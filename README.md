@@ -7,7 +7,7 @@
 I design and ship production systems end to end — from edge APIs and data models
 to interfaces that feel considered.
 
-[![GitHub](https://img.shields.io/badge/GitHub-141414?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jayanthgopala)&nbsp;[![Email](https://img.shields.io/badge/Email-1a1a1a?style=for-the-badge&logo=gmail&logoColor=white)](mailto:jayanthgopala21@gmail.com)
+[![GitHub](https://img.shields.io/badge/GitHub-141414?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jayanthgopala)&nbsp;[![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/jayanth-gopala-v/)&nbsp;[![Email](https://img.shields.io/badge/Email-1a1a1a?style=for-the-badge&logo=gmail&logoColor=white)](mailto:jayanthgopala21@gmail.com)
 
 </div>
 
@@ -35,7 +35,6 @@ database. Built on Cloudflare Workers, D1, R2 and React.
     * Tech Stack percentages    — guessed proficiency levels.
     * Location / Education /
       Focus / Portfolio domain  — placeholder values in migration 003.
-    * LinkedIn badge            — the URL was a guess and may not resolve.
 
   Fix in this order, or GitHub's camo proxy caches the 404s and the images stay
   broken for a while even after the Worker is up:

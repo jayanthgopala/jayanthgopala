@@ -217,5 +217,5 @@ INSERT INTO content (key, value, group_name, label, hint, multiline, sort_order,
 
 INSERT INTO socials (label, url, icon, sort_order) VALUES
   ('GitHub',   'https://github.com/jayanthgopala',     'github',   0),
-  ('LinkedIn', 'https://linkedin.com/in/jayanthgopala', 'linkedin', 1),
+  ('LinkedIn', 'https://www.linkedin.com/in/jayanth-gopala-v/', 'linkedin', 1),
   ('Email',    'mailto:jayanthgopala21@gmail.com',      'mail',     2);
