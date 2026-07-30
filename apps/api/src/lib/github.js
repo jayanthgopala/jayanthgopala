@@ -77,7 +77,31 @@ export async function pushReadme(env, content, message) {
   }
 
   if (!res.ok) {
-    throw new Error(`GitHub write failed (${res.status}): ${await res.text()}`);
+    const body = await res.text();
+
+    // 403 here is almost always a permissions gap, not a bad token — GitHub
+    // returns 401 for those. Fine-grained tokens fail this way when Contents
+    // is missing or read-only, or when the repo wasn't ticked under
+    // "Only select repositories". The raw message says none of that.
+    if (res.status === 403) {
+      throw new Error(
+        `GitHub refused the write (403). The token authenticates but lacks permission. ` +
+          `Check https://github.com/settings/personal-access-tokens — the token needs ` +
+          `Repository access including "${env.GITHUB_USER}/${env.GITHUB_REPO}", and ` +
+          `Permissions → Repository → Contents set to "Read and write". ` +
+          `Editing an existing token applies immediately; no need to regenerate.`
+      );
+    }
+
+    if (res.status === 404) {
+      throw new Error(
+        `GitHub returned 404 for ${env.GITHUB_USER}/${env.GITHUB_REPO}. Either the repo ` +
+          `doesn't exist, or the token can't see it — a fine-grained token scoped to ` +
+          `other repositories reports a missing repo rather than a forbidden one.`
+      );
+    }
+
+    throw new Error(`GitHub write failed (${res.status}): ${body}`);
   }
 
   const json = await res.json();

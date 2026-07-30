@@ -1,5 +1,5 @@
 import { useScrolled } from '../lib/motion.jsx';
-import { copy } from '../lib/api.js';
+import { copy, externalUrl } from '../lib/api.js';
 import { SocialIcon } from './Icons.jsx';
 import ModeToggle from './ModeToggle.jsx';
 import '../styles/nav.css';
@@ -47,7 +47,7 @@ export default function Nav({ profile, socials = [], content = {}, mode, onChoos
         {github && (
           <a
             className="btn btn-secondary nav-cta"
-            href={github.url}
+            href={externalUrl(github.url)}
             target="_blank"
             rel="noreferrer noopener"
           >

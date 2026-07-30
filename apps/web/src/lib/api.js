@@ -53,7 +53,7 @@ export const fetchProjects = (opts) => get('/api/public/projects', opts);
 export const EMPTY_SITE = {
   profile: {
     name: '', role: '', headline: '', description: '', location: '', email: '',
-    avatarUrl: '', resumeUrl: '', githubUser: '',
+    avatarUrl: '', cinematicAvatarUrl: '', resumeUrl: '', githubUser: '',
     ctaPrimary: 'View Projects', ctaSecondary: 'GitHub',
   },
   status: {
@@ -76,3 +76,20 @@ export const EMPTY_SITE = {
  * flashes blank labels.
  */
 export const copy = (content, key, fallback = '') => content?.[key] || fallback;
+
+/**
+ * Makes a user-entered link safe to put in an href.
+ *
+ * A URL typed without a scheme — `login.example.net` — is a *relative* path to
+ * the browser, so the link silently resolves against the current origin and
+ * lands back on this site. Anyone entering a URL in the admin panel will type
+ * it that way sooner or later, so normalise rather than expecting discipline.
+ *
+ * `mailto:`, `tel:` and anchors are left alone.
+ */
+export function externalUrl(url = '') {
+  const raw = String(url).trim();
+  if (!raw) return '';
+  if (/^(https?:|mailto:|tel:|#|\/)/i.test(raw)) return raw;
+  return `https://${raw}`;
+}

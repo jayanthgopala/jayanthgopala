@@ -60,6 +60,7 @@ export function rowToProfile(row) {
     location: row.location,
     email: row.email,
     avatarUrl: row.avatar_url,
+    cinematicAvatarUrl: row.cinematic_avatar_url || '',
     resumeUrl: row.resume_url,
     githubUser: row.github_user,
     ctaPrimary: row.cta_primary,

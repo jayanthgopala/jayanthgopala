@@ -26,8 +26,12 @@ export default function CinematicHero({ profile, content = {} }) {
   const sceneRef = useRef(null);
   const p = useSceneProgress(sceneRef);
 
-  const custom = profile.avatarUrl ? mediaUrl(profile.avatarUrl) : '';
-  const portrait = custom || DEFAULT_PORTRAIT;
+  // Cinematic gets its own image when one is set. The two modes frame the
+  // subject completely differently — a circle crop versus a full-bleed plate —
+  // so a single shared upload always compromises one of them. Falls back to
+  // the minimal portrait, then the bundled render.
+  const custom = profile.cinematicAvatarUrl || profile.avatarUrl || '';
+  const portrait = custom ? mediaUrl(custom) : DEFAULT_PORTRAIT;
 
   // Push in hard. The origin is the subject's eye in image coordinates, so the
   // transform lives on the <img> itself — a percentage origin on the wrapper

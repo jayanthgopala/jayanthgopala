@@ -1,5 +1,5 @@
 import { Reveal, useRipple } from '../lib/motion.jsx';
-import { copy } from '../lib/api.js';
+import { copy, externalUrl } from '../lib/api.js';
 import { SocialIcon, ArrowUpRight } from './Icons.jsx';
 import '../styles/sections.css';
 
@@ -41,7 +41,7 @@ export default function Contact({ profile, socials = [], content = {} }) {
                 {profile.resumeUrl && (
                   <a
                     className="btn btn-secondary"
-                    href={profile.resumeUrl}
+                    href={externalUrl(profile.resumeUrl)}
                     target="_blank"
                     rel="noreferrer noopener"
                     onPointerDown={ripple}
@@ -57,7 +57,7 @@ export default function Contact({ profile, socials = [], content = {} }) {
                     <li key={social.id ?? social.url}>
                       <a
                         className="contact-social"
-                        href={social.url}
+                        href={externalUrl(social.url)}
                         target="_blank"
                         rel="noreferrer noopener"
                         aria-label={social.label}

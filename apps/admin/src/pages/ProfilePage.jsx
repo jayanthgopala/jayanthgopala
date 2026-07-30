@@ -25,6 +25,7 @@ export default function ProfilePage() {
         location: draft.location,
         email: draft.email,
         avatar_url: draft.avatarUrl,
+        cinematic_avatar_url: draft.cinematicAvatarUrl,
         resume_url: draft.resumeUrl,
         github_user: draft.githubUser,
         cta_primary: draft.ctaPrimary,
@@ -88,11 +89,18 @@ export default function ProfilePage() {
           </Field>
 
           <ImageUploadField
-            label="Hero portrait"
-            hint="Replaces the bundled photo in the hero's 3D object. A square, head-and-shoulders image works best."
+            label="Portrait — Minimal mode"
+            hint="Cropped to a circle in the hero's 3D object. Head-and-shoulders works best."
             preview="round"
             value={draft.avatarUrl}
             onChange={(v) => set('avatarUrl', v)}
+          />
+
+          <ImageUploadField
+            label="Portrait — Cinematic mode"
+            hint="Full-bleed behind the headline. Chest-up, subject centred, background matching #101012 (or cut out). Falls back to the minimal portrait if left empty."
+            value={draft.cinematicAvatarUrl}
+            onChange={(v) => set('cinematicAvatarUrl', v)}
           />
 
           <Field label="Location">

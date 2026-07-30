@@ -20,7 +20,10 @@ CREATE TABLE profile (
   description   TEXT    NOT NULL DEFAULT '',
   location      TEXT    NOT NULL DEFAULT '',
   email         TEXT    NOT NULL DEFAULT '',
+  -- Minimal mode: head-and-shoulders, cropped to a circle.
   avatar_url    TEXT    NOT NULL DEFAULT '',
+  -- Cinematic mode: full-bleed chest-up render. Falls back to avatar_url.
+  cinematic_avatar_url TEXT NOT NULL DEFAULT '',
   resume_url    TEXT    NOT NULL DEFAULT '',
   github_user   TEXT    NOT NULL DEFAULT '',
   cta_primary   TEXT    NOT NULL DEFAULT 'View Projects',

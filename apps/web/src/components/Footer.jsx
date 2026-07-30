@@ -1,4 +1,4 @@
-import { copy } from '../lib/api.js';
+import { copy, externalUrl } from '../lib/api.js';
 import { SocialIcon } from './Icons.jsx';
 import '../styles/sections.css';
 
@@ -19,7 +19,7 @@ export default function Footer({ profile, socials = [], content = {} }) {
           {socials.map((social) => (
             <li key={social.id ?? social.url}>
               <a
-                href={social.url}
+                href={externalUrl(social.url)}
                 target="_blank"
                 rel="noreferrer noopener"
                 aria-label={social.label}

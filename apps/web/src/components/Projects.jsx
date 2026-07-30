@@ -1,5 +1,5 @@
 import { Reveal, useTilt } from '../lib/motion.jsx';
-import { mediaUrl, copy } from '../lib/api.js';
+import { mediaUrl, copy, externalUrl } from '../lib/api.js';
 import { GitHubIcon, ArrowUpRight } from './Icons.jsx';
 import '../styles/projects.css';
 
@@ -57,7 +57,7 @@ function ProjectCard({ project, index, featuredLabel }) {
             {project.liveUrl && (
               <a
                 className="project-link project-link-primary"
-                href={project.liveUrl}
+                href={externalUrl(project.liveUrl)}
                 target="_blank"
                 rel="noreferrer noopener"
               >
@@ -67,7 +67,7 @@ function ProjectCard({ project, index, featuredLabel }) {
             {project.repoUrl && (
               <a
                 className="project-link"
-                href={project.repoUrl}
+                href={externalUrl(project.repoUrl)}
                 target="_blank"
                 rel="noreferrer noopener"
               >

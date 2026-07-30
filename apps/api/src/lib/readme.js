@@ -7,6 +7,17 @@
 /** Pipes break Markdown tables; newlines break table rows. */
 const esc = (s = '') => String(s).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ').trim();
 
+/**
+ * A scheme-less URL in a Markdown link is treated as relative by GitHub too —
+ * `[Live Demo](example.net)` resolves against the repo, not the internet. Same
+ * normalisation as the website applies here.
+ */
+const href = (url = '') => {
+  const raw = String(url).trim();
+  if (!raw) return '';
+  return /^(https?:|mailto:|tel:|#)/i.test(raw) ? raw : `https://${raw}`;
+};
+
 const ICON_BADGE = {
   github: 'GitHub-141414?style=for-the-badge&logo=github&logoColor=white',
   linkedin: 'LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white',
@@ -20,8 +31,8 @@ const techList = (tech = []) => tech.map((t) => `\`${esc(t)}\``).join(' · ');
 
 function projectRow(p) {
   const links = [];
-  if (p.liveUrl) links.push(`[Live Demo](${p.liveUrl})`);
-  if (p.repoUrl) links.push(`[Source](${p.repoUrl})`);
+  if (p.liveUrl) links.push(`[Live Demo](${href(p.liveUrl)})`);
+  if (p.repoUrl) links.push(`[Source](${href(p.repoUrl)})`);
 
   return `| **${esc(p.title)}** | ${esc(p.summary)} | ${techList(p.tech)} | ${
     links.join(' • ') || '—'
@@ -61,7 +72,7 @@ export function renderReadme(site, env) {
     .filter((s) => s.showInReadme)
     .map((s) => {
       const badge = ICON_BADGE[s.icon] || ICON_BADGE.link;
-      return `[![${esc(s.label)}](https://img.shields.io/badge/${badge})](${s.url})`;
+      return `[![${esc(s.label)}](https://img.shields.io/badge/${badge})](${href(s.url)})`;
     })
     .join('&nbsp;');
 
@@ -108,10 +119,6 @@ ${socialBadges}
 
 <br />
 
-## ${t('readme.projects', 'Featured Projects')}
-
-${projectTable}
-
 ## ${t('readme.stack', 'Tech Stack')}
 
 ${stackByCategory(stack)}
@@ -123,12 +130,12 @@ ${stackByCategory(stack)}
 
 ## ${t('readme.currently', 'Currently')}
 
-- 🛠️  Building **${esc(status.currentProject) || '—'}**${
-    status.currentProjectUrl ? ` — [see it](${status.currentProjectUrl})` : ''
-  }
-- 🚀  Latest deployment: **${esc(status.deployLabel) || '—'}** (\`${esc(status.deployState)}\`)
-- 📍  Based in ${esc(profile.location) || '—'}
-- 📬  Reach me at [${esc(profile.email)}](mailto:${esc(profile.email)})
+${[
+  profile.location && `- 📍  Based in ${esc(profile.location)}`,
+  profile.email && `- 📬  Reach me at [${esc(profile.email)}](mailto:${esc(profile.email)})`,
+]
+  .filter(Boolean)
+  .join('\n')}
 
 <div align="center">
   <sub>${t(

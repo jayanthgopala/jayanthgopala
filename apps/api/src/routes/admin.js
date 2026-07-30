@@ -78,8 +78,8 @@ app.put('/profile', async (c) => {
     'profile',
     {
       name: str, role: str, headline: str, description: str,
-      location: str, email: str, avatar_url: str, resume_url: str,
-      github_user: str, cta_primary: str, cta_secondary: str,
+      location: str, email: str, avatar_url: str, cinematic_avatar_url: str,
+      resume_url: str, github_user: str, cta_primary: str, cta_secondary: str,
     },
     body,
     'id = 1'

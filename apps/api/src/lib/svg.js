@@ -109,55 +109,66 @@ function relativeTime(iso) {
 export function statusCardSvg(site) {
   const s = site.status;
   const W = 820;
-  const H = 260;
+  const H = 166; // shrunk to fit availability + links only
   const availColor = s.available ? T.mint : T.amber;
   const availText = s.available ? s.availabilityNote : 'Currently at capacity';
 
   // Links across the lower half, not system metrics. Deployment state and an
   // uptime percentage were seeded values that nothing measured; a status card
   // showing decorative numbers is worse than one showing none.
-  const pretty = (url = '') =>
-    String(url)
+  /**
+   * Shortens a link to the part that identifies it. Four columns leaves ~24
+   * characters, and a blind truncation produces `github.com/jayanthgop…` —
+   * the handle, which is the only interesting part, is exactly what gets cut.
+   */
+  const pretty = (url = '') => {
+    const bare = String(url)
       .replace(/^mailto:/, '')
       .replace(/^https?:\/\//, '')
       .replace(/^www\./, '')
-      .replace(/\/$/, '');
+      .replace(/\/+$/, '');
 
-  const cols = (site.socials || [])
-    .filter((l) => l.showInReadme)
-    .slice(0, 3)
-    .map((l, i) => ({
-      x: 40 + i * 260,
-      label: l.label,
-      value: clip(pretty(l.url), 28),
-      state: 'operational',
-    }));
+    const handle =
+      bare.match(/^github\.com\/([^/]+)/)?.[1] ||
+      bare.match(/^(?:[a-z.]*\.)?linkedin\.com\/in\/([^/]+)/)?.[1] ||
+      bare.match(/^(?:[a-z.]*\.)?(?:x|twitter)\.com\/([^/]+)/)?.[1];
 
-  const progress = Math.max(0, Math.min(100, Number(s.currentProgress) || 0));
-  const barWidth = W - 80;
+    return handle ? `@${handle}` : bare;
+  };
 
+  // Column width and truncation follow the count, so adding a link in the admin
+  // panel reflows the card rather than silently dropping off the end.
+  const shown = (site.socials || []).filter((l) => l.showInReadme).slice(0, 4);
+  const step = (W - 80) / Math.max(1, shown.length);
+  const dense = shown.length >= 4;
+  const valueSize = dense ? 12.5 : 14;
+  const maxChars = dense ? 25 : 30;
+
+  const cols = shown.map((l, i) => ({
+    x: 40 + i * step,
+    label: l.label,
+    value: clip(pretty(l.url), maxChars),
+    state: 'operational',
+  }));
+
+  // No "current project" block. It was the largest element on the card and the
+  // most likely to go stale — a progress percentage nothing measures reads as
+  // noise the moment it stops being edited. Availability plus links is what
+  // stays true. The card shrinks to suit.
   const body = `
     ${dot(48, 44, availColor, !!s.available)}
     ${value(64, 49, availText, { size: 15, weight: 600 })}
     <text x="${W - 40}" y="49" text-anchor="end" font-family="${FONT}" font-size="12"
       fill="${T.dim}">${esc(relativeTime(s.updatedAt))}</text>
 
-    ${label(40, 88, 'Current project')}
-    ${value(40, 114, clip(s.currentProject || '—', 44), { size: 24, weight: 700 })}
-
-    <rect x="40" y="132" width="${barWidth}" height="6" rx="3" fill="${T.border}"/>
-    <rect x="40" y="132" width="${(barWidth * progress) / 100}" height="6" rx="3" fill="url(#accent)"/>
-    <text x="${W - 40}" y="127" text-anchor="end" font-family="${FONT}" font-size="12"
-      font-weight="600" fill="${T.muted}">${progress}%</text>
-
-    <rect x="40" y="170" width="${W - 80}" height="1" fill="${T.border}"/>
+    <rect x="40" y="76" width="${W - 80}" height="1" fill="${T.border}"/>
 
     ${cols
       .map(
         (c) => `
-      ${label(c.x, 200, c.label)}
-      ${dot(c.x + 5, 222, STATE_COLOR[c.state] || T.dim)}
-      ${value(c.x + 18, 227, c.value, { size: 14, weight: 500, fill: T.muted })}`
+      ${label(c.x, 106, c.label)}
+      ${dot(c.x + 5, 128, STATE_COLOR[c.state] || T.dim)}
+      ${value(c.x + 18, 133, c.value, { size: valueSize, weight: 500, fill: T.muted })}`
       )
       .join('')}
   `;

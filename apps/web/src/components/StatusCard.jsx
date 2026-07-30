@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { copy } from '../lib/api.js';
+import { copy, externalUrl } from '../lib/api.js';
 import { SocialIcon, ArrowUpRight } from './Icons.jsx';
 import '../styles/status.css';
 
@@ -79,7 +79,7 @@ export default function StatusCard({ status, loading, content = {}, socials = []
         <span className="eyebrow">{copy(content, 'status.label.current', 'Current project')}</span>
         <h3 className="status-project">
           {status.currentProjectUrl ? (
-            <a href={status.currentProjectUrl} target="_blank" rel="noreferrer noopener">
+            <a href={externalUrl(status.currentProjectUrl)} target="_blank" rel="noreferrer noopener">
               {status.currentProject || '—'}
             </a>
           ) : (
@@ -110,7 +110,7 @@ export default function StatusCard({ status, loading, content = {}, socials = []
             <a
               key={social.id ?? social.url}
               className="status-link"
-              href={social.url}
+              href={externalUrl(social.url)}
               target="_blank"
               rel="noreferrer noopener"
             >
