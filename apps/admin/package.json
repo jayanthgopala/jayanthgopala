@@ -10,7 +10,6 @@
     "deploy": "npm run build && wrangler pages deploy dist --project-name=portfolio-admin"
   },
   "dependencies": {
-    "@portfolio/tokens": "*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
