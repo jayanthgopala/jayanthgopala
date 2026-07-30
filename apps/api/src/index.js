@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { requireAuth } from './lib/auth.js';
 import { loadSite } from './lib/db.js';
 import { statusCardSvg, metricsCardSvg, svgResponse } from './lib/svg.js';
+import { bannerSvg } from './lib/banner.js';
 import { syncProfile } from './lib/sync.js';
 import publicRoutes from './routes/public.js';
 import authRoutes from './routes/auth.js';
@@ -55,6 +56,22 @@ app.get('/svg/status.svg', async (c) => {
 app.get('/svg/metrics.svg', async (c) => {
   const site = await loadSite(c.env.DB);
   return svgResponse(metricsCardSvg(site));
+});
+
+/**
+ * Animated profile banner, one endpoint per palette. The README embeds both in
+ * a <picture> so GitHub picks the right one for the viewer's theme — the same
+ * asset can't do both, because SVG served as an <img> has no access to the
+ * host page's colour scheme.
+ */
+app.get('/svg/banner-dark.svg', async (c) => {
+  const site = await loadSite(c.env.DB);
+  return svgResponse(bannerSvg(site, 'dark'));
+});
+
+app.get('/svg/banner-light.svg', async (c) => {
+  const site = await loadSite(c.env.DB);
+  return svgResponse(bannerSvg(site, 'light'));
 });
 
 // --- R2 media --------------------------------------------------------------

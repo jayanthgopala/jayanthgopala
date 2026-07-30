@@ -1,6 +1,8 @@
 node_modules/
 dist/
 .wrangler/
+.tmpbanner/
+.tmptest/
 .dev.vars
 .env
 .env.local

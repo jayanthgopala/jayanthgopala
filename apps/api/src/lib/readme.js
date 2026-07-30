@@ -75,7 +75,22 @@ export function renderReadme(site, env) {
 
   return `<div align="center">
 
-# ${esc(profile.name)}
+<!--
+  Banner is served live from the portfolio Worker, so it reflects the admin
+  panel without a commit. <picture> lets GitHub pick the palette: an SVG
+  embedded as an image can't see the host page's colour scheme itself.
+-->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="${api}/svg/banner-dark.svg" />
+  <source media="(prefers-color-scheme: light)" srcset="${api}/svg/banner-light.svg" />
+  <img src="${api}/svg/banner-dark.svg" alt="${esc(profile.name)} — ${esc(profile.role)}" width="100%" />
+</picture>
+
+</div>
+
+<br />
+
+<div align="center">
 
 ### ${esc(profile.headline)}
 
