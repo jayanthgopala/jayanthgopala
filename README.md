@@ -8,7 +8,7 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://portfolio-api.jayanthgopala21.workers.dev/svg/banner-dark.svg" />
   <source media="(prefers-color-scheme: light)" srcset="https://portfolio-api.jayanthgopala21.workers.dev/svg/banner-light.svg" />
-  <img src="https://portfolio-api.jayanthgopala21.workers.dev/svg/banner-dark.svg" alt="Jayanth Gopala — Software Engineer" width="100%" />
+  <img src="https://portfolio-api.jayanthgopala21.workers.dev/svg/banner-dark.svg" alt="Jayanth Gopala V — Software Engineer" width="100%" />
 </picture>
 
 </div>
