@@ -7,9 +7,17 @@
 // Same fallback as the website — see apps/web/src/lib/api.js for why an unset
 // VITE_API_URL fails so confusingly. Public endpoint, safe to default.
 const PRODUCTION_API = 'https://portfolio-api.jayanthgopala21.workers.dev';
-const BASE = (
+
+/** See apps/web/src/lib/api.js — a scheme-less base silently goes relative. */
+function normaliseBase(value) {
+  const raw = String(value || '').trim().replace(/\/+$/, '');
+  if (!raw) return '';
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+}
+
+const BASE = normaliseBase(
   import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '' : PRODUCTION_API)
-).replace(/\/$/, '');
+);
 
 export class ApiError extends Error {
   constructor(message, status) {

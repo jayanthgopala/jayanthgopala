@@ -12,9 +12,23 @@
  * This URL is a public endpoint, not a secret, so defaulting to it is safe.
  */
 const PRODUCTION_API = 'https://portfolio-api.jayanthgopala21.workers.dev';
-const BASE = (
+
+/**
+ * A base URL without a scheme is a *relative* path to the browser, so
+ * `fetch('example.com/api/x')` silently resolves against the current origin.
+ * On Pages that hits the SPA fallback, returns index.html, and surfaces as
+ * `Unexpected token '<'` — a parse error that says nothing about the real
+ * cause. Cheap to normalise, so we do.
+ */
+function normaliseBase(value) {
+  const raw = String(value || '').trim().replace(/\/+$/, '');
+  if (!raw) return '';
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+}
+
+const BASE = normaliseBase(
   import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '' : PRODUCTION_API)
-).replace(/\/$/, '');
+);
 
 export const mediaUrl = (path) => {
   if (!path) return '';

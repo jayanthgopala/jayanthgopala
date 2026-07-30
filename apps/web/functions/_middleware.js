@@ -52,10 +52,13 @@ export async function onRequest(context) {
 
   // Runtime variable, not build-time — but defaulted for the same reason as the
   // client: without it the page silently serves placeholder link previews.
-  const apiUrl = String(
-    env.API_URL || 'https://portfolio-api.jayanthgopala21.workers.dev'
-  ).replace(/\/$/, '');
-  if (!apiUrl) return response; // not configured — serve the static head
+  // Same normalisation as the client: a scheme-less value would make the
+  // fetch below relative to the Worker itself and quietly return HTML.
+  const rawApi = String(env.API_URL || 'https://portfolio-api.jayanthgopala21.workers.dev')
+    .trim()
+    .replace(/\/+$/, '');
+  const apiUrl = /^https?:\/\//i.test(rawApi) ? rawApi : `https://${rawApi}`;
+  if (!rawApi) return response; // not configured — serve the static head
 
   let site;
   try {
