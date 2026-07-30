@@ -11,7 +11,7 @@ export default function Footer({ profile, socials = [], content = {} }) {
           <span className="footer-copy">
             {/* Year is computed, not stored — a hardcoded year is the one
                 thing on a portfolio guaranteed to go stale. */}
-            © {new Date().getFullYear()} — {copy(content, 'footer.note', 'Built on Cloudflare Workers.')}
+            © {new Date().getFullYear()} — {copy(content, 'footer.note', 'Built by Jayanth Gopala V')}
           </span>
         </div>
 

@@ -93,9 +93,19 @@
 }
 
 @media (max-width: 960px) {
-  .hero { min-height: auto; padding-block: calc(var(--nav-h) + var(--s-7)) var(--s-8); }
-  .hero-inner { grid-template-columns: 1fr; gap: var(--s-8); }
+  .hero { min-height: auto; padding-block: calc(var(--nav-h) + var(--s-6)) var(--s-8); }
+  .hero-inner { grid-template-columns: 1fr; gap: var(--s-6); }
   .hero-title { max-width: 18ch; }
-  /* The orb is decorative; on small screens the status card earns the space. */
-  .hero-orb-wrap { display: none; }
+
+  /* The portrait stays on mobile — it used to be hidden entirely. Kept in its
+     natural position under the copy: `.hero-aside` also holds the status card,
+     so ordering the whole column above the headline would put "Available for
+     collaborations" before the name. */
+  .hero-orb-wrap { display: grid; }
+  .portrait { width: clamp(160px, 46vw, 230px); }
+  .hero-aside { gap: var(--s-5); }
+}
+
+@media (max-width: 560px) {
+  .portrait { width: clamp(150px, 52vw, 200px); }
 }

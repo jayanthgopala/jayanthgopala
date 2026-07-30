@@ -187,7 +187,7 @@ INSERT INTO content (key, value, group_name, label, hint, multiline, sort_order)
   ('status.unavailable',      'At capacity',        'Status card', 'Unavailable text',         '', 0, 5),
 
   -- Footer
-  ('footer.note', 'Built on Cloudflare Workers.', 'Footer', 'Footer note', 'The © and year are added automatically', 0, 0),
+  ('footer.note', 'Built by Jayanth Gopala V', 'Footer', 'Footer note', 'The © and year are added automatically', 0, 0),
 
   -- SEO — injected into <head> at the edge, so link previews use these
   ('seo.title',       'Jayanth Gopala — Software Engineer', 'SEO', 'Page title', 'Browser tab and link previews', 0, 0),

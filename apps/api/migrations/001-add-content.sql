@@ -49,7 +49,7 @@ INSERT OR IGNORE INTO content (key, value, group_name, label, hint, multiline, s
   ('status.available',        'Available',         'Status card', 'Available fallback',    'Used if the availability note is blank', 0, 4),
   ('status.unavailable',      'At capacity',       'Status card', 'Unavailable text',      '', 0, 5),
 
-  ('footer.note', 'Built on Cloudflare Workers.', 'Footer', 'Footer note', 'The © and year are added automatically', 0, 0),
+  ('footer.note', 'Built by Jayanth Gopala V', 'Footer', 'Footer note', 'The © and year are added automatically', 0, 0),
 
   ('seo.title',       'Jayanth Gopala — Software Engineer', 'SEO', 'Page title', 'Browser tab and link previews', 0, 0),
   ('seo.description', 'Building scalable software and exceptional digital experiences.',

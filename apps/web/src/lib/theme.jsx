@@ -50,6 +50,13 @@ export function useThemeMode(content) {
     if (!isValid(next)) return;
     setMode(next);
     setExplicit(true);
+
+    // Jump to the top. The two modes lay the page out completely differently —
+    // cinematic replaces a 100vh hero with a 240vh scroll scene — so keeping
+    // the scroll offset drops you into the middle of a section that no longer
+    // exists. Instant, not smooth: this is a context switch, not navigation.
+    window.scrollTo({ top: 0, behavior: 'instant' });
+
     try {
       localStorage.setItem(STORAGE_KEY, next);
     } catch {
