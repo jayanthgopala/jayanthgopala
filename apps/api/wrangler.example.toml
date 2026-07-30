@@ -1,47 +1,57 @@
 # ============================================================================
-#  PUBLIC REPOSITORY — NEVER PUT SECRETS IN THIS FILE
+#  TEMPLATE — this file is tracked in a PUBLIC repository.
 #
-#  [vars] below is plaintext config that ships with the Worker and is readable
-#  by anyone. Secrets go in the Cloudflare secret store instead:
+#  NEVER PUT SECRETS HERE. [vars] below is plaintext config that ships with the
+#  Worker and is readable by anyone. Secrets go in the Cloudflare secret store:
 #
 #      npx wrangler secret put ADMIN_PASSWORD
 #      npx wrangler secret put JWT_SECRET
 #      npx wrangler secret put GITHUB_TOKEN
 #
 #  They are read at runtime as env.ADMIN_PASSWORD etc. — no file involved.
-#  See CLAUDE.md at the repo root.
-# ============================================================================
 #
-# Copy to wrangler.toml and fill in your own ids:
-#   cp wrangler.example.toml wrangler.toml
-# wrangler.toml is git-ignored — keep it that way.
+#  ---------------------------------------------------------------------------
+#  The real wrangler.toml is git-ignored and generated from this file by
+#  `npm run build` (scripts/prepare-config.mjs), which fills the two
+#  placeholders below from environment variables:
+#
+#      D1_DATABASE_ID     your D1 database id
+#      KV_NAMESPACE_ID    your CACHE namespace id
+#
+#  Locally you already have a wrangler.toml, so the script leaves it alone.
+#  In Cloudflare Workers Builds, set those two as Build variables.
+#
+#  They are only kept out of the repo to avoid a tracked config file becoming
+#  the place a real secret eventually gets added — the ids themselves are
+#  opaque identifiers, not credentials.
+# ============================================================================
 
 name = "portfolio-api"
 main = "src/index.js"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
-# --- Public, non-secret config -------------------------------------------
-# Secrets (ADMIN_PASSWORD, JWT_SECRET, GITHUB_TOKEN) are set with:
-#   wrangler secret put <NAME>
-# Locally they come from apps/api/.dev.vars (git-ignored).
+# Production values. All of these are already public — the API URL is in the
+# README's image tags and the origins are returned in every CORS response.
 [vars]
-GITHUB_USER     = "jayanthgopala"        # <-- your GitHub handle
+GITHUB_USER     = "jayanthgopala"
 GITHUB_REPO     = "jayanthgopala"        # profile repo == your username
 GITHUB_BRANCH   = "main"
 README_PATH     = "README.md"
-PUBLIC_API_URL  = "http://localhost:8787"
-ALLOWED_ORIGINS = "http://localhost:5173,http://localhost:5174"
+PUBLIC_API_URL  = "https://portfolio-api.jayanthgopala21.workers.dev"
+# Credentialed requests can't use a wildcard, so every origin the site or admin
+# panel is served from has to be listed explicitly.
+ALLOWED_ORIGINS = "https://jayanthgopala.com,https://www.jayanthgopala.com,https://jayanthgopala.pages.dev,https://admin.jayanthgopala.com,https://jayanthgopala-admin.pages.dev,http://localhost:5173,http://localhost:5174"
 CACHE_TTL       = "60"
 
 [[d1_databases]]
 binding       = "DB"
 database_name = "portfolio"
-database_id   = "REPLACE_WITH_YOUR_D1_ID"
+database_id   = "__D1_DATABASE_ID__"
 
 [[kv_namespaces]]
 binding = "CACHE"
-id      = "REPLACE_WITH_YOUR_KV_ID"
+id      = "__KV_NAMESPACE_ID__"
 
 [[r2_buckets]]
 binding     = "MEDIA"

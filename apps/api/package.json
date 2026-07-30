@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "build": "node -e \"console.log('no build step — wrangler bundles the Worker at deploy time')\"",
+    "build": "node scripts/prepare-config.mjs",
     "deploy": "wrangler deploy",
     "db:local": "wrangler d1 execute portfolio --local --file=./schema.sql",
     "db:remote": "wrangler d1 execute portfolio --remote --file=./schema.sql",
