@@ -21,7 +21,7 @@
 
 I design and ship production systems end to end — from edge APIs and data models to interfaces that feel considered.
 
-[![GitHub](https://img.shields.io/badge/GitHub-141414?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jayanthgopala)&nbsp;[![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/jayanth-gopala-v/)&nbsp;[![Email](https://img.shields.io/badge/Email-1a1a1a?style=for-the-badge&logo=gmail&logoColor=white)](mailto:jayanthgopala21@gmail.com)
+[![GitHub](https://img.shields.io/badge/GitHub-141414?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jayanthgopala)&nbsp;[![Portfolio](https://img.shields.io/badge/Website-1a1a1a?style=for-the-badge&logo=vercel&logoColor=white)](https://jayanthgopala.com)&nbsp;[![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/jayanth-gopala-v/)&nbsp;[![Email](https://img.shields.io/badge/Email-1a1a1a?style=for-the-badge&logo=gmail&logoColor=white)](mailto:jayanthgopala21@gmail.com)
 
 </div>
 
@@ -32,12 +32,6 @@ I design and ship production systems end to end — from edge APIs and data mode
 </div>
 
 <br />
-
-## Featured Projects
-
-| Project | What it does | Stack | Links |
-| :------ | :----------- | :---- | :---- |
-| **placement and placement automation** | Multi-tenant (per-college), microservices monorepo — three Node backend services + a React SPA + shared libs, containerized with Docker Compose. | `React` · `Vite` · `Node.js` · `Express` · `PostgreSQL (RLS)` · `Redis` · `BullMQ` · `Sequelize` · `Cloudflare (Workers` · `R2` · `Tunnel)` · `Docker` · `Dokploy` · `JWT/WebAuthn` · `more` | [Live Demo](login.fortifyhub.net) |
 
 ## Tech Stack
 
@@ -56,8 +50,6 @@ I design and ship production systems end to end — from edge APIs and data mode
 
 ## Currently
 
-- 🛠️  Building **Portfolio Platform** — [see it](https://jayanthgopala.com/)
-- 🚀  Latest deployment: **portfolio-web · production** (`ready`)
 - 📍  Based in India
 - 📬  Reach me at [jayanthgopala21@gmail.com](mailto:jayanthgopala21@gmail.com)
 
