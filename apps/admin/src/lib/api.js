@@ -4,7 +4,12 @@
  * `credentials: 'include'` on every call — the session lives in an httpOnly
  * cookie, which is what keeps the token out of reach of any injected script.
  */
-const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+// Same fallback as the website — see apps/web/src/lib/api.js for why an unset
+// VITE_API_URL fails so confusingly. Public endpoint, safe to default.
+const PRODUCTION_API = 'https://portfolio-api.jayanthgopala21.workers.dev';
+const BASE = (
+  import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '' : PRODUCTION_API)
+).replace(/\/$/, '');
 
 export class ApiError extends Error {
   constructor(message, status) {

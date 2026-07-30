@@ -1,11 +1,20 @@
 /**
  * API client for the public site.
  *
- * In dev, VITE_API_URL is empty and Vite proxies /api to the Worker, so the
- * browser sees a same-origin request. In production it points at the deployed
- * Worker.
+ * Dev resolves to '' so Vite's proxy handles /api and the browser sees a
+ * same-origin request. Production falls back to the deployed Worker.
+ *
+ * The fallback exists because a missing VITE_API_URL fails in a genuinely
+ * confusing way: Vite inlines the variable at BUILD time, so an unset one
+ * leaves BASE empty, the app requests /api/public/site from its own origin,
+ * Pages' SPA fallback answers with index.html, and JSON.parse reports
+ * `Unexpected token '<'`. Nothing in that message points at a missing env var.
+ * This URL is a public endpoint, not a secret, so defaulting to it is safe.
  */
-const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+const PRODUCTION_API = 'https://portfolio-api.jayanthgopala21.workers.dev';
+const BASE = (
+  import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '' : PRODUCTION_API)
+).replace(/\/$/, '');
 
 export const mediaUrl = (path) => {
   if (!path) return '';

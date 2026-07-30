@@ -50,7 +50,11 @@ export async function onRequest(context) {
   const type = response.headers.get('content-type') || '';
   if (!type.includes('text/html') || !response.ok) return response;
 
-  const apiUrl = String(env.API_URL || '').replace(/\/$/, '');
+  // Runtime variable, not build-time — but defaulted for the same reason as the
+  // client: without it the page silently serves placeholder link previews.
+  const apiUrl = String(
+    env.API_URL || 'https://portfolio-api.jayanthgopala21.workers.dev'
+  ).replace(/\/$/, '');
   if (!apiUrl) return response; // not configured — serve the static head
 
   let site;
