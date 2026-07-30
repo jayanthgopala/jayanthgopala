@@ -10,7 +10,7 @@
 }
 
 .crop-dialog {
-  width: min(420px, 100%);
+  width: min(480px, 100%);
   display: flex;
   flex-direction: column;
   gap: var(--s-4);
@@ -24,10 +24,12 @@
 .crop-head strong { display: block; font-size: var(--t-sm); }
 .crop-hint { display: block; margin-top: 2px; font-size: var(--t-micro); color: var(--text-dim); }
 
+.crop-stage { display: flex; gap: var(--s-4); align-items: center; }
+
 .crop-frame {
   position: relative;
-  width: 100%;
-  aspect-ratio: 1;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   border-radius: var(--r-md);
   background: var(--bg);
@@ -73,3 +75,37 @@
   justify-content: flex-end;
   gap: var(--s-2);
 }
+
+/* Portrait (cinematic) frame is taller, so the dialog needs more room. */
+.crop-dialog[data-shape='portrait'] { width: min(440px, 100%); }
+.crop-dialog[data-shape='portrait'] .crop-frame { max-height: 52vh; }
+
+/* --- Nudge pad --------------------------------------------------------------
+   A d-pad rather than a row of buttons: the spatial arrangement means you press
+   the direction you want rather than reading a label first. */
+.crop-pad {
+  display: grid;
+  grid-template-areas: '. up .' 'left reset right' '. down .';
+  gap: 4px;
+  flex-shrink: 0;
+}
+.crop-up { grid-area: up; } .crop-down { grid-area: down; }
+.crop-left { grid-area: left; } .crop-right { grid-area: right; }
+.crop-reset { grid-area: reset; }
+
+.crop-nudge {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-xs);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  transition: background var(--d-fast) var(--ease), color var(--d-fast) var(--ease);
+}
+.crop-nudge:hover { background: var(--surface-hover); color: var(--text); }
+.crop-nudge:active { transform: scale(0.94); }
+.crop-reset { color: var(--text-dim); font-size: 14px; }

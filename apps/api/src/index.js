@@ -9,7 +9,7 @@ import { syncProfile } from './lib/sync.js';
 import publicRoutes from './routes/public.js';
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
-import { askHandler } from './routes/ask.js';
+import { askHandler, TONES, DEFAULT_TONE } from './routes/ask.js';
 
 const app = new Hono();
 
@@ -143,6 +143,17 @@ app.get('/media/:key', async (c) => {
 app.route('/api/public', publicRoutes);
 app.route('/api/auth', authRoutes);
 app.post('/api/ask', askHandler);
+
+// Voice presets, so the widget renders whatever the Worker actually supports
+// rather than a hardcoded list that can drift out of sync.
+// Deliberately NOT /api/ask/tones — a GET under the same prefix as the POST
+// route would not match and returned 404.
+app.get('/api/tones', (c) =>
+  c.json({
+    default: DEFAULT_TONE,
+    tones: Object.entries(TONES).map(([id, t]) => ({ id, label: t.label })),
+  })
+);
 app.use('/api/admin/*', requireAuth());
 app.route('/api/admin', adminRoutes);
 

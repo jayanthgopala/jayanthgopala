@@ -18,6 +18,7 @@ import { loadSite } from '../lib/db.js';
 const MODELS = ['@cf/meta/llama-3.1-8b-instruct-fp8', '@cf/meta/llama-3.2-3b-instruct'];
 const MAX_QUESTION = 400;
 const RATE_LIMIT = 12; // requests per window
+const MAX_HISTORY = 8; // prior turns kept for context
 const WINDOW_SECONDS = 60;
 
 /** Compact the site payload into something worth spending context on. */
@@ -85,25 +86,83 @@ function buildContext(site) {
   return lines.join('\n');
 }
 
-function systemPrompt(context, name) {
+/**
+ * Voice presets for the assistant.
+ *
+ * Tone only — every one of these sits on top of the same grounding rules, so
+ * none of them may invent anything. A casual register is a way of saying true
+ * things, not a licence to embellish, and the Gen Z preset says so explicitly
+ * because that is exactly where a model starts improvising.
+ */
+export const TONES = {
+  professional: {
+    label: 'Professional',
+    temperature: 0.3,
+    instruction:
+      'Warm, plain and professional. Full sentences, no slang, no contractions-heavy ' +
+      'phrasing, no exclamation marks. The register of a good colleague describing a peer. ' +
+      'Example opening: "Jayanth is a software engineer who..."',
+  },
+  genz: {
+    label: 'Gen Z',
+    temperature: 0.85,
+    instruction:
+      'Talk like a switched-on 22-year-old, not a press release. Contractions everywhere. ' +
+      'Casual openers ("ok so", "honestly", "basically"). Light slang is fine ("legit", ' +
+      '"kinda", "no cap" sparingly). One emoji maximum, only if it earns its place. ' +
+      'Example opening: "ok so Jayanth basically builds..." ' +
+      'Hard rule: never inflate or embellish to sound impressive. Same facts as the ' +
+      'professional voice, different delivery.',
+  },
+  concise: {
+    label: 'Concise',
+    temperature: 0.2,
+    instruction:
+      'Maximum two short sentences, and prefer one. No preamble, no sign-off, no restating ' +
+      'the question, no "he is a software engineer who" throat-clearing. Lead with the answer ' +
+      'and stop. Example: "Full-stack engineer. Node, React, Cloudflare Workers."',
+  },
+  recruiter: {
+    label: 'For recruiters',
+    temperature: 0.35,
+    instruction:
+      'Lead with the concrete: role, stack, scale, what was actually shipped. Prefer specifics ' +
+      'over adjectives. Close with how to get in touch when it is relevant. Do not editorialise ' +
+      'about seniority or fit — state what the record shows.',
+  },
+};
+
+export const DEFAULT_TONE = 'professional';
+
+function systemPrompt(context, name, tone = DEFAULT_TONE) {
   return `You answer questions about ${name} for visitors to their portfolio site.
 
-SCOPE: you answer ONLY questions about ${name} — their work, projects, skills,
-education, background and how to reach them. For anything else (general
-knowledge, coding help, opinions, current events, comparisons of tools, writing
-tasks) reply with exactly one sentence saying you can only answer questions
-about ${name}. Do not attempt the task, do not partially answer, do not explain
-what you would say. A visitor asking you to write code or compare frameworks
-gets the refusal, nothing more.
+### YOUR VOICE — follow this in every reply
+${(TONES[tone] || TONES[DEFAULT_TONE]).instruction}
+The voice controls HOW you write, never WHAT is true. The grounding rules below
+override it in every case.
+
+CONVERSATION: you are in an ongoing chat and can see what was said before.
+Greetings ("hi", "hello"), acknowledgements ("thanks", "ok") and continuations
+("yes", "go on", "tell me more", "what else") are normal parts of it — answer
+them naturally and carry on from your previous message. A one-word reply is the
+visitor continuing, not changing the subject; never meet one with a refusal.
+
+SCOPE: refuse only when the visitor asks about a genuinely unrelated TOPIC —
+general knowledge, coding help, opinions on tools, current events, writing
+tasks. Then reply with one sentence saying you can only answer questions about
+${name}, and nothing else. Do not attempt the task.
+
+LINKS: when a URL or email address is relevant, write it out in full and plain
+(https://example.com, name@example.com). No markdown link syntax.
 
 Use ONLY the information below. If a question is about ${name} but the answer is
 not in it, say you do not have that detail and suggest they email ${name}
 directly. Never guess, never invent employers, dates, qualifications or
 projects — the person's professional reputation depends on this.
 
-Answer in at most three sentences, in a warm, plain, professional register.
-Refer to ${name} in the third person. Do not use markdown headings or bullet
-lists; write prose.
+Answer in at most three sentences. Refer to ${name} in the third person. Do not
+use markdown headings or bullet lists; write prose.
 
 --- INFORMATION ---
 ${context}
@@ -147,13 +206,32 @@ export async function askHandler(c) {
   const site = await loadSite(c.env.DB);
   const name = site.profile?.name || 'the site owner';
 
+  /**
+   * Prior turns, so continuations work. Without these the endpoint is
+   * stateless and "yes" or "go on" arrives with no antecedent — the model
+   * can only read it as a new, meaningless question and refuses.
+   *
+   * Capped at MAX_HISTORY: the system prompt already carries the whole site as
+   * context, and an unbounded transcript would push it out of the window.
+   */
+  const tone = TONES[body.tone] ? body.tone : DEFAULT_TONE;
+
+  const history = Array.isArray(body.history) ? body.history.slice(-MAX_HISTORY) : [];
+  const priorTurns = history
+    .filter((m) => m && typeof m.text === 'string' && m.text.trim())
+    .map((m) => ({
+      role: m.role === 'user' ? 'user' : 'assistant',
+      content: String(m.text).slice(0, 600),
+    }));
+
   const payload = {
     messages: [
-      { role: 'system', content: systemPrompt(buildContext(site), name) },
+      { role: 'system', content: systemPrompt(buildContext(site), name, tone) },
+      ...priorTurns,
       { role: 'user', content: question },
     ],
     max_tokens: 260,
-    temperature: 0.3, // low: this is recall, not creative writing
+    temperature: (TONES[tone] || TONES[DEFAULT_TONE]).temperature ?? 0.3,
   };
 
   let lastError = '';

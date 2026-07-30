@@ -99,7 +99,9 @@ export default function ProfilePage() {
 
           <ImageUploadField
             label="Portrait — Cinematic mode"
-            hint="Full-bleed behind the headline. Chest-up, subject centred, dark background. Not cropped — the whole image is used."
+            hint="Full-bleed behind the headline. Chest-up, subject centred, dark background."
+            crop
+            cropShape="portrait"
             value={draft.cinematicAvatarUrl}
             onChange={(v) => set('cinematicAvatarUrl', v)}
           />

@@ -62,7 +62,12 @@ export default function Hero({ profile, loading, children }) {
           {/* graded={false}: the bundled asset is an art-directed render now,
               not a raw studio photo, so it gets the light treatment. */}
           <Reveal delay={200} className="hero-orb-wrap">
-            <PortraitOrb src={portrait} alt={profile.name || 'Portrait'} graded={false} />
+            <PortraitOrb
+              src={portrait}
+              alt={profile.name || 'Portrait'}
+              graded={false}
+              cropped={Boolean(profile.avatarUrl)}
+            />
           </Reveal>
           <Reveal delay={320}>{children}</Reveal>
         </div>

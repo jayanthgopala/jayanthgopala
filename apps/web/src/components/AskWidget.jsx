@@ -2,6 +2,36 @@ import { useEffect, useRef, useState } from 'react';
 import { copy, askQuestion } from '../lib/api.js';
 import '../styles/ask.css';
 
+/**
+ * Turns URLs and email addresses in the model's prose into real anchors.
+ *
+ * The prompt asks for plain URLs rather than markdown, so this is the only
+ * place they become clickable — otherwise a visitor is left selecting text to
+ * copy an address by hand.
+ */
+const LINK_RE = /(https?:\/\/[^\s<>()]+[^\s<>().,;:!?]|[\w.+-]+@[\w-]+\.[\w.-]+)/g;
+
+function linkify(text) {
+  return String(text)
+    .split(LINK_RE)
+    .map((part, i) => {
+      if (!LINK_RE.test(part)) return part;
+      LINK_RE.lastIndex = 0; // the regex is global; reset between tests
+      const isEmail = !/^https?:\/\//i.test(part);
+      return (
+        <a
+          key={i}
+          className="ask-link"
+          href={isEmail ? `mailto:${part}` : part}
+          target={isEmail ? undefined : '_blank'}
+          rel="noreferrer noopener"
+        >
+          {part}
+        </a>
+      );
+    });
+}
+
 const SparkIcon = (props) => (
   <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
     <path d="M12 2.6l1.9 5.3 5.3 1.9-5.3 1.9-1.9 5.3-1.9-5.3-5.3-1.9 5.3-1.9L12 2.6zM18.5 15l.9 2.4 2.4.9-2.4.9-.9 2.4-.9-2.4-2.4-.9 2.4-.9.9-2.4z" />
@@ -53,7 +83,8 @@ export default function AskWidget({ content = {}, profile }) {
     setBusy(true);
 
     try {
-      const { answer } = await askQuestion(q);
+      // Send the turns so far, not just the new question.
+      const { answer } = await askQuestion(q, [...messages]);
       setMessages((m) => [...m, { role: 'bot', text: answer }]);
     } catch (err) {
       setMessages((m) => [
@@ -107,7 +138,7 @@ export default function AskWidget({ content = {}, profile }) {
                 className={`ask-msg ${m.role === 'user' ? 'ask-user' : 'ask-bot'}`}
                 data-error={m.error || undefined}
               >
-                {m.text}
+                {m.role === 'user' ? m.text : linkify(m.text)}
               </p>
             ))}
 

@@ -19,11 +19,14 @@ import '../styles/portrait-orb.css';
  * proper portrait — is already art-directed, so it gets a light touch instead
  * of being muddied.
  */
-export default function PortraitOrb({ src, alt, graded = true }) {
+export default function PortraitOrb({ src, alt, graded = true, cropped = false }) {
   // A touch more than the project cards: this is the focal object, and the
   // parallax needs a little more travel to be legible.
   const tilt = useTilt({ max: 7 });
 
+  // `cropped` marks an image that already came out of the crop tool. The orb's
+  // own framing zoom must not be applied on top of it — that is what made the
+  // site disagree with the crop preview. See portrait-orb.css.
   return (
     <div
       ref={tilt.ref}
@@ -31,6 +34,7 @@ export default function PortraitOrb({ src, alt, graded = true }) {
       onPointerLeave={tilt.onPointerLeave}
       className="portrait"
       data-graded={graded ? 'heavy' : 'light'}
+      data-cropped={cropped || undefined}
     >
       <div className="portrait-scene">
         <div className="portrait-glow" aria-hidden="true" />

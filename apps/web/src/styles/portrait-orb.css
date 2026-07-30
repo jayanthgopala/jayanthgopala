@@ -217,3 +217,23 @@
 @media (hover: none) {
   .portrait-scene { transform: none; }
 }
+
+/* --- Hand-cropped uploads --------------------------------------------------
+   An image from the crop tool is already framed exactly as the owner wants, so
+   the orb must show it 1:1. Without this the light-treatment rules above scale
+   it 1.75x from the top edge and the site disagrees with the crop preview —
+   the face ends up pushed below the circle. */
+.portrait[data-cropped] .portrait-img {
+  transform: none;
+  transform-origin: 50% 50%;
+  object-position: 50% 50%;
+  object-fit: cover;
+}
+
+/* The crop already decides the composition; a heavy vignette would eat it. */
+.portrait[data-cropped] .portrait-vignette {
+  background:
+    radial-gradient(circle at 50% 50%, transparent 62%, rgba(8, 8, 10, 0.34) 86%,
+                    rgba(8, 8, 10, 0.8) 100%);
+}
+.portrait[data-cropped] .portrait-duotone { opacity: 0.18; }

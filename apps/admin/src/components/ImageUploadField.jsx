@@ -16,7 +16,8 @@ export default function ImageUploadField({
   value,
   onChange,
   preview = 'wide', // 'wide' for screenshots, 'round' for portraits
-  crop = false,     // round previews get the crop step
+  crop = false,        // show the crop step before uploading
+  cropShape = 'circle', // 'circle' for the orb, 'portrait' for cinematic
 }) {
   const toast = useToast();
   const inputRef = useRef(null);
@@ -106,6 +107,7 @@ export default function ImageUploadField({
       {pendingCrop && (
         <CropDialog
           file={pendingCrop}
+          shape={cropShape}
           onCancel={() => setPendingCrop(null)}
           onCropped={(cropped) => {
             setPendingCrop(null);

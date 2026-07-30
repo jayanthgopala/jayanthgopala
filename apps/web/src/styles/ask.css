@@ -162,3 +162,13 @@
   .ask-panel { animation: none; }
   .ask-typing span { animation: none; opacity: 0.5; }
 }
+
+/* Links inside an answer. Underlined rather than colour-only: on a muted grey
+   message bubble, colour alone is a weak affordance. */
+.ask-link {
+  color: var(--iris);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-word;
+}
+.ask-link:hover { color: var(--text); }

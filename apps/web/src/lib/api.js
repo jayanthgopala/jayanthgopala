@@ -48,11 +48,13 @@ export const fetchRepoStats = (opts) => get('/api/public/repo-stats', opts);
 
 /** Grounded Q&A. Surfaces the server's own wording on failure — it explains
  *  rate limits and outages better than a generic message would. */
-export async function askQuestion(question) {
+export async function askQuestion(question, history = []) {
   const res = await fetch(`${BASE}/api/ask`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question }),
+    // History travels with every call — the Worker is stateless, so without it
+    // a reply like "yes" or "go on" reaches the model with no antecedent.
+    body: JSON.stringify({ question, history }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
