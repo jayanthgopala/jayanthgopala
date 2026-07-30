@@ -26,11 +26,11 @@ export default function CinematicHero({ profile, content = {} }) {
   const sceneRef = useRef(null);
   const p = useSceneProgress(sceneRef);
 
-  // Cinematic gets its own image when one is set. The two modes frame the
-  // subject completely differently — a circle crop versus a full-bleed plate —
-  // so a single shared upload always compromises one of them. Falls back to
-  // the minimal portrait, then the bundled render.
-  const custom = profile.cinematicAvatarUrl || profile.avatarUrl || '';
+  // Each mode falls back to its own bundled default, never to the other mode's
+  // upload. The two frame the subject completely differently — a circle crop
+  // versus a full-bleed plate — so borrowing the minimal portrait here produced
+  // a head floating in the middle of the frame rather than a composed shot.
+  const custom = profile.cinematicAvatarUrl || '';
   const portrait = custom ? mediaUrl(custom) : DEFAULT_PORTRAIT;
 
   // Push in hard. The origin is the subject's eye in image coordinates, so the

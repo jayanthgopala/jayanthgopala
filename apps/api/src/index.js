@@ -8,6 +8,7 @@ import { syncProfile } from './lib/sync.js';
 import publicRoutes from './routes/public.js';
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
+import { askHandler } from './routes/ask.js';
 
 const app = new Hono();
 
@@ -91,6 +92,7 @@ app.get('/media/:key', async (c) => {
 
 app.route('/api/public', publicRoutes);
 app.route('/api/auth', authRoutes);
+app.post('/api/ask', askHandler);
 app.use('/api/admin/*', requireAuth());
 app.route('/api/admin', adminRoutes);
 

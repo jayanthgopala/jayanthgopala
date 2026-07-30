@@ -7,6 +7,8 @@ import {
   getStack,
   getSocials,
   getContentRows,
+  getEducation,
+  getExperience,
   rowToProject,
   contentHash,
 } from '../lib/db.js';
@@ -312,6 +314,106 @@ app.delete('/socials/:id', async (c) => {
   await c.env.DB.prepare('DELETE FROM socials WHERE id = ?').bind(int(c.req.param('id'))).run();
   await afterWrite(c);
   return c.json({ ok: true });
+});
+
+// --- Education & experience ------------------------------------------------
+//
+// Both are ordered lists with the same lifecycle, so one factory serves both
+// rather than two near-identical blocks of CRUD.
+
+function listRoutes({ path, table, read, columns, required }) {
+  app.get(path, async (c) => c.json(await read(c.env.DB, { includeDrafts: true })));
+
+  app.post(path, async (c) => {
+    const body = await c.req.json();
+    for (const field of required) {
+      if (!body[field]) return c.json({ error: `${field} is required` }, 400);
+    }
+
+    const next = await c.env.DB.prepare(
+      `SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM ${table}`
+    ).first();
+
+    const names = Object.keys(columns);
+    const values = names.map((col) => columns[col](body[toCamel(col)] ?? body[col]));
+
+    await c.env.DB.prepare(
+      `INSERT INTO ${table} (${names.join(',')}, sort_order)
+       VALUES (${names.map(() => '?').join(',')}, ?)`
+    )
+      .bind(...values, next?.n ?? 0)
+      .run();
+
+    await afterWrite(c);
+    return c.json(await read(c.env.DB, { includeDrafts: true }), 201);
+  });
+
+  app.patch(`${path}/:id`, async (c) => {
+    const body = await c.req.json();
+    const mapped = {};
+    for (const col of Object.keys(columns)) {
+      const camel = toCamel(col);
+      if (body[camel] !== undefined) mapped[col] = body[camel];
+      else if (body[col] !== undefined) mapped[col] = body[col];
+    }
+    if (body.sortOrder !== undefined) mapped.sort_order = body.sortOrder;
+
+    const update = buildUpdate(table, { ...columns, sort_order: int }, mapped, 'id = ?');
+    if (!update) return c.json({ error: 'no valid fields' }, 400);
+
+    // Neither table has updated_at.
+    const sql = update.sql.replace(", updated_at = datetime('now')", '');
+    await c.env.DB.prepare(sql).bind(...update.values, int(c.req.param('id'))).run();
+
+    await afterWrite(c);
+    return c.json(await read(c.env.DB, { includeDrafts: true }));
+  });
+
+  app.delete(`${path}/:id`, async (c) => {
+    await c.env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`)
+      .bind(int(c.req.param('id')))
+      .run();
+    await afterWrite(c);
+    return c.json({ ok: true });
+  });
+
+  app.post(`${path}/reorder`, async (c) => {
+    const { ids } = await c.req.json();
+    if (!Array.isArray(ids)) return c.json({ error: 'ids must be an array' }, 400);
+
+    await c.env.DB.batch(
+      ids.map((id, i) =>
+        c.env.DB.prepare(`UPDATE ${table} SET sort_order = ? WHERE id = ?`).bind(i, int(id))
+      )
+    );
+
+    await afterWrite(c);
+    return c.json(await read(c.env.DB, { includeDrafts: true }));
+  });
+}
+
+const toCamel = (s) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+
+listRoutes({
+  path: '/education',
+  table: 'education',
+  read: getEducation,
+  required: ['institution'],
+  columns: {
+    institution: str, qualification: str, field: str, period: str,
+    location: str, grade: str, description: str, published: bool,
+  },
+});
+
+listRoutes({
+  path: '/experience',
+  table: 'experience',
+  read: getExperience,
+  required: ['title'],
+  columns: {
+    kind: str, title: str, organisation: str, period: str, location: str,
+    description: str, url: str, tech: json, published: bool,
+  },
 });
 
 // --- Site copy -------------------------------------------------------------

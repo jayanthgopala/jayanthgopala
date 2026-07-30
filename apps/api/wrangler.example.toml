@@ -53,6 +53,11 @@ database_id   = "__D1_DATABASE_ID__"
 binding = "CACHE"
 id      = "__KV_NAMESPACE_ID__"
 
+# Workers AI powers the /api/ask assistant. No id needed — the binding
+# is account-scoped, which is also why it is safe in the public template.
+[ai]
+binding = "AI"
+
 [[r2_buckets]]
 binding     = "MEDIA"
 bucket_name = "portfolio-media"

@@ -139,16 +139,63 @@ export async function getContentRows(db) {
   }));
 }
 
+export async function getEducation(db, { includeDrafts = false } = {}) {
+  const sql = includeDrafts
+    ? 'SELECT * FROM education ORDER BY sort_order ASC, id ASC'
+    : 'SELECT * FROM education WHERE published = 1 ORDER BY sort_order ASC, id ASC';
+  const { results } = await db.prepare(sql).all();
+
+  return (results || []).map((r) => ({
+    id: r.id,
+    institution: r.institution,
+    qualification: r.qualification,
+    field: r.field,
+    period: r.period,
+    location: r.location,
+    grade: r.grade,
+    description: r.description,
+    published: !!r.published,
+    sortOrder: r.sort_order,
+  }));
+}
+
+export async function getExperience(db, { includeDrafts = false } = {}) {
+  const sql = includeDrafts
+    ? 'SELECT * FROM experience ORDER BY sort_order ASC, id ASC'
+    : 'SELECT * FROM experience WHERE published = 1 ORDER BY sort_order ASC, id ASC';
+  const { results } = await db.prepare(sql).all();
+
+  return (results || []).map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    title: r.title,
+    organisation: r.organisation,
+    period: r.period,
+    location: r.location,
+    description: r.description,
+    url: r.url,
+    tech: parseJson(r.tech, []),
+    published: !!r.published,
+    sortOrder: r.sort_order,
+  }));
+}
+
 /** The single payload the website hydrates from, and the README renders from. */
 export async function loadSite(db, opts = {}) {
-  const [profile, status, projects, stack, socials, content] = await Promise.all([
-    getProfile(db),
-    getStatus(db),
-    getProjects(db, opts),
-    getStack(db),
-    getSocials(db),
-    getContent(db),
-  ]);
+  const [profile, status, projects, stack, socials, content, education, experience] =
+    await Promise.all([
+      getProfile(db),
+      getStatus(db),
+      getProjects(db, opts),
+      getStack(db),
+      getSocials(db),
+      getContent(db),
+      // These tables arrived in migration 005. A database that predates it
+      // would throw and take the whole payload down, so degrade to empty
+      // instead — the sections simply don't render.
+      getEducation(db, opts).catch(() => []),
+      getExperience(db, opts).catch(() => []),
+    ]);
 
   return {
     profile,
@@ -157,6 +204,8 @@ export async function loadSite(db, opts = {}) {
     stack,
     socials,
     content,
+    education,
+    experience,
     generatedAt: new Date().toISOString(),
   };
 }
