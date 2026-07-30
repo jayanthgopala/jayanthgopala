@@ -12,3 +12,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+
+# Carries account-scoped D1/KV ids. Use wrangler.example.toml as the template.
+apps/api/wrangler.toml

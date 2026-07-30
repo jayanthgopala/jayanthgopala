@@ -74,7 +74,12 @@ export default function App() {
   }, [site.content]);
 
   const statusCard = (
-    <StatusCard status={site.status} loading={loading} content={site.content} />
+    <StatusCard
+      status={site.status}
+      loading={loading}
+      content={site.content}
+      socials={site.socials}
+    />
   );
 
   return (

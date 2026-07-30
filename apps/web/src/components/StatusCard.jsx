@@ -1,22 +1,7 @@
 import { useEffect, useState } from 'react';
 import { copy } from '../lib/api.js';
+import { SocialIcon, ArrowUpRight } from './Icons.jsx';
 import '../styles/status.css';
-
-/** "3m ago" style formatting. D1 stores UTC without a Z suffix. */
-function relativeTime(value) {
-  if (!value) return '—';
-  const iso = String(value).replace(' ', 'T');
-  const then = new Date(iso.endsWith('Z') || iso.includes('+') ? iso : `${iso}Z`);
-  const diff = Date.now() - then.getTime();
-  if (Number.isNaN(diff)) return '—';
-
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
 
 function useLocalTime(timeZone) {
   const [time, setTime] = useState('');
@@ -59,7 +44,16 @@ function Row({ label, state, children }) {
  * The live status widget. Its data is refreshed by App's 60s poll, so this
  * component stays purely presentational.
  */
-export default function StatusCard({ status, loading, content = {} }) {
+/** Strips protocol, `www.`, `mailto:` and any trailing slash for display. */
+function prettyUrl(url = '') {
+  return String(url)
+    .replace(/^mailto:/, '')
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .replace(/\/$/, '');
+}
+
+export default function StatusCard({ status, loading, content = {}, socials = [] }) {
   const localTime = useLocalTime(status.timezone);
   const progress = Math.max(0, Math.min(100, Number(status.currentProgress) || 0));
 
@@ -106,26 +100,32 @@ export default function StatusCard({ status, loading, content = {} }) {
         <span className="mono status-progress">{progress}%</span>
       </div>
 
-      <div className="status-rows">
-        <Row
-          label={copy(content, 'status.label.deployment', 'Latest deployment')}
-          state={status.deployState}
-        >
-          <span className="status-truncate">{status.deployLabel || '—'}</span>
-          <span className="status-ago">{relativeTime(status.deployAt)}</span>
-        </Row>
-
-        <Row label={copy(content, 'status.label.github', 'GitHub')} state={status.githubState}>
-          {status.githubState || '—'}
-        </Row>
-
-        <Row
-          label={copy(content, 'status.label.health', 'System health')}
-          state={status.healthState}
-        >
-          {Number(status.healthUptime || 0).toFixed(2)}% uptime
-        </Row>
-      </div>
+      {/* Links, not system metrics. Deployment state, "GitHub: operational" and
+          an uptime percentage were seeded demo values that nothing actually
+          measured — a status card is worse than useless if its numbers are
+          decorative. These come from the Links editor. */}
+      {socials.length > 0 && (
+        <div className="status-rows">
+          {socials.map((social) => (
+            <a
+              key={social.id ?? social.url}
+              className="status-link"
+              href={social.url}
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              <span className="status-link-label">
+                <SocialIcon icon={social.icon} width={15} height={15} />
+                {social.label}
+              </span>
+              <span className="status-link-go">
+                <span className="status-link-url">{prettyUrl(social.url)}</span>
+                <ArrowUpRight width={13} height={13} />
+              </span>
+            </a>
+          ))}
+        </div>
+      )}
     </article>
   );
 }

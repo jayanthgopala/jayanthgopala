@@ -124,35 +124,6 @@
                     rgba(8, 8, 10, 0.9) 99%);
 }
 
-/* --- Rings ---------------------------------------------------------------- */
-
-.portrait-ring {
-  position: absolute;
-  border-radius: 50%;
-  border: 1px solid transparent;
-  background: var(--gradient-accent) border-box;
-  -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
-  mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-}
-
-.portrait-ring-back {
-  inset: -6%;
-  opacity: 0.42;
-  transform: translateZ(-46px);
-  animation: portrait-spin-back 26s linear infinite;
-}
-
-/* Sits in front of the subject. A ring that passes both behind and in front
-   is the cheapest, strongest depth cue available. */
-.portrait-ring-front {
-  inset: 1%;
-  opacity: 0.62;
-  transform: translateZ(62px);
-  animation: portrait-spin-front 19s linear infinite;
-}
-
 /* --- Particles ------------------------------------------------------------ */
 
 .portrait-particle {
@@ -219,16 +190,6 @@
   to   { opacity: 1;    scale: 1.05; }
 }
 
-@keyframes portrait-spin-back {
-  from { transform: translateZ(-46px) rotateX(74deg) rotateZ(0deg); }
-  to   { transform: translateZ(-46px) rotateX(74deg) rotateZ(360deg); }
-}
-
-@keyframes portrait-spin-front {
-  from { transform: translateZ(62px) rotateY(76deg) rotateZ(0deg); }
-  to   { transform: translateZ(62px) rotateY(76deg) rotateZ(-360deg); }
-}
-
 /* The trailing counter-rotation keeps the dot from spinning about its own
    centre — only the orbit should move it. */
 @keyframes portrait-orbit {
@@ -247,7 +208,6 @@
 @media (prefers-reduced-motion: reduce) {
   .portrait-scene,
   .portrait-glow,
-  .portrait-ring,
   .portrait-particle {
     animation: none;
   }

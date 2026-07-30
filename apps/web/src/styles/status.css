@@ -119,6 +119,48 @@
 }
 .status-row + .status-row { border-top: 1px solid rgba(255, 255, 255, 0.04); }
 
+/* --- Links ---------------------------------------------------------------- */
+
+.status-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding: var(--s-3) var(--s-2);
+  margin-inline: calc(var(--s-2) * -1);
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm);
+  min-width: 0;
+  transition: background var(--d-fast) var(--ease), color var(--d-fast) var(--ease);
+}
+.status-link + .status-link { border-top: 1px solid rgba(255, 255, 255, 0.04); }
+.status-link:hover { background: var(--surface-hover); }
+
+.status-link-label {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.status-link-go {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-dim);
+  transition: color var(--d-fast) var(--ease), gap var(--d-fast) var(--ease);
+}
+.status-link:hover .status-link-go { color: var(--iris); gap: 9px; }
+
+.status-link-url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-xs);
+}
+
 .status-row-label { color: var(--text-dim); white-space: nowrap; }
 
 .status-row-value {

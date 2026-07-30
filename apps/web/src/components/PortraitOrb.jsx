@@ -35,9 +35,6 @@ export default function PortraitOrb({ src, alt, graded = true }) {
       <div className="portrait-scene">
         <div className="portrait-glow" aria-hidden="true" />
 
-        {/* Behind the subject */}
-        <span className="portrait-ring portrait-ring-back" aria-hidden="true" />
-
         <div className="portrait-disc">
           <img
             className="portrait-img"
@@ -55,9 +52,10 @@ export default function PortraitOrb({ src, alt, graded = true }) {
           <span className="portrait-rim" aria-hidden="true" />
         </div>
 
-        {/* In front of the subject — this crossing is what sells the depth */}
-        <span className="portrait-ring portrait-ring-front" aria-hidden="true" />
-
+        {/* No orbiting rings here. They read as lines sweeping across the face,
+            which fights the portrait instead of framing it — and "minimal" is
+            the whole point of this mode. Depth comes from the translateZ layers
+            and the contact shadow. */}
         <span className="portrait-particle portrait-particle-1" aria-hidden="true" />
         <span className="portrait-particle portrait-particle-2" aria-hidden="true" />
         <span className="portrait-particle portrait-particle-3" aria-hidden="true" />

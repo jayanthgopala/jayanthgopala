@@ -1,3 +1,7 @@
+# Copy to wrangler.toml and fill in your own ids:
+#   cp wrangler.example.toml wrangler.toml
+# wrangler.toml is git-ignored because it carries account-scoped resource ids.
+
 name = "portfolio-api"
 main = "src/index.js"
 compatibility_date = "2024-12-01"

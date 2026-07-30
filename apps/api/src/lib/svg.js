@@ -113,12 +113,25 @@ export function statusCardSvg(site) {
   const availColor = s.available ? T.mint : T.amber;
   const availText = s.available ? s.availabilityNote : 'Currently at capacity';
 
-  // Column layout: 3 metrics across the lower half.
-  const cols = [
-    { x: 40, label: 'Latest deployment', value: clip(s.deployLabel || '—', 26), state: s.deployState },
-    { x: 300, label: 'GitHub', value: clip(s.githubState || '—', 20), state: s.githubState },
-    { x: 560, label: 'System health', value: `${Number(s.healthUptime).toFixed(2)}% uptime`, state: s.healthState },
-  ];
+  // Links across the lower half, not system metrics. Deployment state and an
+  // uptime percentage were seeded values that nothing measured; a status card
+  // showing decorative numbers is worse than one showing none.
+  const pretty = (url = '') =>
+    String(url)
+      .replace(/^mailto:/, '')
+      .replace(/^https?:\/\//, '')
+      .replace(/^www\./, '')
+      .replace(/\/$/, '');
+
+  const cols = (site.socials || [])
+    .filter((l) => l.showInReadme)
+    .slice(0, 3)
+    .map((l, i) => ({
+      x: 40 + i * 260,
+      label: l.label,
+      value: clip(pretty(l.url), 28),
+      state: 'operational',
+    }));
 
   const progress = Math.max(0, Math.min(100, Number(s.currentProgress) || 0));
   const barWidth = W - 80;
