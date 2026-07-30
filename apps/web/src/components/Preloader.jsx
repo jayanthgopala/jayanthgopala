@@ -51,19 +51,13 @@ export default function Preloader({ content = {}, ready }) {
     const start = performance.now();
     let cancelled = false;
 
-    const finish = () => {
-      setPhase('exiting');
-      timers.current.push(
-        setTimeout(() => {
-          setPhase('done');
-          try {
-            sessionStorage.setItem(SESSION_KEY, '1');
-          } catch {
-            /* non-fatal */
-          }
-        }, FADE_MS)
-      );
-    };
+    // Only flips the phase. The unmount timer lives in its own effect below:
+    // scheduling it here put it in `timers.current`, and the phase change then
+    // triggered this effect's cleanup, which cleared the very timer meant to
+    // finish the transition. The overlay faded to opacity 0 but never
+    // unmounted, and the scroll lock never released — an invisible overlay
+    // holding the page hostage.
+    const finish = () => setPhase('exiting');
 
     const tick = (now) => {
       if (cancelled) return;
@@ -102,9 +96,35 @@ export default function Preloader({ content = {}, ready }) {
     };
   }, [phase]);
 
-  // Lock scrolling while the overlay is up.
+  // Exit transition, owned by its own effect so no other cleanup can cancel it.
+  useEffect(() => {
+    if (phase !== 'exiting') return;
+    const id = setTimeout(() => {
+      setPhase('done');
+      try {
+        sessionStorage.setItem(SESSION_KEY, '1');
+      } catch {
+        /* non-fatal */
+      }
+    }, FADE_MS);
+    return () => clearTimeout(id);
+  }, [phase]);
+
+  /**
+   * Failsafe. Whatever happens to the counter — a stalled fetch, a bug like the
+   * one above — the overlay tears itself down after this. An entrance animation
+   * must never be able to trap the page behind a scroll lock.
+   */
   useEffect(() => {
     if (phase === 'done') return;
+    const id = setTimeout(() => setPhase('done'), 8000);
+    return () => clearTimeout(id);
+  }, [phase]);
+
+  // Lock scrolling only while the overlay is actually visible. Holding it
+  // through the fade means a stuck exit leaves the page unscrollable.
+  useEffect(() => {
+    if (phase !== 'loading') return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
