@@ -1,0 +1,52 @@
+.gh-buttons {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+
+.gh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  height: 34px;
+  padding-inline: var(--s-3);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: var(--t-xs);
+  font-weight: 550;
+  color: var(--text-muted);
+  white-space: nowrap;
+  transition: color var(--d-fast) var(--ease),
+              background var(--d-fast) var(--ease),
+              border-color var(--d-fast) var(--ease),
+              transform var(--d-fast) var(--ease);
+}
+
+.gh-btn:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+/* Count sits in its own well, mirroring GitHub's own button treatment so the
+   number reads as data rather than part of the label. */
+.gh-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 20px;
+  padding-inline: 6px;
+  margin-right: -4px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.07);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+@media (max-width: 560px) {
+  .gh-btn { height: 32px; }
+}

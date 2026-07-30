@@ -41,7 +41,7 @@ README_PATH     = "README.md"
 PUBLIC_API_URL  = "https://portfolio-api.jayanthgopala21.workers.dev"
 # Credentialed requests can't use a wildcard, so every origin the site or admin
 # panel is served from has to be listed explicitly.
-ALLOWED_ORIGINS = "https://jayanthgopala.com,https://www.jayanthgopala.com,https://jayanthgopala.pages.dev,https://admin.jayanthgopala.com,https://jayanthgopala-admin.pages.dev,http://localhost:5173,http://localhost:5174"
+ALLOWED_ORIGINS = "https://jayanthgopala.com,https://www.jayanthgopala.com,https://jayanthgopala.pages.dev,https://admin.jayanthgopala.com,https://jayanthgopala-admin.pages.dev,http://localhost:5173,http://localhost:5174,http://localhost:4173,http://localhost:4180"
 CACHE_TTL       = "60"
 
 [[d1_databases]]

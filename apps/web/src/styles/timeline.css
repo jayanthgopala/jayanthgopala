@@ -1,0 +1,120 @@
+/* Shared by the Education and Experience sections. */
+
+.timeline {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding-left: var(--s-6);
+}
+
+/* The rail. Drawn on the list rather than per item so it's one continuous
+   line, and stopped short at both ends so it doesn't dangle past the markers. */
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 10px;
+  bottom: 10px;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--border-strong) 12%,
+    var(--border-strong) 88%,
+    transparent
+  );
+}
+
+.timeline-item { position: relative; }
+
+.timeline-marker {
+  position: absolute;
+  left: calc(var(--s-6) * -1 + 3px);
+  top: 26px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--gradient-accent);
+  box-shadow: 0 0 0 4px var(--bg);
+}
+
+.timeline-card {
+  padding: var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.timeline-card:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.timeline-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+}
+
+.timeline-title {
+  font-size: var(--t-h3);
+  font-weight: 620;
+  letter-spacing: -0.022em;
+}
+
+.timeline-period {
+  color: var(--text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.timeline-org { color: var(--text-muted); font-size: var(--t-sm); }
+.timeline-dim { color: var(--text-dim); }
+
+.timeline-badge {
+  align-self: flex-start;
+  padding: 3px var(--s-3);
+  border-radius: var(--r-pill);
+  background: var(--iris-soft);
+  border: 1px solid var(--border);
+  color: var(--iris);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.timeline-desc {
+  color: var(--text-muted);
+  font-size: var(--t-sm);
+  line-height: 1.6;
+}
+
+.timeline-tech {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-1);
+}
+.timeline-tech-item { height: 24px; font-size: var(--t-micro); }
+
+.timeline-link {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: var(--s-1);
+  font-size: var(--t-sm);
+  font-weight: 550;
+  color: var(--iris);
+  transition: gap var(--d-fast) var(--ease);
+}
+.timeline-link:hover { gap: 9px; }
+
+@media (max-width: 560px) {
+  .timeline { padding-left: var(--s-5); }
+  .timeline-marker { left: calc(var(--s-5) * -1 + 2px); }
+  .timeline::before { left: 5px; }
+  .timeline-head { gap: var(--s-2); }
+}

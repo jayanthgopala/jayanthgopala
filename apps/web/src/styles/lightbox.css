@@ -1,0 +1,80 @@
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: grid;
+  place-items: center;
+  padding: clamp(var(--s-4), 5vw, var(--s-8));
+  background: rgba(4, 4, 6, 0.86);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: lightbox-in var(--d-base) var(--ease);
+  cursor: zoom-out;
+}
+
+@keyframes lightbox-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.lightbox-img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  cursor: default;
+  animation: lightbox-rise var(--d-slow) var(--ease);
+}
+
+@keyframes lightbox-rise {
+  from { opacity: 0; transform: scale(0.97) translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.lightbox-close {
+  position: absolute;
+  top: clamp(var(--s-3), 3vw, var(--s-5));
+  right: clamp(var(--s-3), 3vw, var(--s-5));
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  transition: color var(--d-fast) var(--ease), background var(--d-fast) var(--ease);
+}
+.lightbox-close:hover { color: var(--text); background: var(--surface-hover); }
+
+/* Screen-reader-only label on the close button. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The screenshot becomes a button, so strip the button chrome and keep the
+   image behaving exactly as it did before. */
+.project-media-btn {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lightbox, .lightbox-img { animation: none; }
+}

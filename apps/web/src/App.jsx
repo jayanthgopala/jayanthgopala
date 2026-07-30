@@ -9,6 +9,7 @@ import Preloader from './components/Preloader.jsx';
 import StatusCard from './components/StatusCard.jsx';
 import Projects from './components/Projects.jsx';
 import Stack from './components/Stack.jsx';
+import { Education, Experience } from './components/Timeline.jsx';
 import Contact from './components/Contact.jsx';
 import Footer from './components/Footer.jsx';
 import ErrorBanner from './components/ErrorBanner.jsx';
@@ -96,6 +97,8 @@ export default function App() {
         content={site.content}
         mode={mode}
         onChooseMode={choose}
+        hasEducation={site.education?.length > 0}
+        hasExperience={site.experience?.length > 0}
       />
 
       <main id="top">
@@ -116,6 +119,8 @@ export default function App() {
         )}
 
         <Projects projects={site.projects} loading={loading} content={site.content} />
+        <Experience experience={site.experience} content={site.content} />
+        <Education education={site.education} content={site.content} />
         <Stack stack={site.stack} content={site.content} />
         <Contact profile={site.profile} socials={site.socials} content={site.content} />
       </main>

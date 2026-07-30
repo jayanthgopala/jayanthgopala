@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { Reveal, useTilt } from '../lib/motion.jsx';
 import { mediaUrl, copy, externalUrl } from '../lib/api.js';
 import { GitHubIcon, ArrowUpRight } from './Icons.jsx';
+import Lightbox from './Lightbox.jsx';
 import '../styles/projects.css';
 
-function ProjectCard({ project, index, featuredLabel }) {
+function ProjectCard({ project, index, featuredLabel, onEnlarge }) {
   const tilt = useTilt({ max: 4 });
 
   return (
@@ -17,14 +19,21 @@ function ProjectCard({ project, index, featuredLabel }) {
       >
         <div className="project-media">
           {project.screenshot ? (
-            <img
-              src={mediaUrl(project.screenshot)}
-              alt={`${project.title} screenshot`}
-              loading="lazy"
-              decoding="async"
-              width="800"
-              height="500"
-            />
+            <button
+              type="button"
+              className="project-media-btn"
+              onClick={() => onEnlarge(mediaUrl(project.screenshot), `${project.title} screenshot`)}
+              aria-label={`Enlarge ${project.title} screenshot`}
+            >
+              <img
+                src={mediaUrl(project.screenshot)}
+                alt={`${project.title} screenshot`}
+                loading="lazy"
+                decoding="async"
+                width="800"
+                height="500"
+              />
+            </button>
           ) : (
             /* No screenshot uploaded yet — an accent-tinted placeholder keeps
                the grid rhythm instead of collapsing the card. */
@@ -82,6 +91,8 @@ function ProjectCard({ project, index, featuredLabel }) {
 }
 
 export default function Projects({ projects = [], loading, content = {} }) {
+  const [enlarged, setEnlarged] = useState(null);
+  const onEnlarge = (src, alt) => setEnlarged({ src, alt });
   const featured = projects.filter((p) => p.published !== false);
   const featuredLabel = copy(content, 'projects.featured', 'Featured');
 
@@ -118,11 +129,14 @@ export default function Projects({ projects = [], loading, content = {} }) {
                 project={project}
                 index={index}
                 featuredLabel={featuredLabel}
+                onEnlarge={onEnlarge}
               />
             ))}
           </div>
         )}
       </div>
+
+      <Lightbox src={enlarged?.src} alt={enlarged?.alt} onClose={() => setEnlarged(null)} />
     </section>
   );
 }

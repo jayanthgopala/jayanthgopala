@@ -44,6 +44,7 @@ async function get(path, { signal } = {}) {
 export const fetchSite = (opts) => get('/api/public/site', opts);
 export const fetchStatus = (opts) => get('/api/public/status', opts);
 export const fetchProjects = (opts) => get('/api/public/projects', opts);
+export const fetchRepoStats = (opts) => get('/api/public/repo-stats', opts);
 
 /**
  * Rendered while the network request is in flight. Keeping the shape identical
@@ -64,6 +65,8 @@ export const EMPTY_SITE = {
   projects: [],
   stack: [],
   socials: [],
+  education: [],
+  experience: [],
   content: {},
 };
 

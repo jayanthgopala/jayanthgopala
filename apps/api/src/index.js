@@ -4,6 +4,7 @@ import { requireAuth } from './lib/auth.js';
 import { loadSite } from './lib/db.js';
 import { statusCardSvg, metricsCardSvg, svgResponse } from './lib/svg.js';
 import { bannerSvg } from './lib/banner.js';
+import { bumpViews, viewsSvg, viewsResponse } from './lib/views.js';
 import { syncProfile } from './lib/sync.js';
 import publicRoutes from './routes/public.js';
 import authRoutes from './routes/auth.js';
@@ -73,6 +74,55 @@ app.get('/svg/banner-dark.svg', async (c) => {
 app.get('/svg/banner-light.svg', async (c) => {
   const site = await loadSite(c.env.DB);
   return svgResponse(bannerSvg(site, 'light'));
+});
+
+app.get('/svg/views.svg', async (c) => {
+  const count = await bumpViews(c.env);
+  const site = await loadSite(c.env.DB);
+  const label = site.content?.['views.label'] || 'Profile views';
+  return viewsResponse(viewsSvg(count, label));
+});
+
+/**
+ * Star / fork counts for the site's GitHub buttons.
+ *
+ * Proxied rather than called from the browser so the numbers are cached at the
+ * edge instead of spending each visitor's 60-req/hour unauthenticated GitHub
+ * rate limit — a handful of visitors would otherwise exhaust it and the buttons
+ * would show nothing.
+ */
+app.get('/api/public/repo-stats', async (c) => {
+  const owner = c.env.GITHUB_USER;
+  const repo = c.req.query('repo') || c.env.GITHUB_REPO;
+  const cacheKey = `repo:${owner}/${repo}`;
+
+  const hit = await c.env.CACHE.get(cacheKey, 'json');
+  if (hit) return c.json(hit);
+
+  try {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'portfolio-worker',
+        ...(c.env.GITHUB_TOKEN ? { Authorization: `Bearer ${c.env.GITHUB_TOKEN}` } : {}),
+      },
+    });
+    if (!res.ok) return c.json({ stars: null, forks: null }, 200);
+
+    const j = await res.json();
+    const data = {
+      stars: j.stargazers_count ?? null,
+      forks: j.forks_count ?? null,
+      url: j.html_url,
+      owner,
+      repo,
+    };
+    await c.env.CACHE.put(cacheKey, JSON.stringify(data), { expirationTtl: 900 });
+    return c.json(data);
+  } catch {
+    // Buttons still render and still link to GitHub; they just lose the count.
+    return c.json({ stars: null, forks: null }, 200);
+  }
 });
 
 // --- R2 media --------------------------------------------------------------

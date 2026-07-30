@@ -117,6 +117,21 @@ ${socialBadges}
   <img src="${api}/svg/status.svg" alt="Live status" width="820" />
 </div>
 
+<!--
+  The links inside that card are pixels, not anchors. GitHub proxies README
+  images through camo and renders them as <img>, so nothing inside an SVG is
+  ever clickable — an <a> in the markup would simply be ignored. The row below
+  is the clickable equivalent.
+-->
+<div align="center">
+
+${socials
+  .filter((s) => s.showInReadme)
+  .map((s) => `[${esc(s.label)}](${href(s.url)})`)
+  .join(' &nbsp;·&nbsp; ')}
+
+</div>
+
 <br />
 
 ## ${t('readme.stack', 'Tech Stack')}

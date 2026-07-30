@@ -336,11 +336,37 @@ export function bannerSvg(site, mode = 'dark') {
   const skills = (site.stack || []).slice(0, maxSkills).map((s) => s.name);
   const socials = (site.socials || []).slice(0, 4);
 
+  /**
+   * Education, Focus and Portfolio are derived from live data rather than typed
+   * out again as banner copy. They were static content keys, which meant adding
+   * a degree or changing the current project updated the site but left the
+   * GitHub banner claiming something else. The content keys survive as manual
+   * overrides for anyone who wants to word it differently.
+   */
+  const latestEducation = (site.education || [])[0];
+  const educationValue =
+    t('banner.education', '') ||
+    (latestEducation
+      ? [latestEducation.qualification, latestEducation.institution].filter(Boolean).join(' · ')
+      : '');
+
+  const focusValue = t('banner.focus', '') || site.status?.currentProject || '';
+
+  const portfolioLink = (site.socials || []).find(
+    (s) => s.icon === 'globe' || /portfolio|website/i.test(s.label)
+  );
+  const portfolioValue =
+    t('banner.portfolio', '') ||
+    String(portfolioLink?.url || '')
+      .replace(/^https?:\/\//, '')
+      .replace(/^www\./, '')
+      .replace(/\/+$/, '');
+
   const meta = [
     [t('banner.label.location', 'Location'), profile.location],
-    [t('banner.label.education', 'Education'), t('banner.education', '')],
-    [t('banner.label.focus', 'Focus'), t('banner.focus', '')],
-    [t('banner.label.portfolio', 'Portfolio'), t('banner.portfolio', '')],
+    [t('banner.label.education', 'Education'), educationValue],
+    [t('banner.label.focus', 'Focus'), focusValue],
+    [t('banner.label.portfolio', 'Portfolio'), portfolioValue],
     [t('banner.label.email', 'Email'), profile.email],
   ].filter(([, value]) => value);
 
