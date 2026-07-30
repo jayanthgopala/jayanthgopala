@@ -1,0 +1,164 @@
+/* Floating assistant. Sits above everything except the lightbox. */
+
+.ask-fab {
+  position: fixed;
+  right: clamp(var(--s-4), 3vw, var(--s-6));
+  bottom: clamp(var(--s-4), 3vw, var(--s-6));
+  z-index: 300;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  height: 46px;
+  padding-inline: var(--s-5);
+  border-radius: var(--r-pill);
+  background: var(--gradient-accent);
+  color: #0a0a0c;
+  font-size: var(--t-sm);
+  font-weight: 620;
+  box-shadow: var(--shadow-lg), 0 0 34px rgba(110, 123, 255, 0.32);
+  transition: transform var(--d-fast) var(--ease), box-shadow var(--d-base) var(--ease);
+}
+.ask-fab:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg), 0 0 46px rgba(110, 123, 255, 0.46); }
+.ask-fab:active { transform: scale(0.97); }
+
+.ask-panel {
+  position: fixed;
+  right: clamp(var(--s-4), 3vw, var(--s-6));
+  bottom: calc(clamp(var(--s-4), 3vw, var(--s-6)) + 58px);
+  z-index: 301;
+  width: min(380px, calc(100vw - var(--s-6)));
+  max-height: min(520px, calc(100vh - 140px));
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: ask-in var(--d-base) var(--ease);
+}
+
+@keyframes ask-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+.ask-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.ask-title { display: block; font-size: var(--t-sm); font-weight: 620; }
+
+.ask-note {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--t-micro);
+  color: var(--text-dim);
+}
+
+.ask-close {
+  color: var(--text-dim);
+  padding: 4px;
+  border-radius: var(--r-xs);
+  transition: color var(--d-fast) var(--ease);
+}
+.ask-close:hover { color: var(--text); }
+
+.ask-feed {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--s-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.ask-msg {
+  max-width: 92%;
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-md);
+  font-size: var(--t-sm);
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.ask-bot {
+  align-self: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-bottom-left-radius: var(--r-xs);
+}
+.ask-bot[data-error] { border-color: rgba(232, 106, 138, 0.4); color: var(--rose); }
+
+.ask-user {
+  align-self: flex-end;
+  background: var(--iris-soft);
+  border: 1px solid rgba(110, 123, 255, 0.3);
+  color: var(--text);
+  border-bottom-right-radius: var(--r-xs);
+}
+
+/* Three dots while the model is thinking — a spinner reads as "loading a page",
+   this reads as "composing a reply". */
+.ask-typing { display: flex; gap: 5px; align-items: center; padding-block: var(--s-4); }
+.ask-typing span {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text-dim);
+  animation: ask-blink 1.3s var(--ease-soft) infinite;
+}
+.ask-typing span:nth-child(2) { animation-delay: 0.18s; }
+.ask-typing span:nth-child(3) { animation-delay: 0.36s; }
+
+@keyframes ask-blink {
+  0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
+  30%           { opacity: 1;    transform: translateY(-3px); }
+}
+
+.ask-form {
+  display: flex;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-4) var(--s-4);
+  border-top: 1px solid var(--border);
+}
+
+.ask-input {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  padding-inline: var(--s-3);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--t-sm);
+}
+.ask-input:focus { outline: none; border-color: var(--iris); }
+.ask-input:disabled { opacity: 0.6; }
+
+.ask-send {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-sm);
+  background: var(--gradient-accent);
+  color: #0a0a0c;
+  flex-shrink: 0;
+  transition: opacity var(--d-fast) var(--ease);
+}
+.ask-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+@media (max-width: 480px) {
+  .ask-fab span { display: none; }
+  .ask-fab { width: 46px; padding: 0; justify-content: center; }
+  .ask-panel { right: var(--s-3); left: var(--s-3); width: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ask-panel { animation: none; }
+  .ask-typing span { animation: none; opacity: 0.5; }
+}

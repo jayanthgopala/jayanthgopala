@@ -7,6 +7,7 @@ import StatusPage from '../pages/StatusPage.jsx';
 import ProjectsPage from '../pages/ProjectsPage.jsx';
 import StackPage from '../pages/StackPage.jsx';
 import SocialsPage from '../pages/SocialsPage.jsx';
+import { EducationPage, ExperiencePage } from '../pages/TimelinePage.jsx';
 import CopyPage from '../pages/CopyPage.jsx';
 import PublishPage from '../pages/PublishPage.jsx';
 
@@ -15,6 +16,8 @@ const PAGES = [
   { id: 'profile', label: 'Profile', Component: ProfilePage },
   { id: 'status', label: 'Live status', Component: StatusPage },
   { id: 'projects', label: 'Projects', Component: ProjectsPage },
+  { id: 'experience', label: 'Experience', Component: ExperiencePage },
+  { id: 'education', label: 'Education', Component: EducationPage },
   { id: 'stack', label: 'Tech stack', Component: StackPage },
   { id: 'socials', label: 'Links', Component: SocialsPage },
   { id: 'copy', label: 'Copy', Component: CopyPage },

@@ -1,0 +1,75 @@
+.crop-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: grid;
+  place-items: center;
+  padding: var(--s-4);
+  background: rgba(3, 3, 5, 0.78);
+  backdrop-filter: blur(6px);
+}
+
+.crop-dialog {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding: var(--s-5);
+  border-radius: var(--r-xl);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+}
+
+.crop-head strong { display: block; font-size: var(--t-sm); }
+.crop-hint { display: block; margin-top: 2px; font-size: var(--t-micro); color: var(--text-dim); }
+
+.crop-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--r-md);
+  background: var(--bg);
+  cursor: grab;
+  touch-action: none;          /* we handle drag and pinch ourselves */
+  overscroll-behavior: contain; /* wheel-zoom must not scroll the page */
+  user-select: none;
+}
+.crop-frame:active { cursor: grabbing; }
+
+.crop-img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  max-width: none;
+  pointer-events: none;
+}
+
+/* Everything outside the circle dimmed, so what the site shows is unambiguous
+   while the square that actually gets exported stays visible. */
+.crop-mask {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 9999px rgba(3, 3, 5, 0.55);
+  -webkit-mask: radial-gradient(circle at 50% 50%, transparent 49.5%, #000 50%);
+  mask: radial-gradient(circle at 50% 50%, transparent 49.5%, #000 50%);
+}
+.crop-frame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+
+.crop-zoom { display: flex; align-items: center; gap: var(--s-3); }
+.crop-zoom .label { flex-shrink: 0; }
+
+.crop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}

@@ -46,6 +46,19 @@ export const fetchStatus = (opts) => get('/api/public/status', opts);
 export const fetchProjects = (opts) => get('/api/public/projects', opts);
 export const fetchRepoStats = (opts) => get('/api/public/repo-stats', opts);
 
+/** Grounded Q&A. Surfaces the server's own wording on failure — it explains
+ *  rate limits and outages better than a generic message would. */
+export async function askQuestion(question) {
+  const res = await fetch(`${BASE}/api/ask`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
 /**
  * Rendered while the network request is in flight. Keeping the shape identical
  * to the real payload means components never branch on "is it loaded yet" —

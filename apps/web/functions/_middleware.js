@@ -84,7 +84,58 @@ export async function onRequest(context) {
   const image = profile.avatarUrl ? esc(profile.avatarUrl) : '';
   const canonical = new URL(request.url).origin;
 
+  /**
+   * JSON-LD Person schema.
+   *
+   * This is the piece that lets a search engine treat "Jayanth Gopala V" as an
+   * entity rather than a string of words on a page. `sameAs` is the important
+   * field: it links this site to the profiles that already rank, which is how
+   * a crawler learns they are the same person.
+   *
+   * Injected here rather than in index.html so it always reflects live content,
+   * and so it is present in the raw HTML for crawlers that never run JS.
+   */
+  const personSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'Person',
+    name: profile.name,
+    url: canonical,
+    image: `${canonical}/og-image.jpg`,
+    jobTitle: profile.role || undefined,
+    description: description || undefined,
+    email: profile.email ? `mailto:${profile.email}` : undefined,
+    address: profile.location
+      ? { '@type': 'PostalAddress', addressLocality: profile.location }
+      : undefined,
+    sameAs: (site.socials || [])
+      .map((s) => s.url)
+      .filter((u) => /^https?:\/\//i.test(u)),
+    knowsAbout: (site.stack || []).map((s) => s.name).slice(0, 20),
+    alumniOf: (site.education || []).map((e) => ({
+      '@type': 'EducationalOrganization',
+      name: e.institution,
+    })),
+  };
+
+  // Drop empty keys — Google's validator flags them and they add bytes.
+  const cleanSchema = JSON.stringify(personSchema, (_, v) => {
+    if (v === undefined || v === null || v === '') return undefined;
+    if (Array.isArray(v) && v.length === 0) return undefined;
+    return v;
+  });
+
+  class SchemaInjector {
+    element(el) {
+      // `</head>` is the safe anchor: scripts appended here never block paint.
+      el.append(
+        `<script type="application/ld+json">${cleanSchema.replace(/</g, '\\u003c')}</script>`,
+        { html: true }
+      );
+    }
+  }
+
   let rewriter = new HTMLRewriter()
+    .on('head', new SchemaInjector())
     .on('title', new TextSetter(title))
     .on('meta[name="description"]', new AttributeSetter('content', description))
     .on('meta[property="og:title"]', new AttributeSetter('content', title))

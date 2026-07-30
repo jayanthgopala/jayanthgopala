@@ -92,13 +92,14 @@ export default function ProfilePage() {
             label="Portrait — Minimal mode"
             hint="Cropped to a circle in the hero's 3D object. Head-and-shoulders works best."
             preview="round"
+            crop
             value={draft.avatarUrl}
             onChange={(v) => set('avatarUrl', v)}
           />
 
           <ImageUploadField
             label="Portrait — Cinematic mode"
-            hint="Full-bleed behind the headline. Chest-up, subject centred, background matching #101012 (or cut out). Falls back to the minimal portrait if left empty."
+            hint="Full-bleed behind the headline. Chest-up, subject centred, dark background. Not cropped — the whole image is used."
             value={draft.cinematicAvatarUrl}
             onChange={(v) => set('cinematicAvatarUrl', v)}
           />

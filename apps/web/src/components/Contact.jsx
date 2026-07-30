@@ -1,6 +1,7 @@
 import { Reveal, useRipple } from '../lib/motion.jsx';
 import { copy, externalUrl } from '../lib/api.js';
 import { SocialIcon, ArrowUpRight } from './Icons.jsx';
+import GitHubButtons from './GitHubButtons.jsx';
 import '../styles/sections.css';
 
 export default function Contact({ profile, socials = [], content = {} }) {
@@ -50,6 +51,11 @@ export default function Contact({ profile, socials = [], content = {} }) {
                   </a>
                 )}
               </div>
+
+              {/* Star / fork live down here rather than in the nav: they are a
+                  call to action once someone has read the work, not a
+                  navigation control competing with the mode toggle. */}
+              <GitHubButtons profile={profile} content={content} />
 
               {socials.length > 0 && (
                 <ul className="contact-socials">

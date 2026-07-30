@@ -1,0 +1,20 @@
+# https://jayanthgopala.com
+User-agent: *
+Allow: /
+
+# AI crawlers are allowed deliberately. The point of this site is that someone
+# searching "Jayanth Gopala" - in Google or through an assistant - finds
+# accurate information rather than guesswork.
+User-agent: GPTBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+Sitemap: https://jayanthgopala.com/sitemap.xml

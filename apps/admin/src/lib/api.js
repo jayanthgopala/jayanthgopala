@@ -80,6 +80,18 @@ export const api = {
   updateStack: (id, body) => request(`/api/admin/stack/${id}`, { method: 'PATCH', body }),
   deleteStack: (id) => request(`/api/admin/stack/${id}`, { method: 'DELETE' }),
 
+  getEducation: () => request('/api/admin/education'),
+  createEducation: (body) => request('/api/admin/education', { method: 'POST', body }),
+  updateEducation: (id, body) => request(`/api/admin/education/${id}`, { method: 'PATCH', body }),
+  deleteEducation: (id) => request(`/api/admin/education/${id}`, { method: 'DELETE' }),
+  reorderEducation: (ids) => request('/api/admin/education/reorder', { method: 'POST', body: { ids } }),
+
+  getExperience: () => request('/api/admin/experience'),
+  createExperience: (body) => request('/api/admin/experience', { method: 'POST', body }),
+  updateExperience: (id, body) => request(`/api/admin/experience/${id}`, { method: 'PATCH', body }),
+  deleteExperience: (id) => request(`/api/admin/experience/${id}`, { method: 'DELETE' }),
+  reorderExperience: (ids) => request('/api/admin/experience/reorder', { method: 'POST', body: { ids } }),
+
   getContent: () => request('/api/admin/content'),
   saveContent: (values) => request('/api/admin/content', { method: 'PUT', body: values }),
 

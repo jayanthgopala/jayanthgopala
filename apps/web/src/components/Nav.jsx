@@ -2,7 +2,6 @@ import { useScrolled } from '../lib/motion.jsx';
 import { copy, externalUrl } from '../lib/api.js';
 import { SocialIcon } from './Icons.jsx';
 import ModeToggle from './ModeToggle.jsx';
-import GitHubButtons from './GitHubButtons.jsx';
 import '../styles/nav.css';
 
 export default function Nav({
@@ -33,21 +32,11 @@ export default function Nav({
     { href: '#contact', label: copy(content, 'nav.contact', 'Contact'), show: true },
   ].filter((l) => l.show);
 
-  // Derive initials rather than storing them — one less field to keep in sync.
-  const initials =
-    (profile.name || '')
-      .split(' ')
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w[0])
-      .join('')
-      .toUpperCase() || '—';
-
   return (
     <header className={`nav ${scrolled ? 'nav-scrolled glass' : ''}`}>
       <div className="nav-inner container">
         <a href="#top" className="nav-brand" aria-label="Back to top">
-          <span className="nav-mark">{initials}</span>
+          <img className="nav-mark" src="/logo-mark.png" alt="" width="34" height="24" />
           <span className="nav-name">{profile.name}</span>
         </a>
 
@@ -71,8 +60,6 @@ export default function Nav({
             {copy(content, 'nav.resume', 'Résumé')}
           </a>
         )}
-
-        <GitHubButtons profile={profile} content={content} />
 
         <ModeToggle mode={mode} onChoose={onChooseMode} content={content} />
 

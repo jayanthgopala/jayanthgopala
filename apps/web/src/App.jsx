@@ -13,6 +13,7 @@ import { Education, Experience } from './components/Timeline.jsx';
 import Contact from './components/Contact.jsx';
 import Footer from './components/Footer.jsx';
 import ErrorBanner from './components/ErrorBanner.jsx';
+import AskWidget from './components/AskWidget.jsx';
 
 const STATUS_POLL_MS = 60_000;
 
@@ -126,6 +127,8 @@ export default function App() {
       </main>
 
       <Footer profile={site.profile} socials={site.socials} content={site.content} />
+
+      <AskWidget content={site.content} profile={site.profile} />
 
       {error && <ErrorBanner message={error} onRetry={() => load()} />}
     </>

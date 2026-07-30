@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import { Button, useToast } from './ui.jsx';
+import CropDialog from './CropDialog.jsx';
 
 /**
  * Drop-or-browse image upload backed by R2.
@@ -15,11 +16,20 @@ export default function ImageUploadField({
   value,
   onChange,
   preview = 'wide', // 'wide' for screenshots, 'round' for portraits
+  crop = false,     // round previews get the crop step
 }) {
   const toast = useToast();
   const inputRef = useRef(null);
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [pendingCrop, setPendingCrop] = useState(null);
+
+  /** Portraits go through the crop step first; screenshots upload as-is. */
+  function accept(file) {
+    if (!file) return;
+    if (crop) setPendingCrop(file);
+    else upload(file);
+  }
 
   async function upload(file) {
     if (!file) return;
@@ -79,7 +89,7 @@ export default function ImageUploadField({
           onDrop={(e) => {
             e.preventDefault();
             setOver(false);
-            upload(e.dataTransfer.files?.[0]);
+            accept(e.dataTransfer.files?.[0]);
           }}
         >
           {busy ? (
@@ -93,12 +103,23 @@ export default function ImageUploadField({
         </div>
       )}
 
+      {pendingCrop && (
+        <CropDialog
+          file={pendingCrop}
+          onCancel={() => setPendingCrop(null)}
+          onCropped={(cropped) => {
+            setPendingCrop(null);
+            upload(cropped);
+          }}
+        />
+      )}
+
       <input
         ref={inputRef}
         type="file"
         accept="image/png,image/jpeg,image/webp,image/avif,image/gif"
         hidden
-        onChange={(e) => upload(e.target.files?.[0])}
+        onChange={(e) => { accept(e.target.files?.[0]); e.target.value = ''; }}
       />
     </div>
   );
