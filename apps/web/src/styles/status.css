@@ -1,0 +1,149 @@
+/* Live status widget — minimal dashboard, one of only two glass surfaces. */
+
+.status {
+  position: relative;
+  padding: var(--s-5);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  overflow: hidden;
+}
+
+/* Hairline accent along the top edge, inset from the corners so it doesn't
+   fight the border radius. */
+.status::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: var(--s-5);
+  right: var(--s-5);
+  height: 1px;
+  background: var(--gradient-accent);
+  opacity: 0.6;
+}
+
+.status[data-loading] { opacity: 0.55; }
+
+/* --- Header --------------------------------------------------------------- */
+
+.status-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding-bottom: var(--s-4);
+}
+
+.status-avail {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.status-avail-text {
+  font-size: var(--t-sm);
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-time { color: var(--text-dim); flex-shrink: 0; }
+
+/* --- Current project ------------------------------------------------------ */
+
+.status-current {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--s-2) var(--s-3);
+  padding-block: var(--s-4);
+  border-top: 1px solid var(--border);
+}
+
+.status-current .eyebrow { grid-column: 1 / -1; }
+
+.status-project {
+  grid-column: 1 / -1;
+  font-size: var(--t-h3);
+  font-weight: 640;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+.status-project a { transition: color var(--d-fast) var(--ease); }
+.status-project a:hover { color: var(--iris); }
+
+.status-bar {
+  align-self: center;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.status-bar-fill {
+  display: block;
+  height: 100%;
+  width: var(--progress, 0%);
+  border-radius: inherit;
+  background: var(--gradient-accent);
+  background-size: 200% 100%;
+  /* Width eases in on first paint; the gradient drifts continuously. */
+  transition: width var(--d-slow) var(--ease);
+  animation: bar-flow 5s linear infinite;
+}
+@keyframes bar-flow {
+  from { background-position: 0% 0; }
+  to   { background-position: 200% 0; }
+}
+
+.status-progress { color: var(--text-muted); font-weight: 500; }
+
+/* --- Metric rows ---------------------------------------------------------- */
+
+.status-rows {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+  padding-top: var(--s-2);
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding-block: var(--s-3);
+  font-size: var(--t-sm);
+  min-width: 0;
+}
+.status-row + .status-row { border-top: 1px solid rgba(255, 255, 255, 0.04); }
+
+.status-row-label { color: var(--text-dim); white-space: nowrap; }
+
+.status-row-value {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  color: var(--text-muted);
+  min-width: 0;
+  text-transform: capitalize;
+}
+
+.status-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
+}
+
+.status-ago {
+  color: var(--text-dim);
+  font-size: var(--t-xs);
+  flex-shrink: 0;
+  text-transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-bar-fill { animation: none; }
+}

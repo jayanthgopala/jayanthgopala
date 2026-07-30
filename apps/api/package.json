@@ -1,0 +1,19 @@
+{
+  "name": "@portfolio/api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 execute portfolio --local --file=./schema.sql",
+    "db:remote": "wrangler d1 execute portfolio --remote --file=./schema.sql",
+    "tail": "wrangler tail"
+  },
+  "dependencies": {
+    "hono": "^4.6.14"
+  },
+  "devDependencies": {
+    "wrangler": "^4.58.0"
+  }
+}

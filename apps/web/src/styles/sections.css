@@ -1,0 +1,172 @@
+/* Stack, Contact, Footer and the error banner. */
+
+/* --- Stack ---------------------------------------------------------------- */
+
+.stack-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: var(--s-4);
+}
+
+.stack-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding: var(--s-5);
+  height: 100%;
+}
+.stack-group:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+
+.stack-list { display: flex; flex-direction: column; gap: var(--s-3); }
+
+.stack-item {
+  display: grid;
+  grid-template-columns: 1fr 72px;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.stack-name { font-size: var(--t-sm); color: var(--text); }
+
+.stack-meter {
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.stack-meter-fill {
+  display: block;
+  height: 100%;
+  width: var(--level, 0%);
+  border-radius: inherit;
+  background: var(--gradient-accent);
+  transition: width var(--d-slow) var(--ease);
+}
+
+/* --- Contact -------------------------------------------------------------- */
+
+.contact {
+  --accent: var(--iris);
+  padding: clamp(var(--s-6), 6vw, var(--s-9)) var(--s-5);
+  border-radius: var(--r-2xl);
+  background:
+    radial-gradient(90% 130% at 50% 0%, var(--iris-soft), transparent 62%),
+    var(--surface);
+  overflow: hidden;
+}
+
+/* Always-on gradient border here — this is the page's single focal CTA. */
+.contact.gradient-border::before { opacity: 0.5; }
+.contact.gradient-border:hover::before { opacity: 0.85; }
+
+.contact-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-4);
+  text-align: center;
+  max-width: 620px;
+  margin-inline: auto;
+}
+
+.contact-title { max-width: 16ch; }
+.contact-lead { max-width: 44ch; }
+
+.contact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+}
+
+.contact-socials {
+  display: flex;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+}
+
+.contact-social {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  transition: color var(--d-fast) var(--ease),
+              background var(--d-fast) var(--ease),
+              transform var(--d-fast) var(--ease),
+              border-color var(--d-fast) var(--ease);
+}
+.contact-social:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+}
+
+/* --- Footer --------------------------------------------------------------- */
+
+.footer {
+  border-top: 1px solid var(--border);
+  padding-block: var(--s-6);
+  margin-top: var(--s-7);
+}
+
+.footer-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+}
+
+.footer-meta { display: flex; flex-direction: column; gap: 2px; }
+.footer-name { font-size: var(--t-sm); font-weight: 560; }
+.footer-copy { font-size: var(--t-xs); color: var(--text-dim); }
+
+.footer-socials { display: flex; flex-wrap: wrap; gap: var(--s-4); }
+
+.footer-social {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--t-xs);
+  color: var(--text-dim);
+  transition: color var(--d-fast) var(--ease);
+}
+.footer-social:hover { color: var(--text); }
+
+/* --- Error banner --------------------------------------------------------- */
+
+.error-banner {
+  position: fixed;
+  left: 50%;
+  bottom: var(--s-5);
+  translate: -50% 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  max-width: calc(100vw - var(--s-6));
+  padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4);
+  border-radius: var(--r-pill);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--t-sm);
+  animation: banner-in var(--d-base) var(--ease);
+}
+
+@keyframes banner-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.error-banner-text { color: var(--text-muted); }
+.error-banner-detail { color: var(--text-dim); }
+
+@media (max-width: 560px) {
+  .error-banner-detail { display: none; }
+}

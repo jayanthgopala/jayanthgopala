@@ -1,0 +1,259 @@
+/* ==========================================================================
+   3D portrait object.
+
+   Depth comes from translateZ on a preserve-3d scene, so the layers parallax
+   against each other under tilt. Everything animates transform/opacity only.
+   ========================================================================== */
+
+.portrait {
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
+
+  position: relative;
+  width: clamp(210px, 25vw, 310px);
+  aspect-ratio: 1;
+  margin-inline: auto;
+  /* Short perspective = strong depth. Any longer and the parallax vanishes. */
+  perspective: 780px;
+  perspective-origin: 50% 45%;
+}
+
+.portrait-scene {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+  transition: transform var(--d-base) var(--ease);
+  animation: portrait-float 10s var(--ease-soft) infinite alternate;
+}
+
+/* --- Ambient glow (deepest layer) ----------------------------------------- */
+
+.portrait-glow {
+  position: absolute;
+  inset: -26%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(110, 123, 255, 0.34), transparent 64%);
+  filter: blur(36px);
+  transform: translateZ(-90px);
+  animation: portrait-breathe 8s var(--ease-soft) infinite alternate;
+}
+
+/* --- Subject -------------------------------------------------------------- */
+
+.portrait-disc {
+  position: absolute;
+  inset: 9%;
+  border-radius: 50%;
+  overflow: hidden;
+  transform: translateZ(0);
+  background: var(--bg-elevated);
+  box-shadow:
+    0 26px 60px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.07);
+  /* Feathered edge. Without this the disc reads as a bright coin pasted on the
+     page; the fade lets the studio background dissolve into the dark instead. */
+  -webkit-mask-image: radial-gradient(circle at 50% 46%, #000 62%, rgba(0, 0, 0, 0.55) 82%, transparent 97%);
+  mask-image: radial-gradient(circle at 50% 46%, #000 62%, rgba(0, 0, 0, 0.55) 82%, transparent 97%);
+}
+
+.portrait-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Framed on the face rather than the centre of the frame — a passport crop
+     puts the head high, so centring would cut the forehead. */
+  object-position: 50% 17%;
+  /* Zoomed well past the frame: the tighter the crop, the less of the pale
+     studio backdrop survives inside the circle. */
+  transform: scale(1.52);
+  /* Grading: the source is a warm studio shot on near-white. Desaturating and
+     dropping the brightness lets it sit on a near-black page instead of glaring. */
+  filter: grayscale(0.5) contrast(1.22) saturate(0.78) brightness(0.8);
+}
+
+/* Tints the midtones toward the site's iris accent so the portrait belongs to
+   the palette rather than importing its own. */
+.portrait-duotone {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(165deg, rgba(110, 123, 255, 0.4), rgba(167, 139, 250, 0.16) 45%, rgba(8, 8, 10, 0.5));
+  mix-blend-mode: soft-light;
+}
+
+/* Fades the light studio background into the page instead of cutting it out —
+   a hard key would eat the white t-shirt. */
+.portrait-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 40%, transparent 24%, rgba(8, 8, 10, 0.42) 52%,
+                    rgba(8, 8, 10, 0.82) 76%, rgba(8, 8, 10, 0.99) 96%);
+}
+
+/* Cool rim light from the upper left, matching the glow's direction. */
+.portrait-rim {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(70% 60% at 22% 14%, rgba(168, 178, 255, 0.3), transparent 56%),
+    radial-gradient(50% 46% at 84% 78%, rgba(99, 210, 195, 0.16), transparent 60%);
+  mix-blend-mode: screen;
+}
+
+/* Light treatment for an art-directed upload (e.g. a stylized 3D render).
+   Keep the crop wide, the colour intact, and only enough vignette to seat the
+   subject against the page. */
+/* Framed on the head. A half-body render puts the face in the top fifth of the
+   frame, so a centred crop fills the circle with torso.
+   `transform-origin: top` is the load-bearing part: scale() zooms about the
+   element's centre by default, which drags the visible band down past the face
+   no matter what `object-position` says. Anchoring to the top pins the crop to
+   the head and zooms away from it. */
+.portrait[data-graded='light'] .portrait-img {
+  object-position: 48% 0%;
+  transform: scale(1.75);
+  transform-origin: 50% 0%;
+  filter: contrast(1.05) saturate(1.02) brightness(1.02);
+}
+.portrait[data-graded='light'] .portrait-duotone { opacity: 0.28; }
+.portrait[data-graded='light'] .portrait-rim { opacity: 0.55; }
+.portrait[data-graded='light'] .portrait-vignette {
+  background:
+    radial-gradient(circle at 50% 44%, transparent 56%, rgba(8, 8, 10, 0.4) 82%,
+                    rgba(8, 8, 10, 0.9) 99%);
+}
+
+/* --- Rings ---------------------------------------------------------------- */
+
+.portrait-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: var(--gradient-accent) border-box;
+  -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.portrait-ring-back {
+  inset: -6%;
+  opacity: 0.42;
+  transform: translateZ(-46px);
+  animation: portrait-spin-back 26s linear infinite;
+}
+
+/* Sits in front of the subject. A ring that passes both behind and in front
+   is the cheapest, strongest depth cue available. */
+.portrait-ring-front {
+  inset: 1%;
+  opacity: 0.62;
+  transform: translateZ(62px);
+  animation: portrait-spin-front 19s linear infinite;
+}
+
+/* --- Particles ------------------------------------------------------------ */
+
+.portrait-particle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--mint);
+  box-shadow: 0 0 12px rgba(99, 210, 195, 0.85);
+}
+
+/* Depth and radius are per-particle; the orbit keyframe reads them, so one
+   keyframe block serves all three.
+   Negative delays offset the phase — without them all three start at 0° and
+   read as a row of dots rather than independent orbits. */
+.portrait-particle-1 {
+  --pz: 80px;
+  --pr: clamp(112px, 13vw, 165px);
+  animation: portrait-orbit 13s linear infinite;
+}
+.portrait-particle-2 {
+  --pz: -60px;
+  --pr: clamp(126px, 14.5vw, 182px);
+  background: var(--violet);
+  box-shadow: 0 0 12px rgba(167, 139, 250, 0.85);
+  animation: portrait-orbit 18s linear infinite reverse;
+  animation-delay: -7s;
+}
+.portrait-particle-3 {
+  --pz: 46px;
+  --pr: clamp(100px, 11.5vw, 148px);
+  background: var(--amber);
+  box-shadow: 0 0 12px rgba(245, 180, 92, 0.75);
+  animation: portrait-orbit 23s linear infinite;
+  animation-delay: -15s;
+}
+
+/* --- Contact shadow ------------------------------------------------------- */
+
+.portrait-shadow {
+  position: absolute;
+  left: 50%;
+  bottom: -9%;
+  width: 66%;
+  height: 13%;
+  translate: -50% 0;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.62), transparent 72%);
+  filter: blur(14px);
+  transform: translateZ(-70px);
+}
+
+/* --- Keyframes ------------------------------------------------------------ */
+
+@keyframes portrait-float {
+  from { translate: 0 -7px; }
+  to   { translate: 0 9px; }
+}
+
+@keyframes portrait-breathe {
+  from { opacity: 0.72; scale: 0.95; }
+  to   { opacity: 1;    scale: 1.05; }
+}
+
+@keyframes portrait-spin-back {
+  from { transform: translateZ(-46px) rotateX(74deg) rotateZ(0deg); }
+  to   { transform: translateZ(-46px) rotateX(74deg) rotateZ(360deg); }
+}
+
+@keyframes portrait-spin-front {
+  from { transform: translateZ(62px) rotateY(76deg) rotateZ(0deg); }
+  to   { transform: translateZ(62px) rotateY(76deg) rotateZ(-360deg); }
+}
+
+/* The trailing counter-rotation keeps the dot from spinning about its own
+   centre — only the orbit should move it. */
+@keyframes portrait-orbit {
+  from {
+    transform: translateZ(var(--pz)) rotate(0deg) translateX(var(--pr)) rotate(0deg);
+  }
+  to {
+    transform: translateZ(var(--pz)) rotate(360deg) translateX(var(--pr)) rotate(-360deg);
+  }
+}
+
+/* --- Reduced motion --------------------------------------------------------
+   The object stays — it is content, not decoration — but every drift,
+   orbit and spin stops. Tilt is disabled in motion.jsx. */
+
+@media (prefers-reduced-motion: reduce) {
+  .portrait-scene,
+  .portrait-glow,
+  .portrait-ring,
+  .portrait-particle {
+    animation: none;
+  }
+}
+
+/* Tilt needs a fine pointer; on touch it only fights the scroll. */
+@media (hover: none) {
+  .portrait-scene { transform: none; }
+}

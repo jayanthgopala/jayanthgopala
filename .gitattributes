@@ -1,0 +1,11 @@
+# Normalise line endings in the repo; check out native on each platform.
+# Without this, the CRLF-vs-LF churn shows up as whole-file diffs.
+* text=auto eol=lf
+
+# Binary assets — never touch these.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.avif binary
+*.ico binary

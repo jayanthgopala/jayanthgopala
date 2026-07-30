@@ -1,0 +1,9 @@
+# Copy to `.dev.vars` for local development. That file is git-ignored.
+# In production these are set with: wrangler secret put <NAME>
+
+ADMIN_PASSWORD=change-me-locally
+JWT_SECRET=a-long-random-string-at-least-32-chars-long
+
+# Fine-grained PAT, single repo, Contents: read and write.
+# See docs/GITHUB-TOKEN.md. Leave blank to develop without GitHub pushes.
+GITHUB_TOKEN=

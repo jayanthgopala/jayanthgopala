@@ -1,0 +1,17 @@
+{
+  "name": "portfolio-platform",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev:api": "npm run dev -w @portfolio/api",
+    "dev:web": "npm run dev -w @portfolio/web",
+    "dev:admin": "npm run dev -w @portfolio/admin",
+    "build": "npm run build -w @portfolio/web && npm run build -w @portfolio/admin",
+    "db:local": "npm run db:local -w @portfolio/api",
+    "db:remote": "npm run db:remote -w @portfolio/api",
+    "deploy:api": "npm run deploy -w @portfolio/api",
+    "deploy:web": "npm run deploy -w @portfolio/web",
+    "deploy:admin": "npm run deploy -w @portfolio/admin"
+  }
+}

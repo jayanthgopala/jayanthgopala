@@ -1,0 +1,332 @@
+/* ==========================================================================
+   Cinematic mode.
+
+   Activated by `data-mode="cinematic"` on <html>. Everything here is an
+   override of the minimal theme's tokens and components — the two modes share
+   one DOM and one content payload, so nothing below duplicates markup.
+   ========================================================================== */
+
+:root[data-mode='cinematic'] {
+  --bg: #101012;
+  --bg-elevated: #151518;
+
+  /* Cyan lead accent, warmer secondary. Kept desaturated enough to avoid the
+     neon look the brief rules out. */
+  --accent-primary: #3ecfd5;
+  --accent-secondary: #7dd3a0;
+
+  --iris: #3ecfd5;
+  --violet: #56b8d8;
+  --iris-soft: rgba(62, 207, 213, 0.14);
+
+  --gradient-accent: linear-gradient(110deg, #3ecfd5, #56b8d8 52%, #7dd3a0);
+  --nav-h: 76px;
+}
+
+/* --- Hero ----------------------------------------------------------------- */
+
+/* The scene is taller than the viewport; the stage sticks to the top and plays
+   the shot while the scene scrolls past. 240vh gives ~140vh of scroll runway —
+   enough for the push-in to breathe without feeling like a hostage situation. */
+.cine-scene {
+  position: relative;
+  height: 240vh;
+}
+
+.cine-stage {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.cine-figure {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: end center;
+  will-change: opacity;
+}
+
+.cine-render {
+  height: 100%;
+  width: auto;
+  max-width: none;
+  object-fit: contain;
+  object-position: bottom center;
+
+  /* The camera target: the subject's eye, in image coordinates. The transform
+     lives here rather than on the wrapper because a percentage origin resolves
+     against its own box, and the wrapper is a different aspect ratio — the
+     same percentages there would land on his shoulder. */
+  /* Measured off the cutout: his eyes sit at ~19% of the frame height, and the
+     eye facing camera at ~45% of its width. */
+  transform-origin: 45% 19%;
+  will-change: transform;
+
+  /* The studio backdrop is genuinely cut away and the subject composited onto
+     this theme's exact `--bg`, so there is nothing left to hide — no
+     darkening, no big radial mask.
+     The residual feather is only for JPEG: lossy encoding nudges the flat
+     backdrop a shade off `--bg` and leaves faint block artifacts, which show
+     up as a barely-visible rectangle. Fading the outer edges dissolves it.
+     The subject's arms clear 10% on each side, so 6% is safe. */
+  -webkit-mask-image:
+    linear-gradient(to right, transparent 0, #000 6%, #000 94%, transparent 100%),
+    linear-gradient(to bottom, #000 74%, transparent 99%);
+  mask-image:
+    linear-gradient(to right, transparent 0, #000 6%, #000 94%, transparent 100%),
+    linear-gradient(to bottom, #000 74%, transparent 99%);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+
+/* If `--bg` is ever retuned, the baked-in backdrop stops matching. Regenerate
+   the asset (see docs) rather than reaching for a mask here. */
+
+/* Feathers the figure into the page on every edge, which is what makes a
+   rectangular render read as full-bleed. */
+/* Atmosphere only now that the cutout does the heavy lifting — a soft pool of
+   light behind the subject and a gentle darkening toward the frame edges. */
+.cine-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(46% 44% at 50% 38%, rgba(62, 207, 213, 0.07), transparent 70%),
+    radial-gradient(78% 70% at 50% 44%, transparent 58%, rgba(16, 16, 18, 0.55) 92%);
+}
+
+/* --- Flanking copy -------------------------------------------------------- */
+
+.cine-copy {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 1440px;
+  padding-inline: clamp(20px, 4vw, 56px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-6);
+  pointer-events: none; /* the figure behind stays inspectable */
+  transition: opacity 120ms linear;
+}
+
+.cine-side {
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+}
+
+.cine-right { text-align: right; align-items: flex-end; }
+
+.cine-greeting {
+  font-size: clamp(0.95rem, 1.5vw, 1.35rem);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--accent-primary);
+}
+
+.cine-name {
+  font-size: clamp(2.1rem, 5.2vw, 4.6rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 0.98;
+  color: #fff;
+  /* The figure sits directly behind the text; without a shadow the two fight
+     for the same pixels wherever the render is bright. */
+  text-shadow: 0 2px 40px rgba(0, 0, 0, 0.75);
+}
+
+.cine-name-right { display: block; }
+
+.cine-subline {
+  font-size: clamp(0.95rem, 1.5vw, 1.35rem);
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.82);
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.7);
+}
+
+/* --- Statement revealed at the end of the push-in -------------------------- */
+
+.cine-reveal {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  padding-inline: clamp(24px, 8vw, 120px);
+  text-align: center;
+  pointer-events: none;
+  will-change: opacity, transform;
+}
+
+.cine-reveal-text {
+  max-width: 24ch;
+  font-size: clamp(1.5rem, 3.4vw, 3rem);
+  font-weight: 620;
+  letter-spacing: -0.03em;
+  line-height: 1.16;
+  color: #fff;
+  text-wrap: balance;
+  text-shadow: 0 4px 48px rgba(0, 0, 0, 0.85);
+}
+
+/* --- Scroll hint ---------------------------------------------------------- */
+
+.cine-scroll {
+  position: absolute;
+  bottom: var(--s-6);
+  left: 50%;
+  translate: -50% 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--t-micro);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  transition: opacity 120ms linear;
+}
+
+.cine-scroll-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  animation: cine-bob 1.9s var(--ease-soft) infinite;
+}
+
+@keyframes cine-bob {
+  0%, 100% { transform: translateY(0); opacity: 1; }
+  50%      { transform: translateY(6px); opacity: 0.35; }
+}
+
+/* --- Status card ---------------------------------------------------------- */
+
+.cine-status-band {
+  position: relative;
+  z-index: 3;
+  padding-block: var(--s-7);
+  /* Pulls the card up over the hero's lower vignette so the two read as one
+     continuous scene rather than two stacked blocks. */
+  margin-top: -6vh;
+}
+
+.cine-status-band .status {
+  max-width: 520px;
+  margin-inline: auto;
+}
+
+/* --- Nav: floating pill --------------------------------------------------- */
+
+:root[data-mode='cinematic'] .nav {
+  top: var(--s-4);
+  border-bottom: none;
+  background: none;
+  backdrop-filter: none;
+  height: auto;
+}
+
+:root[data-mode='cinematic'] .nav-inner {
+  width: fit-content;
+  max-width: calc(100vw - var(--s-5));
+  margin-inline: auto;
+  padding: 7px 8px 7px var(--s-4);
+  border-radius: var(--r-pill);
+  background: rgba(20, 20, 24, 0.66);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow-lg);
+  gap: var(--s-2);
+}
+
+:root[data-mode='cinematic'] .nav-brand { margin-right: var(--s-3); }
+:root[data-mode='cinematic'] .nav-name { display: none; }
+
+:root[data-mode='cinematic'] .nav-link {
+  border-radius: var(--r-pill);
+  padding: var(--s-2) var(--s-4);
+  font-weight: 550;
+}
+
+:root[data-mode='cinematic'] .nav-cta {
+  height: 34px;
+  border-radius: var(--r-pill);
+}
+
+/* --- Mode toggle ---------------------------------------------------------- */
+
+.mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.mode-option {
+  padding: 5px var(--s-3);
+  border-radius: var(--r-pill);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  white-space: nowrap;
+  transition: color var(--d-fast) var(--ease), background var(--d-fast) var(--ease);
+}
+.mode-option:hover { color: var(--text); }
+
+.mode-option[aria-pressed='true'] {
+  background: var(--gradient-accent);
+  color: #0A0A0C;
+}
+
+/* --- Sections in cinematic mode -------------------------------------------
+   The lower sections keep their layout and simply inherit the new accent, per
+   the agreed scope. Only the seam under the hero needs attention. */
+
+:root[data-mode='cinematic'] #projects {
+  border-top: 1px solid var(--border);
+}
+
+/* --- Responsive ------------------------------------------------------------
+   Below ~900px the flanking layout has nowhere to flank to: the text would
+   sit on top of the face. Stack it instead. */
+
+@media (max-width: 900px) {
+  .cine-copy {
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-start;
+    text-align: left;
+    padding-bottom: 34vh;
+    gap: var(--s-5);
+  }
+  .cine-right { text-align: left; align-items: flex-start; }
+  .cine-status-band { margin-top: 0; padding-block: var(--s-6); }
+  .cine-stage { padding-top: calc(var(--nav-h) + var(--s-6)); padding-bottom: var(--s-7); }
+  /* Less runway on a phone — the shot should not cost half a page of thumbing. */
+  .cine-scene { height: 190vh; }
+  .cine-reveal-text { max-width: 18ch; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cine-scroll-dot { animation: none; }
+
+  /* Progress is never computed under reduced motion, so the shot never plays.
+     Collapse the scene to a single screen — otherwise it leaves a viewport and
+     a half of dead scroll below a static image. */
+  .cine-scene { height: 100svh; }
+  .cine-reveal { display: none; }
+}

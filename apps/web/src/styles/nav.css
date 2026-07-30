@@ -1,0 +1,73 @@
+.nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  height: var(--nav-h);
+  border-bottom: 1px solid transparent;
+  transition: background var(--d-base) var(--ease),
+              border-color var(--d-base) var(--ease),
+              backdrop-filter var(--d-base) var(--ease);
+}
+
+/* Glass only appears once there is content behind it — a blurred bar over an
+   empty hero is blur for its own sake. */
+.nav-scrolled { border-bottom-color: var(--border); }
+
+.nav-inner {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--s-5);
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin-right: auto;
+}
+
+.nav-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-sm);
+  background: var(--gradient-accent);
+  color: #0A0A0C;
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  box-shadow: var(--shadow-sm);
+}
+
+.nav-name {
+  font-size: var(--t-sm);
+  font-weight: 560;
+  letter-spacing: -0.015em;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.nav-link {
+  position: relative;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-xs);
+  font-size: var(--t-sm);
+  color: var(--text-muted);
+  transition: color var(--d-fast) var(--ease), background var(--d-fast) var(--ease);
+}
+.nav-link:hover { color: var(--text); background: var(--surface); }
+
+.nav-cta { height: 38px; padding-inline: var(--s-4); }
+
+@media (max-width: 720px) {
+  .nav-links { display: none; }
+  .nav-name { display: none; }
+}

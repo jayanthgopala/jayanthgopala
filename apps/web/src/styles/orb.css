@@ -1,0 +1,136 @@
+/* Abstract 3D object — layered CSS, no WebGL. */
+
+.orb {
+  position: relative;
+  width: clamp(200px, 26vw, 300px);
+  aspect-ratio: 1;
+  margin-inline: auto;
+  perspective: 900px;
+  transform-style: preserve-3d;
+}
+
+.orb-glow {
+  position: absolute;
+  inset: -34%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(110, 123, 255, 0.3), transparent 66%);
+  filter: blur(38px);
+  animation: orb-breathe 7s var(--ease-soft) infinite alternate;
+}
+
+/* --- Core sphere ---------------------------------------------------------- */
+
+.orb-core {
+  position: absolute;
+  inset: 22%;
+  border-radius: 50%;
+  /* Off-centre highlight is what sells the sphere — a centred radial reads flat. */
+  background:
+    radial-gradient(circle at 32% 28%, #A9B2FF 0%, #6E7BFF 32%, #4A3FBF 64%, #1B1938 100%);
+  box-shadow:
+    inset -14px -18px 42px rgba(0, 0, 0, 0.5),
+    inset 8px 10px 26px rgba(255, 255, 255, 0.14),
+    0 24px 60px rgba(74, 63, 191, 0.34);
+  animation: orb-float 9s var(--ease-soft) infinite alternate;
+}
+
+.orb-core-sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.34), transparent 42%);
+  mix-blend-mode: screen;
+}
+
+/* Contact shadow grounds the object instead of leaving it floating in a void. */
+.orb-core-shadow {
+  position: absolute;
+  left: 50%;
+  bottom: -26%;
+  width: 78%;
+  height: 16%;
+  translate: -50% 0;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.5), transparent 70%);
+  filter: blur(12px);
+}
+
+/* --- Rings ---------------------------------------------------------------- */
+
+.orb-rings {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+
+.orb-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  /* Gradient ring: paint on the border box, mask the fill. */
+  background: var(--gradient-accent) border-box;
+  -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.5;
+}
+
+.orb-ring-1 { animation: spin-1 18s linear infinite; }
+.orb-ring-2 { inset: 8%;  opacity: 0.34; animation: spin-2 24s linear infinite; }
+.orb-ring-3 { inset: -8%; opacity: 0.22; animation: spin-3 32s linear infinite; }
+
+/* --- Particles ------------------------------------------------------------ */
+
+.orb-particle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--mint);
+  box-shadow: 0 0 12px rgba(99, 210, 195, 0.8);
+}
+
+.orb-particle-1 { animation: orbit 12s linear infinite; }
+.orb-particle-2 { background: var(--violet); box-shadow: 0 0 12px rgba(167, 139, 250, 0.8);
+                  animation: orbit 17s linear infinite reverse; }
+.orb-particle-3 { background: var(--amber); box-shadow: 0 0 12px rgba(245, 180, 92, 0.7);
+                  animation: orbit 22s linear infinite; }
+
+/* --- Keyframes ------------------------------------------------------------ */
+
+@keyframes spin-1 {
+  from { transform: rotateX(72deg) rotateZ(0deg); }
+  to   { transform: rotateX(72deg) rotateZ(360deg); }
+}
+@keyframes spin-2 {
+  from { transform: rotateY(68deg) rotateZ(0deg); }
+  to   { transform: rotateY(68deg) rotateZ(-360deg); }
+}
+@keyframes spin-3 {
+  from { transform: rotateX(28deg) rotateY(40deg) rotateZ(0deg); }
+  to   { transform: rotateX(28deg) rotateY(40deg) rotateZ(360deg); }
+}
+
+@keyframes orb-float {
+  from { transform: translateY(-6px) scale(1); }
+  to   { transform: translateY(8px) scale(1.02); }
+}
+
+@keyframes orb-breathe {
+  from { opacity: 0.7;  transform: scale(0.94); }
+  to   { opacity: 1;    transform: scale(1.06); }
+}
+
+@keyframes orbit {
+  from { transform: rotate(0deg) translateX(clamp(105px, 14vw, 158px)) rotate(0deg); }
+  to   { transform: rotate(360deg) translateX(clamp(105px, 14vw, 158px)) rotate(-360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orb-glow, .orb-core, .orb-ring, .orb-particle { animation: none; }
+  .orb-particle { opacity: 0.6; }
+}

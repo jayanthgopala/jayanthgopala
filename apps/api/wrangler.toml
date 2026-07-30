@@ -1,0 +1,37 @@
+name = "portfolio-api"
+main = "src/index.js"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# --- Public, non-secret config -------------------------------------------
+# Secrets (ADMIN_PASSWORD, JWT_SECRET, GITHUB_TOKEN) are set with:
+#   wrangler secret put <NAME>
+# Locally they come from apps/api/.dev.vars (git-ignored).
+[vars]
+GITHUB_USER     = "jayanthgopala"        # <-- your GitHub handle
+GITHUB_REPO     = "jayanthgopala"        # profile repo == your username
+GITHUB_BRANCH   = "main"
+README_PATH     = "README.md"
+PUBLIC_API_URL  = "http://localhost:8787"
+ALLOWED_ORIGINS = "http://localhost:5173,http://localhost:5174"
+CACHE_TTL       = "60"
+
+[[d1_databases]]
+binding       = "DB"
+database_name = "portfolio"
+database_id   = "REPLACE_WITH_YOUR_D1_ID"
+
+[[kv_namespaces]]
+binding = "CACHE"
+id      = "REPLACE_WITH_YOUR_KV_ID"
+
+[[r2_buckets]]
+binding     = "MEDIA"
+bucket_name = "portfolio-media"
+
+# Self-healing sync: re-push the README if content changed but a push failed.
+[triggers]
+crons = ["*/30 * * * *"]
+
+[observability]
+enabled = true

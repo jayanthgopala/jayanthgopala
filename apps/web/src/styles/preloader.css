@@ -1,0 +1,108 @@
+.preloader {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-5);
+  background: var(--bg);
+  opacity: 1;
+  transition: opacity 420ms var(--ease);
+}
+
+/* Set for one frame before unmount, so the overlay fades rather than vanishing. */
+.preloader[data-exiting] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.preloader-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.preloader-ring svg {
+  transform: rotate(-90deg); /* start the arc at 12 o'clock */
+}
+
+.preloader-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 2;
+}
+
+.preloader-progress {
+  fill: none;
+  stroke: var(--accent-primary, var(--iris));
+  stroke-width: 2;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 120ms linear;
+}
+
+.preloader-value {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.preloader-percent {
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums; /* stops the counter jittering */
+}
+
+.preloader-load {
+  font-size: var(--t-micro);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.preloader-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-2);
+  text-align: center;
+}
+
+.preloader-title {
+  font-size: var(--t-sm);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.preloader-sub {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--text-dim);
+}
+
+.preloader-bar {
+  width: min(180px, 40vw);
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.preloader-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent-primary, var(--iris));
+  transition: width 120ms linear;
+}
+
+/* An unskippable full-screen overlay is exactly what reduced-motion users are
+   asking to avoid. Strip the transitions so it appears and clears instantly. */
+@media (prefers-reduced-motion: reduce) {
+  .preloader,
+  .preloader-progress,
+  .preloader-bar span { transition: none; }
+}

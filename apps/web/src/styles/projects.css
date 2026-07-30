@@ -1,0 +1,192 @@
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
+  gap: clamp(var(--s-4), 2.4vw, var(--s-6));
+}
+
+/* --- Card ----------------------------------------------------------------- */
+
+.project {
+  --accent: var(--iris);
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
+
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+  transform-style: preserve-3d;
+  transform: perspective(1000px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+  transition: transform var(--d-base) var(--ease),
+              border-color var(--d-base) var(--ease),
+              box-shadow var(--d-base) var(--ease),
+              background var(--d-base) var(--ease);
+  will-change: transform;
+}
+
+.project:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  /* Lift is applied on top of the pointer tilt. */
+  transform: perspective(1000px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y))
+             translateY(-6px);
+}
+
+/* Gradient border tinted by the project's accent. */
+.project.gradient-border::before {
+  background: linear-gradient(135deg, var(--accent), transparent 55%, var(--accent));
+}
+
+/* --- Media ---------------------------------------------------------------- */
+
+.project-media {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+}
+
+.project-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--d-slow) var(--ease), filter var(--d-slow) var(--ease);
+  /* Screenshots are usually brighter than the page; pull them back slightly so
+     the card doesn't glare against the dark surface. */
+  filter: saturate(0.94) brightness(0.94);
+}
+.project:hover .project-media img {
+  transform: scale(1.035);
+  filter: saturate(1) brightness(1);
+}
+
+.project-media-empty {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(120% 120% at 24% 12%, var(--accent-soft), transparent 62%),
+    var(--bg-elevated);
+  color: var(--accent);
+  font-size: clamp(3rem, 7vw, 4.5rem);
+  font-weight: 700;
+  opacity: 0.44;
+}
+
+/* Sheen follows the pointer via --mx/--my from useTilt(). */
+.project-sheen {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    38% 60% at var(--mx, 50%) var(--my, 50%),
+    rgba(255, 255, 255, 0.1),
+    transparent 68%
+  );
+  opacity: 0;
+  transition: opacity var(--d-base) var(--ease);
+  pointer-events: none;
+}
+.project:hover .project-sheen { opacity: 1; }
+
+/* --- Body ----------------------------------------------------------------- */
+
+.project-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-5);
+  flex: 1;
+}
+
+.project-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  justify-content: space-between;
+}
+
+.project-title {
+  font-size: var(--t-h3);
+  font-weight: 620;
+  letter-spacing: -0.025em;
+}
+
+.project-flag {
+  flex-shrink: 0;
+  padding: 3px var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.project-summary {
+  color: var(--text-muted);
+  font-size: var(--t-sm);
+  line-height: 1.6;
+}
+
+.project-tech {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: auto;
+  padding-top: var(--s-2);
+}
+
+.project-tech-item { height: 26px; font-size: var(--t-micro); }
+
+/* --- Links ---------------------------------------------------------------- */
+
+.project-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-4);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--border);
+}
+
+.project-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--t-sm);
+  font-weight: 550;
+  color: var(--text-muted);
+  transition: color var(--d-fast) var(--ease), gap var(--d-fast) var(--ease);
+}
+.project-link:hover { color: var(--text); gap: 10px; }
+.project-link-primary { color: var(--accent); }
+.project-link-primary:hover { color: var(--accent); filter: brightness(1.2); }
+
+/* --- Skeleton ------------------------------------------------------------- */
+
+.project-skeleton {
+  min-height: 420px;
+  background: linear-gradient(
+    100deg,
+    var(--surface) 30%,
+    var(--surface-hover) 50%,
+    var(--surface) 70%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+/* Tilt depends on a fine pointer; on touch it just fights the scroll. */
+@media (hover: none) {
+  .project { transform: none; }
+  .project:hover { transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project, .project:hover { transform: none; }
+  .project-media img, .project:hover .project-media img { transform: none; }
+  .project-skeleton { animation: none; }
+}

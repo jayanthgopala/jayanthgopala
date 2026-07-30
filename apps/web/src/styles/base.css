@@ -1,0 +1,290 @@
+@import '@portfolio/tokens/tokens.css';
+
+/* --- Reset ---------------------------------------------------------------- */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+* { margin: 0; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  /* Anchor targets clear the fixed nav. */
+  scroll-padding-top: calc(var(--nav-h) + var(--s-5));
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--t-body);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-synthesis-weight: none;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+img, svg, video { display: block; max-width: 100%; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { background: none; border: none; cursor: pointer; }
+a { color: inherit; text-decoration: none; }
+ul, ol { list-style: none; padding: 0; }
+
+:focus-visible {
+  outline: 2px solid var(--iris);
+  outline-offset: 3px;
+  border-radius: var(--r-xs);
+}
+
+::selection { background: rgba(110, 123, 255, 0.3); color: #fff; }
+
+/* Subtle, non-intrusive scrollbar. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--r-pill);
+  border: 3px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.22); }
+
+/* --- Typography ----------------------------------------------------------- */
+
+h1, h2, h3, h4 {
+  font-weight: 600;
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+p { text-wrap: pretty; }
+
+.display {
+  font-size: var(--t-display);
+  font-weight: 620;
+  letter-spacing: -0.045em;
+  line-height: 0.98;
+  /* Gradient text: the slight fade toward the baseline adds depth without
+     resorting to a coloured heading. */
+  background: var(--gradient-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.h2 { font-size: var(--t-h2); }
+.h3 { font-size: var(--t-h3); }
+
+.lead {
+  font-size: var(--t-lead);
+  color: var(--text-muted);
+  line-height: 1.55;
+  letter-spacing: -0.011em;
+}
+
+.eyebrow {
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.mono { font-family: var(--font-mono); font-size: var(--t-xs); }
+
+/* --- Layout --------------------------------------------------------------- */
+
+.container {
+  width: 100%;
+  max-width: var(--max-w);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+.section { padding-block: clamp(72px, 11vw, 160px); }
+
+.section-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  margin-bottom: var(--s-8);
+  max-width: 640px;
+}
+
+/* --- Surfaces ------------------------------------------------------------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  transition: background var(--d-base) var(--ease),
+              border-color var(--d-base) var(--ease),
+              transform var(--d-base) var(--ease);
+}
+
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  border: 1px solid var(--border);
+}
+
+/* Gradient border without a wrapper element: paint the gradient on the
+   element's own border box and mask out the interior. */
+.gradient-border { position: relative; }
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--gradient-accent);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity var(--d-base) var(--ease);
+  pointer-events: none;
+}
+.gradient-border:hover::before,
+.gradient-border:focus-within::before { opacity: 0.75; }
+
+/* --- Buttons -------------------------------------------------------------- */
+
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  height: 48px;
+  padding-inline: var(--s-5);
+  border-radius: var(--r-pill);
+  font-size: var(--t-sm);
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: transform var(--d-fast) var(--ease),
+              background var(--d-fast) var(--ease),
+              border-color var(--d-fast) var(--ease),
+              box-shadow var(--d-base) var(--ease);
+}
+
+.btn:active { transform: scale(0.975); }
+
+.btn-primary {
+  background: var(--text);
+  color: #0A0A0C;
+  font-weight: 600;
+}
+.btn-primary:hover {
+  box-shadow: 0 8px 30px rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+}
+.btn-secondary:hover {
+  background: var(--surface-hover);
+  border-color: rgba(255, 255, 255, 0.24);
+  transform: translateY(-1px);
+}
+
+.btn-ghost { color: var(--text-muted); height: 38px; padding-inline: var(--s-3); }
+.btn-ghost:hover { color: var(--text); }
+
+/* Ripple: a single span positioned at the pointer by useRipple(). */
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  transform: scale(0);
+  background: currentColor;
+  opacity: 0.22;
+  pointer-events: none;
+  animation: ripple 620ms var(--ease) forwards;
+}
+@keyframes ripple { to { transform: scale(2.6); opacity: 0; } }
+
+/* --- Pills / tags --------------------------------------------------------- */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  height: 28px;
+  padding-inline: var(--s-3);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex-shrink: 0;
+}
+.dot[data-state='operational'], .dot[data-state='ready'] { background: var(--mint); }
+.dot[data-state='building'], .dot[data-state='degraded'] { background: var(--amber); }
+.dot[data-state='error'], .dot[data-state='down'] { background: var(--rose); }
+
+.dot-pulse { position: relative; }
+.dot-pulse::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: inherit;
+  opacity: 0.4;
+  animation: pulse 2.4s var(--ease-soft) infinite;
+}
+@keyframes pulse {
+  0%   { transform: scale(1);   opacity: 0.4; }
+  70%  { transform: scale(2.4); opacity: 0; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* --- Reveal on scroll ------------------------------------------------------
+   Paired with useReveal(). Transform + opacity only, so it stays on the
+   compositor and never triggers layout. */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition: opacity var(--d-slow) var(--ease),
+              transform var(--d-slow) var(--ease);
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+.reveal[data-visible='true'] {
+  opacity: 1;
+  transform: none;
+  will-change: auto;
+}
+
+/* --- Reduced motion --------------------------------------------------------
+   Everything above degrades to an instant, static presentation. */
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .reveal { opacity: 1; transform: none; }
+}

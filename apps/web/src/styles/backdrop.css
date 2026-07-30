@@ -1,0 +1,84 @@
+/* Ambient backdrop. Everything here is decorative and non-interactive. */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--bg);
+}
+
+/* Static mesh — three wide radial washes. Low opacity keeps it atmospheric
+   rather than colourful. */
+.backdrop-mesh {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(42% 38% at 18% 12%, rgba(110, 123, 255, 0.16), transparent 62%),
+    radial-gradient(38% 34% at 84% 22%, rgba(167, 139, 250, 0.13), transparent 60%),
+    radial-gradient(46% 40% at 52% 92%, rgba(99, 210, 195, 0.075), transparent 64%);
+  filter: blur(28px);
+}
+
+/* Drifting blobs. `translate3d` keeps them on their own compositor layer. */
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(88px);
+  opacity: 0.42;
+  will-change: transform;
+}
+
+.blob-1 {
+  width: 46vw; height: 46vw;
+  min-width: 340px; min-height: 340px;
+  top: -12%; left: -8%;
+  background: radial-gradient(circle, rgba(110, 123, 255, 0.5), transparent 70%);
+  animation: drift-1 26s var(--ease-soft) infinite alternate;
+}
+
+.blob-2 {
+  width: 38vw; height: 38vw;
+  min-width: 280px; min-height: 280px;
+  top: 8%; right: -10%;
+  background: radial-gradient(circle, rgba(167, 139, 250, 0.44), transparent 70%);
+  animation: drift-2 32s var(--ease-soft) infinite alternate;
+}
+
+.blob-3 {
+  width: 42vw; height: 42vw;
+  min-width: 300px; min-height: 300px;
+  bottom: -18%; left: 32%;
+  background: radial-gradient(circle, rgba(99, 210, 195, 0.3), transparent 70%);
+  animation: drift-3 38s var(--ease-soft) infinite alternate;
+}
+
+@keyframes drift-1 {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(7vw, 9vh, 0) scale(1.12); }
+}
+@keyframes drift-2 {
+  from { transform: translate3d(0, 0, 0) scale(1.08); }
+  to   { transform: translate3d(-8vw, 12vh, 0) scale(0.94); }
+}
+@keyframes drift-3 {
+  from { transform: translate3d(0, 0, 0) scale(0.96); }
+  to   { transform: translate3d(6vw, -10vh, 0) scale(1.14); }
+}
+
+/* Fine grain. Breaks up the gradients so they don't band on 8-bit displays —
+   this is the difference between "soft gradient" and "muddy smear". */
+.backdrop-grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.16;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+}
+
+/* A drifting blur is exactly the kind of motion that triggers vestibular
+   discomfort — freeze it rather than merely shortening it. */
+@media (prefers-reduced-motion: reduce) {
+  .blob { animation: none; }
+}
