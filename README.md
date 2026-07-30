@@ -31,6 +31,18 @@ I design and ship production systems end to end — from edge APIs and data mode
   <img src="https://portfolio-api.jayanthgopala21.workers.dev/svg/status.svg" alt="Live status" width="820" />
 </div>
 
+<!--
+  The links inside that card are pixels, not anchors. GitHub proxies README
+  images through camo and renders them as <img>, so nothing inside an SVG is
+  ever clickable — an <a> in the markup would simply be ignored. The row below
+  is the clickable equivalent.
+-->
+<div align="center">
+
+[GitHub](https://github.com/jayanthgopala) &nbsp;·&nbsp; [Portfolio](https://jayanthgopala.com) &nbsp;·&nbsp; [LinkedIn](https://www.linkedin.com/in/jayanth-gopala-v/) &nbsp;·&nbsp; [Email](mailto:jayanthgopala21@gmail.com)
+
+</div>
+
 <br />
 
 ## Tech Stack
