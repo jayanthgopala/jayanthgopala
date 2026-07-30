@@ -1,6 +1,20 @@
+# ============================================================================
+#  PUBLIC REPOSITORY — NEVER PUT SECRETS IN THIS FILE
+#
+#  [vars] below is plaintext config that ships with the Worker and is readable
+#  by anyone. Secrets go in the Cloudflare secret store instead:
+#
+#      npx wrangler secret put ADMIN_PASSWORD
+#      npx wrangler secret put JWT_SECRET
+#      npx wrangler secret put GITHUB_TOKEN
+#
+#  They are read at runtime as env.ADMIN_PASSWORD etc. — no file involved.
+#  See CLAUDE.md at the repo root.
+# ============================================================================
+#
 # Copy to wrangler.toml and fill in your own ids:
 #   cp wrangler.example.toml wrangler.toml
-# wrangler.toml is git-ignored because it carries account-scoped resource ids.
+# wrangler.toml is git-ignored — keep it that way.
 
 name = "portfolio-api"
 main = "src/index.js"
