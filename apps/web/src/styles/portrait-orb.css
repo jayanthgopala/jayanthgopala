@@ -230,10 +230,27 @@
   object-fit: cover;
 }
 
-/* The crop already decides the composition; a heavy vignette would eat it. */
+/*
+ * The disc's feathered mask is removed for cropped images.
+ *
+ * That mask is `circle at 50% 46%` fading from 62% radius — centred 4% high and
+ * dissolving everything past 62%. Against a hand-framed crop that reads as the
+ * image being re-cropped to a smaller, off-centre circle: the exact "shows one
+ * thing, crops to the outer ring" mismatch.
+ *
+ * `border-radius: 50%` + `overflow: hidden` already give a hard circle, and
+ * because the uploaded image is square and fills the disc, that circle is its
+ * inscribed circle — precisely what the crop dialog previews.
+ */
+.portrait[data-cropped] .portrait-disc {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+/* Only a whisper at the very rim, so nothing the crop included is lost. */
 .portrait[data-cropped] .portrait-vignette {
   background:
-    radial-gradient(circle at 50% 50%, transparent 62%, rgba(8, 8, 10, 0.34) 86%,
-                    rgba(8, 8, 10, 0.8) 100%);
+    radial-gradient(circle at 50% 50%, transparent 88%, rgba(8, 8, 10, 0.45) 100%);
 }
-.portrait[data-cropped] .portrait-duotone { opacity: 0.18; }
+.portrait[data-cropped] .portrait-duotone { opacity: 0.12; }
+.portrait[data-cropped] .portrait-rim { opacity: 0.3; }
