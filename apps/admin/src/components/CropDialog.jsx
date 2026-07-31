@@ -15,7 +15,7 @@ const NUDGE = 12; // px per arrow press, in display space
  * export. Tracking it in source space means every zoom rescales the offsets and
  * the image slides out from under the cursor.
  */
-export default function CropDialog({ file, shape = 'circle', onCancel, onCropped }) {
+export default function CropDialog({ file, src, shape = 'circle', onCancel, onCropped }) {
   const isCircle = shape === 'circle';
   const aspect = isCircle ? 1 : 3 / 4; // width / height
   const outW = isCircle ? 800 : 900;
@@ -37,9 +37,13 @@ export default function CropDialog({ file, shape = 'circle', onCancel, onCropped
   }, [aspect]);
 
   useEffect(() => {
-    if (!file) return;
-    const url = URL.createObjectURL(file);
+    if (!file && !src) return;
+    // Either a freshly chosen File, or an image already stored in R2 that is
+    // being re-framed. The stored path needs crossOrigin or canvas.toBlob()
+    // throws on a tainted canvas — /media sends the CORS header for this.
+    const objectUrl = file ? URL.createObjectURL(file) : null;
     const image = new Image();
+    if (!file) image.crossOrigin = 'anonymous';
     image.onload = () => {
       const { w, h } = frameSize();
       // Smallest scale that still covers the frame, so the corners can never
@@ -50,9 +54,11 @@ export default function CropDialog({ file, shape = 'circle', onCancel, onCropped
       setScale(fit);
       setOffset({ x: 0, y: 0 });
     };
-    image.src = url;
-    return () => URL.revokeObjectURL(url);
-  }, [file, frameSize]);
+    image.src = objectUrl || src;
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [file, src, frameSize]);
 
   const clamp = useCallback(
     (next, s) => {
@@ -139,7 +145,7 @@ export default function CropDialog({ file, shape = 'circle', onCancel, onCropped
     }
   }
 
-  if (!file) return null;
+  if (!file && !src) return null;
 
   return (
     <div className="crop-backdrop" role="dialog" aria-modal="true" aria-label="Adjust portrait">
@@ -173,6 +179,9 @@ export default function CropDialog({ file, shape = 'circle', onCancel, onCropped
                 src={img.src}
                 alt=""
                 draggable="false"
+                // Matches the loader's request, so the browser reuses that
+                // response rather than fetching the image a second time.
+                crossOrigin={file ? undefined : 'anonymous'}
                 style={{
                   width: img.width * scale,
                   height: img.height * scale,

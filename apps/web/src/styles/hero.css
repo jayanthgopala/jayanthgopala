@@ -22,7 +22,9 @@
 }
 
 .hero-badge {
-  height: 32px;
+  /* Shared with the mobile layout, which offsets the portrait by exactly this
+     plus the column gap so it starts level with the headline. */
+  height: var(--hero-badge-h, 32px);
   gap: var(--s-2);
   color: var(--text-muted);
   font-size: var(--t-xs);
@@ -94,18 +96,43 @@
 
 @media (max-width: 960px) {
   .hero { min-height: auto; padding-block: calc(var(--nav-h) + var(--s-6)) var(--s-8); }
-  .hero-inner { grid-template-columns: 1fr; gap: var(--s-6); }
-  .hero-title { max-width: 18ch; }
 
-  /* The portrait stays on mobile — it used to be hidden entirely. Kept in its
-     natural position under the copy: `.hero-aside` also holds the status card,
-     so ordering the whole column above the headline would put "Available for
-     collaborations" before the name. */
-  .hero-orb-wrap { display: grid; }
-  .portrait { width: clamp(160px, 46vw, 230px); }
-  .hero-aside { gap: var(--s-5); }
+  /* Portrait sits beside the copy rather than stacked above it, so the face and
+     the headline are taken in together and the fold still reaches the CTAs.
+
+     `display: contents` dissolves the aside so its children become grid items
+     in their own right — that is what lets the orb pair with the copy while the
+     status card drops to a full-width row of its own. Reordering `.hero-aside`
+     as a block would drag the card along with it. */
+  .hero-inner {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    column-gap: var(--s-5);
+    row-gap: var(--s-6);
+  }
+  .hero-aside { display: contents; }
+  .hero-content { grid-column: 1; grid-row: 1; }
+  /* Starts level with the headline's first line, not the badge above it and not
+     centred on the column — centring drops it down beside the buttons. The
+     offset is the badge box plus the content column's gap, so it stays correct
+     if either token changes. */
+  .hero-orb-wrap {
+    display: grid;
+    grid-column: 2;
+    grid-row: 1;
+    margin-top: calc(var(--hero-badge-h, 32px) + var(--s-5));
+  }
+  .hero-status-wrap { grid-column: 1 / -1; grid-row: 2; }
+
+  /* Narrower column, so the headline needs to come down with it. */
+  .hero .hero-title { font-size: clamp(1.75rem, 7vw, 2.75rem); max-width: 14ch; }
+  .hero-lead { max-width: 34ch; }
+  .portrait { width: clamp(116px, 30vw, 200px); }
 }
 
 @media (max-width: 560px) {
-  .portrait { width: clamp(150px, 52vw, 200px); }
+  /* Deliberately not larger than the tablet size: the portrait shares its row
+     with the headline here, and anything wider starves the type. */
+  .hero-inner { column-gap: var(--s-4); }
+  .portrait { width: clamp(104px, 32vw, 150px); }
 }

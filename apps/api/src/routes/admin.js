@@ -23,9 +23,18 @@ const app = new Hono();
  * Every mutation funnels through here: invalidate the public cache, then push
  * to GitHub in the background. The operator's request returns immediately.
  */
-async function afterWrite(c) {
+async function afterWrite(c, { media = false } = {}) {
   await bumpVersion(c.env);
   syncInBackground(c, 'auto');
+  // Writes that can leave an image unreferenced reconcile the bucket against
+  // the database afterwards. Backgrounded — the panel must not wait on R2.
+  if (media) {
+    c.executionCtx.waitUntil(
+      reapOrphans(c.env)
+        .then((keys) => keys.length && console.log('reaped R2:', keys.join(', ')))
+        .catch((e) => console.error('reap failed:', e.message))
+    );
+  }
 }
 
 /** Whitelist-based update builder — never interpolate client keys into SQL. */
@@ -74,6 +83,7 @@ app.get('/overview', async (c) => {
 
 app.get('/profile', async (c) => c.json(await getProfile(c.env.DB)));
 
+/** Image-bearing writes sweep R2 afterwards; see lib/media.js. */
 app.put('/profile', async (c) => {
   const body = await c.req.json();
   const update = buildUpdate(
@@ -89,7 +99,7 @@ app.put('/profile', async (c) => {
   if (!update) return c.json({ error: 'no valid fields' }, 400);
 
   await c.env.DB.prepare(update.sql).bind(...update.values).run();
-  await afterWrite(c);
+  await afterWrite(c, { media: true });
   return c.json(await getProfile(c.env.DB));
 });
 
@@ -186,7 +196,7 @@ app.patch('/projects/:id', async (c) => {
     .first();
   if (!row) return c.json({ error: 'not found' }, 404);
 
-  await afterWrite(c);
+  await afterWrite(c, { media: true });
   return c.json(rowToProject(row));
 });
 
@@ -199,10 +209,12 @@ app.delete('/projects/:id', async (c) => {
   await c.env.DB.prepare('DELETE FROM projects WHERE id = ?').bind(id).run();
 
   // Reclaim the R2 object so deleted projects don't leave orphaned uploads.
+  // Immediate rather than left to the sweep: this one is unambiguous, and the
+  // sweep's grace period would otherwise keep a just-uploaded screenshot.
   const key = String(project?.screenshot || '').split('/media/')[1];
-  if (key) await c.env.MEDIA.delete(key).catch(() => {});
+  if (key) await c.env.MEDIA.delete(decodeURIComponent(key)).catch(() => {});
 
-  await afterWrite(c);
+  await afterWrite(c, { media: true });
   return c.json({ ok: true });
 });
 

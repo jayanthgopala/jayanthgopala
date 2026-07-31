@@ -69,7 +69,7 @@ export default function Hero({ profile, loading, children }) {
               cropped={Boolean(profile.avatarUrl)}
             />
           </Reveal>
-          <Reveal delay={320}>{children}</Reveal>
+          <Reveal delay={320} className="hero-status-wrap">{children}</Reveal>
         </div>
       </div>
     </section>

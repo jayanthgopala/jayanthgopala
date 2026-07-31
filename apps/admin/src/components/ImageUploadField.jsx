@@ -24,6 +24,7 @@ export default function ImageUploadField({
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pendingCrop, setPendingCrop] = useState(null);
+  const [adjusting, setAdjusting] = useState(null);
 
   /** Portraits go through the crop step first; screenshots upload as-is. */
   function accept(file) {
@@ -46,6 +47,12 @@ export default function ImageUploadField({
     }
   }
 
+  // Only clears the reference. The file itself is reclaimed by the server once
+  // the form is saved, so cancelling out of a removal leaves nothing broken.
+  function remove() {
+    onChange('');
+  }
+
   return (
     <div className="field field-full">
       <span className="label">{label}</span>
@@ -66,10 +73,15 @@ export default function ImageUploadField({
             <div className="row-sub mono">{value}</div>
           </div>
           <div className="row-actions">
+            {crop && (
+              <Button size="sm" variant="ghost" onClick={() => setAdjusting(value)}>
+                Adjust
+              </Button>
+            )}
             <Button size="sm" variant="ghost" onClick={() => inputRef.current?.click()}>
               Replace
             </Button>
-            <Button size="sm" variant="danger" onClick={() => onChange('')}>
+            <Button size="sm" variant="danger" onClick={remove}>
               Remove
             </Button>
           </div>
@@ -111,6 +123,19 @@ export default function ImageUploadField({
           onCancel={() => setPendingCrop(null)}
           onCropped={(cropped) => {
             setPendingCrop(null);
+            upload(cropped);
+          }}
+        />
+      )}
+
+      {/* Re-frame the image already stored, without picking a file again. */}
+      {adjusting && (
+        <CropDialog
+          src={adjusting}
+          shape={cropShape}
+          onCancel={() => setAdjusting(null)}
+          onCropped={(cropped) => {
+            setAdjusting(null);
             upload(cropped);
           }}
         />

@@ -6,6 +6,7 @@ import { statusCardSvg, metricsCardSvg, svgResponse } from './lib/svg.js';
 import { bannerSvg } from './lib/banner.js';
 import { bumpViews, viewsSvg, viewsResponse } from './lib/views.js';
 import { syncProfile } from './lib/sync.js';
+import { reapOrphans } from './lib/media.js';
 import publicRoutes from './routes/public.js';
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
@@ -176,6 +177,14 @@ export default {
       syncProfile(env, { trigger: 'cron' })
         .then((r) => console.log('cron sync:', JSON.stringify(r)))
         .catch((e) => console.error('cron sync failed:', e.message))
+    );
+
+    // Backstop for the per-write sweep: a request that ends early can lose its
+    // waitUntil, so orphans get one more chance every half hour.
+    ctx.waitUntil(
+      reapOrphans(env)
+        .then((keys) => keys.length && console.log('cron reaped R2:', keys.join(', ')))
+        .catch((e) => console.error('cron reap failed:', e.message))
     );
   },
 };
