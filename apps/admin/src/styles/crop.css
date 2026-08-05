@@ -109,3 +109,7 @@
 .crop-nudge:hover { background: var(--surface-hover); color: var(--text); }
 .crop-nudge:active { transform: scale(0.94); }
 .crop-reset { color: var(--text-dim); font-size: 14px; }
+
+/* Square frame (favicon): no circular mask, so the outline has to match the
+   actual crop rather than the inscribed circle. */
+.crop-dialog[data-shape='square'] .crop-frame::after { border-radius: var(--r-md); }

@@ -61,6 +61,7 @@ export function rowToProfile(row) {
     email: row.email,
     avatarUrl: row.avatar_url,
     cinematicAvatarUrl: row.cinematic_avatar_url || '',
+    faviconUrl: row.favicon_url || '',
     resumeUrl: row.resume_url,
     githubUser: row.github_user,
     ctaPrimary: row.cta_primary,

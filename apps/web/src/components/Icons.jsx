@@ -73,6 +73,18 @@ export const ArrowUpRight = (props) => (
   </svg>
 );
 
+export const ExpandIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M12 3h5v5M8 17H3v-5M17 3l-6 6M3 17l6-6" />
+  </svg>
+);
+
+export const ChevronDown = (props) => (
+  <svg {...base} {...props}>
+    <path d="m5 8 5 5 5-5" />
+  </svg>
+);
+
 export const ICON_MAP = {
   github: GitHubIcon,
   linkedin: LinkedInIcon,

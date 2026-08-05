@@ -15,11 +15,14 @@ const NUDGE = 12; // px per arrow press, in display space
  * export. Tracking it in source space means every zoom rescales the offsets and
  * the image slides out from under the cursor.
  */
-export default function CropDialog({ file, src, shape = 'circle', onCancel, onCropped }) {
+export default function CropDialog({ file, src, shape = 'circle', title = 'Adjust portrait', onCancel, onCropped }) {
   const isCircle = shape === 'circle';
-  const aspect = isCircle ? 1 : 3 / 4; // width / height
-  const outW = isCircle ? 800 : 900;
-  const outH = isCircle ? 800 : 1200;
+  const isPortrait = shape === 'portrait';
+  const aspect = isPortrait ? 3 / 4 : 1; // width / height
+  // A favicon is rendered at 16-64px, so 512 is already generous; the portraits
+  // get more because they are displayed large.
+  const outW = isPortrait ? 900 : isCircle ? 800 : 512;
+  const outH = isPortrait ? 1200 : isCircle ? 800 : 512;
 
   const [img, setImg] = useState(null);
   const [scale, setScale] = useState(1);
@@ -152,7 +155,7 @@ export default function CropDialog({ file, src, shape = 'circle', onCancel, onCr
       <div className="crop-dialog" data-shape={shape}>
         <header className="crop-head">
           <div>
-            <strong>Adjust portrait</strong>
+            <strong>{title}</strong>
             <span className="crop-hint">
               Drag or use the arrows · scroll to zoom
               {isCircle ? ' · circle is what the site shows' : ' · this is the full frame'}

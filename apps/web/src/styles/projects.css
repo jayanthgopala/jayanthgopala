@@ -190,3 +190,176 @@
   .project-media img, .project:hover .project-media img { transform: none; }
   .project-skeleton { animation: none; }
 }
+
+/* --- Expandable detail -------------------------------------------------------
+   The card shows `summary`; the longer `description` lives behind this. Kept to
+   a hairline and a small label so it reads as a quiet affordance rather than a
+   second call to action competing with Live Demo / GitHub. */
+
+.project-details { margin-top: var(--s-4); }
+
+.project-details-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  color: var(--text-dim);
+  font-size: var(--t-xs);
+  transition: color var(--d-fast) var(--ease);
+}
+.project-details-toggle:hover { color: var(--text-muted); }
+
+/* The rule takes the leftover width, so the label sits flush right and the line
+   grows and shrinks with the card instead of being a fixed-width decoration. */
+.project-details-rule {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.project-details-label { flex-shrink: 0; }
+
+.project-details-chevron {
+  flex-shrink: 0;
+  transition: transform var(--d-base) var(--ease);
+}
+.project-details[data-open] .project-details-chevron { transform: rotate(180deg); }
+
+/*
+ * Animating to `1fr` rather than a guessed max-height: the text is DB-driven, so
+ * any fixed height would either clip a long description or leave dead space
+ * after a short one.
+ *
+ * `visibility` does double duty — it keeps the collapsed copy out of the
+ * accessibility tree and out of the tab order, which `height: 0` alone does not.
+ */
+.project-details-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  transition:
+    grid-template-rows var(--d-base) var(--ease),
+    visibility var(--d-base) var(--ease);
+}
+.project-details[data-open] .project-details-panel {
+  grid-template-rows: 1fr;
+  visibility: visible;
+}
+
+.project-details-inner { overflow: hidden; }
+
+.project-details-inner p {
+  margin: 0;
+  padding-top: var(--s-3);
+  color: var(--text-muted);
+  font-size: var(--t-sm);
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project-details-panel,
+  .project-details-chevron { transition: none; }
+}
+
+/* --- Click feedback ----------------------------------------------------------
+   Two layers, because a press and a selection are different signals. The ripple
+   starts at the exact contact point and reads as physical impact; the reticle
+   snaps to the frame and reads as the system acknowledging a target. Together
+   they cover "realistic" and "futuristic" without tipping into neon — the
+   brightest thing on screen is a one-frame white edge that is gone in 600ms. */
+
+.project-media-btn {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: zoom-in;
+}
+
+/*
+ * Depth on press. Kept shallow and returning to the hover scale rather than to
+ * 1: the image is already scaled up while the pointer is over it, so animating
+ * back to rest would read as the card flinching away from the click.
+ */
+.project-media-btn[data-press] img { animation: project-press 460ms var(--ease); }
+
+@keyframes project-press {
+  0%   { transform: scale(1.035); }
+  20%  { transform: scale(0.992); }
+  100% { transform: scale(1.035); }
+}
+
+/*
+ * Expanding shockwave. The bright edge is part of the gradient rather than a
+ * border, so it scales as a proportion of the radius — a real border would
+ * thicken to ~30px by the end of the animation.
+ */
+.project-ripple {
+  position: absolute;
+  left: var(--px, 50%);
+  top: var(--py, 50%);
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.32) 0%,
+    color-mix(in srgb, var(--accent) 45%, transparent) 52%,
+    rgba(255, 255, 255, 0.55) 70%,
+    transparent 73%
+  );
+}
+.project-media-btn[data-press] .project-ripple {
+  animation: project-ripple 620ms var(--ease-soft, var(--ease)) forwards;
+}
+
+@keyframes project-ripple {
+  from { opacity: 0.9; transform: scale(0.35); }
+  to   { opacity: 0;   transform: scale(30); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project-media-btn[data-press] img,
+  .project-media-btn[data-press] .project-ripple { animation: none; }
+}
+
+/*
+ * The standing "this opens" affordance.
+ *
+ * At rest rather than on hover: hover does not exist on touch, and the image
+ * being a button is otherwise undiscoverable — there is no caption, cursor or
+ * outline to hint at it. Low contrast keeps it from competing with the
+ * screenshot; it lifts to full strength when the card is hovered.
+ */
+.project-zoom {
+  position: absolute;
+  top: var(--s-3);
+  right: var(--s-3);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  background: rgba(8, 8, 10, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(8px);
+  opacity: 0.7;
+  pointer-events: none;
+  transition: opacity var(--d-base) var(--ease), transform var(--d-base) var(--ease),
+              border-color var(--d-base) var(--ease);
+}
+.project:hover .project-zoom {
+  opacity: 1;
+  transform: scale(1.06);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.project-media-btn[data-press] .project-zoom { transform: scale(0.92); }
+
+@media (prefers-reduced-motion: reduce) {
+  .project-zoom { transition: none; }
+}

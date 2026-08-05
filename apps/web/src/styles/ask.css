@@ -1,10 +1,17 @@
 /* Floating assistant. Sits above everything except the lightbox. */
 
 .ask-fab {
+  --fab-h: 46px;
+  --fab-gap: calc(clamp(var(--s-4), 3vw, var(--s-6)) + env(safe-area-inset-bottom, 0px));
+
   position: fixed;
   right: clamp(var(--s-4), 3vw, var(--s-6));
-  bottom: clamp(var(--s-4), 3vw, var(--s-6));
+  bottom: var(--fab-gap);
   z-index: 300;
+  /* Own compositor layer. A bottom-fixed element repainted on the main thread
+     visibly lags the page during momentum scrolling on phones. */
+  transform: translateZ(0);
+  backface-visibility: hidden;
   display: inline-flex;
   align-items: center;
   gap: var(--s-2);
@@ -18,13 +25,14 @@
   box-shadow: var(--shadow-lg), 0 0 34px rgba(110, 123, 255, 0.32);
   transition: transform var(--d-fast) var(--ease), box-shadow var(--d-base) var(--ease);
 }
-.ask-fab:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg), 0 0 46px rgba(110, 123, 255, 0.46); }
-.ask-fab:active { transform: scale(0.97); }
+.ask-fab:hover { transform: translateZ(0) translateY(-2px); box-shadow: var(--shadow-lg), 0 0 46px rgba(110, 123, 255, 0.46); }
+.ask-fab:active { transform: translateZ(0) scale(0.97); }
 
 .ask-panel {
   position: fixed;
   right: clamp(var(--s-4), 3vw, var(--s-6));
-  bottom: calc(clamp(var(--s-4), 3vw, var(--s-6)) + 58px);
+  bottom: calc(clamp(var(--s-4), 3vw, var(--s-6)) + 58px + env(safe-area-inset-bottom, 0px));
+  /* Anchored to the button, so both move together — see the svh block below. */
   z-index: 301;
   width: min(380px, calc(100vw - var(--s-6)));
   max-height: min(520px, calc(100vh - 140px));
@@ -152,9 +160,36 @@
 }
 .ask-send:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/*
+ * Anchor to the SMALL viewport rather than the bottom edge.
+ *
+ * A fixed element's `bottom` resolves against the *large* viewport — the one
+ * with the browser toolbar retracted. While the toolbar is showing, the button
+ * is therefore parked underneath it, and it slides down into view as the
+ * toolbar retracts on scroll. That is the drift.
+ *
+ * `lvh` and `svh` are both constants (toolbar hidden / toolbar shown), so their
+ * difference is the toolbar's height. Adding it pins the button inside the
+ * always-visible area, in one place, whatever the toolbar is doing. Both values
+ * are equal on desktop, so the offset there is exactly 0.
+ */
+@supports (height: 100svh) {
+  .ask-fab { bottom: calc(100lvh - 100svh + var(--fab-gap)); }
+  .ask-panel {
+    bottom: calc(
+      100lvh - 100svh + clamp(var(--s-4), 3vw, var(--s-6)) + 58px +
+      env(safe-area-inset-bottom, 0px)
+    );
+    max-height: min(520px, calc(100svh - 140px));
+  }
+}
+
 @media (max-width: 480px) {
-  .ask-fab span { display: none; }
-  .ask-fab { width: 46px; padding: 0; justify-content: center; }
+  /* The label stays. Dropping to a bare icon saved ~100px of a 390px screen and
+     cost the only entry point to the assistant its meaning — an unlabelled
+     circle in the corner of a dark page reads as decoration, not a control.
+     Tightening the type and padding buys back most of the width instead. */
+  .ask-fab { --fab-h: 42px; height: var(--fab-h); padding-inline: var(--s-4); font-size: var(--t-xs); gap: 6px; }
   .ask-panel { right: var(--s-3); left: var(--s-3); width: auto; }
 }
 

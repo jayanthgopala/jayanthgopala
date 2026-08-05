@@ -11,7 +11,6 @@
  * `Unexpected token '<'`. Nothing in that message points at a missing env var.
  * This URL is a public endpoint, not a secret, so defaulting to it is safe.
  */
-const PRODUCTION_API = 'https://portfolio-api.jayanthgopala21.workers.dev';
 
 /**
  * A base URL without a scheme is a *relative* path to the browser, so
@@ -26,9 +25,17 @@ function normaliseBase(value) {
   return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
 }
 
-const BASE = normaliseBase(
-  import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '' : PRODUCTION_API)
-);
+/*
+ * No fallback to a hardcoded URL on purpose.
+ *
+ * A default here would point every fork at the original author's Worker: it
+ * would work locally (the preview port is on their allow-list) and then fail in
+ * production with an opaque CORS error, showing someone else's content in the
+ * one case it did connect. The build refuses to produce that bundle — see the
+ * guard in vite.config.js — so this is only ever unset in development, where
+ * requests are relative and the dev server proxies them.
+ */
+const BASE = normaliseBase(import.meta.env.VITE_API_URL || '');
 
 export const mediaUrl = (path) => {
   if (!path) return '';

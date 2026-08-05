@@ -19,7 +19,7 @@ const GRACE_MS = 2 * 60 * 60 * 1000;
 /** Every R2 key the database currently points at, across all three columns. */
 async function referencedKeys(db) {
   const [profile, projects] = await Promise.all([
-    db.prepare('SELECT avatar_url, cinematic_avatar_url FROM profile').all(),
+    db.prepare('SELECT avatar_url, cinematic_avatar_url, favicon_url FROM profile').all(),
     db.prepare('SELECT screenshot FROM projects').all(),
   ]);
 
@@ -32,6 +32,7 @@ async function referencedKeys(db) {
   for (const row of profile.results || []) {
     add(row.avatar_url);
     add(row.cinematic_avatar_url);
+    add(row.favicon_url);
   }
   for (const row of projects.results || []) add(row.screenshot);
 

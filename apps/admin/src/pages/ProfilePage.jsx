@@ -98,6 +98,17 @@ export default function ProfilePage() {
           />
 
           <ImageUploadField
+            label="Favicon"
+            hint="Square. Shown in the browser tab. Leave empty to keep the bundled mark."
+            preview="round"
+            crop
+            cropShape="square"
+            cropTitle="Adjust favicon"
+            value={draft.faviconUrl}
+            onChange={(v) => set('faviconUrl', v)}
+          />
+
+          <ImageUploadField
             label="Portrait — Cinematic mode"
             hint="Full-bleed behind the headline. Chest-up, subject centred, dark background."
             crop

@@ -6,7 +6,6 @@
  */
 // Same fallback as the website — see apps/web/src/lib/api.js for why an unset
 // VITE_API_URL fails so confusingly. Public endpoint, safe to default.
-const PRODUCTION_API = 'https://portfolio-api.jayanthgopala21.workers.dev';
 
 /** See apps/web/src/lib/api.js — a scheme-less base silently goes relative. */
 function normaliseBase(value) {
@@ -15,9 +14,17 @@ function normaliseBase(value) {
   return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
 }
 
-const BASE = normaliseBase(
-  import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '' : PRODUCTION_API)
-);
+/*
+ * No fallback to a hardcoded URL on purpose.
+ *
+ * A default here would point every fork at the original author's Worker: it
+ * would work locally (the preview port is on their allow-list) and then fail in
+ * production with an opaque CORS error, showing someone else's content in the
+ * one case it did connect. The build refuses to produce that bundle — see the
+ * guard in vite.config.js — so this is only ever unset in development, where
+ * requests are relative and the dev server proxies them.
+ */
+const BASE = normaliseBase(import.meta.env.VITE_API_URL || '');
 
 export class ApiError extends Error {
   constructor(message, status) {

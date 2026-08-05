@@ -2,7 +2,10 @@
   "name": "portfolio-platform",
   "version": "1.0.0",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev:api": "npm run dev -w @portfolio/api",
     "dev:web": "npm run dev -w @portfolio/web",
@@ -12,6 +15,7 @@
     "db:remote": "npm run db:remote -w @portfolio/api",
     "deploy:api": "npm run deploy -w @portfolio/api",
     "deploy:web": "npm run deploy -w @portfolio/web",
-    "deploy:admin": "npm run deploy -w @portfolio/admin"
+    "deploy:admin": "npm run deploy -w @portfolio/admin",
+    "setup": "node scripts/setup.mjs"
   }
 }
