@@ -16,6 +16,8 @@ import { bumpVersion, SYNC_HASH_KEY, SYNC_TIME_KEY } from '../lib/cache.js';
 import { syncProfile, syncInBackground, recentSyncs } from '../lib/sync.js';
 import { renderReadme } from '../lib/readme.js';
 import { fetchGitHubUser } from '../lib/github.js';
+import { reapOrphans } from '../lib/media.js';
+import { visitorStats } from '../lib/visitors.js';
 
 const app = new Hono();
 
