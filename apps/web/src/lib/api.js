@@ -42,6 +42,13 @@ export const mediaUrl = (path) => {
   return /^https?:\/\//.test(path) ? path : `${BASE}${path}`;
 };
 
+/**
+ * Absolute URL for an API path, for callers that need the URL itself rather
+ * than a response — sendBeacon, for one, takes a URL and no options.
+ * Empty BASE in development is intentional: the dev server proxies it.
+ */
+export const apiUrl = (path) => `${BASE}${path}`;
+
 async function get(path, { signal } = {}) {
   const res = await fetch(`${BASE}${path}`, { signal, headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`${path} failed: ${res.status}`);

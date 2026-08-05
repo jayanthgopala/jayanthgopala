@@ -60,10 +60,11 @@ const json = (v) => JSON.stringify(Array.isArray(v) ? v : []);
 // --- Overview -------------------------------------------------------------
 
 app.get('/overview', async (c) => {
-  const [site, syncs, lastSync] = await Promise.all([
+  const [site, syncs, lastSync, visitors] = await Promise.all([
     loadSite(c.env.DB, { includeDrafts: true }),
     recentSyncs(c.env, 8),
     c.env.CACHE.get(SYNC_TIME_KEY),
+    visitorStats(c.env),
   ]);
 
   return c.json({
@@ -75,6 +76,7 @@ app.get('/overview', async (c) => {
     },
     status: site.status,
     lastSyncAt: lastSync,
+    visitors,
     syncs,
   });
 });

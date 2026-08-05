@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { loadSite, getProjects, getStatus } from '../lib/db.js';
 import { cached } from '../lib/cache.js';
+import { recordVisit } from '../lib/visitors.js';
 
 const app = new Hono();
 
@@ -38,3 +39,17 @@ app.get('/projects/:slug', async (c) => {
 });
 
 export default app;
+
+/**
+ * Visit beacon. Always 204, whether or not the visit counted — a response that
+ * revealed the decision would let anyone probe whether a given device id is
+ * already known.
+ */
+app.post('/view', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  await recordVisit(c.env, {
+    deviceId: body.id,
+    userAgent: c.req.header('user-agent') || '',
+  });
+  return c.body(null, 204);
+});

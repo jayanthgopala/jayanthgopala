@@ -14,6 +14,7 @@ import Contact from './components/Contact.jsx';
 import Footer from './components/Footer.jsx';
 import ErrorBanner from './components/ErrorBanner.jsx';
 import AskWidget from './components/AskWidget.jsx';
+import { recordVisit } from './lib/visit.js';
 
 const STATUS_POLL_MS = 60_000;
 
@@ -36,6 +37,12 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // Once per load. The server de-dupes by device, so a reload or a return
+  // visit does not add a unique — see lib/visit.js.
+  useEffect(() => {
+    recordVisit();
   }, []);
 
   useEffect(() => {

@@ -20,7 +20,15 @@ export default function Dashboard() {
   if (loading) return <span className="spinner" />;
   if (!data) return <Empty>Couldn&rsquo;t load the overview.</Empty>;
 
+  // `visitors` is absent until the Worker carrying it is deployed, so every
+  // read is guarded — an older API must not blank the dashboard.
+  const v = data.visitors;
+
   const stats = [
+    { label: 'Unique visitors', value: v ? v.unique.toLocaleString() : '—' },
+    { label: 'Visitors today', value: v ? v.today.toLocaleString() : '—' },
+    { label: 'Last 7 days', value: v ? v.last7.toLocaleString() : '—' },
+    { label: 'Page views', value: v ? v.visits.toLocaleString() : '—' },
     { label: 'Projects', value: data.counts.projects },
     { label: 'Published', value: data.counts.published },
     { label: 'Stack items', value: data.counts.stack },
