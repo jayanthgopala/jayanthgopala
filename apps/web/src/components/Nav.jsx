@@ -1,15 +1,12 @@
 import { useScrolled } from '../lib/motion.jsx';
 import { copy, externalUrl } from '../lib/api.js';
 import { SocialIcon } from './Icons.jsx';
-import ModeToggle from './ModeToggle.jsx';
 import '../styles/nav.css';
 
 export default function Nav({
   profile,
   socials = [],
   content = {},
-  mode,
-  onChooseMode,
   hasEducation = false,
   hasExperience = false,
 }) {
@@ -60,8 +57,6 @@ export default function Nav({
             {copy(content, 'nav.resume', 'Résumé')}
           </a>
         )}
-
-        <ModeToggle mode={mode} onChoose={onChooseMode} content={content} />
 
         {github && (
           <a

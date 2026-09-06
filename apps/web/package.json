@@ -5,13 +5,20 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run bake && vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && wrangler pages deploy dist --project-name=portfolio-web"
+    "deploy": "npm run build && wrangler pages deploy dist --project-name=portfolio-web",
+    "bake": "node scripts/bake-world.mjs"
   },
   "dependencies": {
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
+    "@react-three/postprocessing": "^3.0.5",
+    "lenis": "^1.3.26",
+    "postprocessing": "^6.39.4",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "three": "^0.185.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",

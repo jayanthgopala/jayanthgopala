@@ -1,0 +1,1525 @@
+/* ==========================================================================
+   CINEMATIC MODE
+
+   Activated by data-mode="cinematic" on <html>. Every selector below is either
+   scoped under that attribute or prefixed cx-, which only cinematic components
+   emit — so nothing here can reach minimal mode.
+
+   Three attributes on <html> drive everything:
+
+     data-mode="cinematic"   this stylesheet applies at all
+     data-tone="ink|paper"   which half of the sequence the fixed chrome is over
+     data-world="on"         the 3D canvas has a context, so acts go transparent
+
+   With the world on, the canvas is the background and the ink-to-paper cut
+   happens inside the render. Without it, the acts paint their own backgrounds
+   and the cut happens geometrically at the section seam. Both are correct; the
+   second is what you get with no WebGL.
+   ========================================================================== */
+
+:root[data-mode='cinematic'] {
+  /* --- The three colours. That is the whole palette. --------------------- */
+  --ink: #111111;
+  --ink-raised: #1A1A1A;
+  --paper: #F1F0EE;
+
+  /* One signal colour in two calibrations. Cyan that reads as electric on ink
+     is illegible on paper — same hue, different luminance, because a single
+     hex here would fail contrast in exactly half the sequence. */
+  /* One blue, both tones. The reference uses a single saturated accent against
+     paper and black and nothing else, and splitting it into two calibrations —
+     as the cyan version did — is what made the palette read as a UI theme
+     rather than as printed artwork. */
+  --signal-ink: #2F7DFF;
+  --signal-paper: #2F7DFF;
+
+  /* Inherited by base.css for the document background, so overscroll and any
+     gap match the opening rather than flashing minimal mode's near-black. */
+  --bg: var(--ink);
+  --bg-elevated: var(--ink-raised);
+  --nav-h: 72px;
+
+  /* --- Type --------------------------------------------------------------
+     Extreme contrast and nothing in the middle: 800 for display, 300 for body,
+     600 for the tiny tracked-out labels. The absence of intermediate weights
+     is what makes the hierarchy read instantly. */
+  /* Sized to sit beside the figure rather than across it. The first cut ran
+     to 10.5vw and the name covered the subject's whole torso — which is a
+     striking piece of type and a ruined shot. */
+  --cx-display: clamp(2.2rem, 6.4vw, 5.6rem);
+  --cx-title: clamp(1.9rem, 5vw, 4.25rem);
+  --cx-shot: clamp(1.75rem, 4vw, 3.25rem);
+  --cx-lead: clamp(1.0625rem, 1.45vw, 1.3125rem);
+  --cx-label: 0.6875rem;
+  --cx-track-label: 0.22em;
+
+  /* --- Motion ------------------------------------------------------------
+     One curve, slower than minimal mode. Cinematic pacing is mostly durations
+     that feel a beat too long in isolation and exactly right in sequence. */
+  --cx-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --cx-d: 780ms;
+  --cx-d-fast: 420ms;
+
+  --cx-gutter: clamp(20px, 5.5vw, 92px);
+  --cx-max: 1320px;
+}
+
+/* --- Tone ------------------------------------------------------------------
+   Every colour any cinematic component uses resolves through these, so an act
+   declares data-tone and inherits a complete palette. */
+
+[data-tone='ink'] {
+  --bg-act: var(--ink);
+  --fg: #F4F4F6;
+  --fg-mute: rgba(244, 244, 246, 0.62);
+  --fg-dim: rgba(244, 244, 246, 0.34);
+  --line: rgba(255, 255, 255, 0.14);
+  --line-soft: rgba(255, 255, 255, 0.07);
+  --raised: rgba(255, 255, 255, 0.035);
+  --sig: var(--signal-ink);
+  --on-sig: #F6F2F1;
+}
+
+[data-tone='paper'] {
+  --bg-act: var(--paper);
+  --fg: #0E0E10;
+  --fg-mute: rgba(14, 14, 16, 0.68);
+  --fg-dim: rgba(14, 14, 16, 0.44);
+  --line: rgba(0, 0, 0, 0.17);
+  --line-soft: rgba(0, 0, 0, 0.09);
+  --raised: rgba(0, 0, 0, 0.035);
+  --sig: var(--signal-paper);
+  --on-sig: #F6F2F1;
+}
+
+/* Chrome colours, from <html data-tone>. The fixed furniture floats over
+   whichever act is behind it, so it is the only thing that has to be told
+   about the cut — and the only tone change that animates. A hard cut on the
+   nav reads as a bug rather than as an edit. */
+:root[data-mode='cinematic'] {
+  --chrome-fg: rgba(244, 244, 246, 0.74);
+  --chrome-dim: rgba(244, 244, 246, 0.32);
+  --chrome-line: rgba(255, 255, 255, 0.16);
+  --chrome-sig: var(--signal-ink);
+  --chrome-veil: var(--ink);
+  --chrome-pill: rgba(18, 18, 22, 0.62);
+  --chrome-on-sig: #F6F2F1;
+}
+
+:root[data-mode='cinematic'][data-tone='paper'] {
+  --chrome-fg: rgba(14, 14, 16, 0.78);
+  --chrome-dim: rgba(14, 14, 16, 0.36);
+  --chrome-line: rgba(0, 0, 0, 0.2);
+  --chrome-sig: var(--signal-paper);
+  --chrome-veil: var(--paper);
+  --chrome-pill: rgba(255, 255, 255, 0.6);
+  --chrome-on-sig: #F6F2F1;
+}
+
+/* ==========================================================================
+   THE WORLD
+   ========================================================================== */
+
+.cx-world {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.cx-world-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/*
+ * The scrim, and the reason body copy is readable at all.
+ *
+ * Opacity is written per frame by the engine as --veil, from a value declared
+ * per act: the opening shot lets the world through completely, and the acts
+ * carrying paragraphs push it most of the way back. Tuning that in one table
+ * beat every attempt at making the type itself heavier — a text shadow strong
+ * enough to survive moving geometry is a text shadow you can see.
+ */
+.cx-world-veil {
+  position: absolute;
+  inset: 0;
+  background: var(--chrome-veil);
+  opacity: var(--veil, 0);
+}
+
+/* With the world on, the acts become glass. */
+:root[data-world='on'] .cx-act { background: transparent; }
+
+/* One stacking context on <main> rather than a z-index per act: the acts
+   already isolate, and stacking them individually against a fixed sibling is
+   how sticky children end up behind it. */
+:root[data-world='on'] .cx { position: relative; z-index: 1; }
+
+/* Act I holds only type when the world is live — clicks must reach the page,
+   not be swallowed by a full-bleed empty stage. */
+.cx-title[data-world] .cx-title-stage { pointer-events: none; }
+.cx-title[data-world] .cx-title-copy { pointer-events: auto; }
+
+/* ==========================================================================
+   ACT SHELL
+   Full-bleed, butted directly together with no margin, which is what makes the
+   tone change land as a cut rather than a gap.
+   ========================================================================== */
+
+.cx-act {
+  position: relative;
+  background: var(--bg-act);
+  color: var(--fg);
+  /* Keeps each act's blending and stacking to itself, so a glow in one can
+     never bleed across the seam into the next. */
+  isolation: isolate;
+}
+
+.cx-act-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  max-width: 46ch;
+}
+
+.cx-act-title {
+  font-size: var(--cx-title);
+  font-weight: 800;
+  letter-spacing: -0.042em;
+  line-height: 0.94;
+  color: var(--fg);
+  text-wrap: balance;
+}
+
+.cx-act-lead {
+  font-size: var(--cx-lead);
+  font-weight: 300;
+  line-height: 1.5;
+  letter-spacing: -0.008em;
+  color: var(--fg-mute);
+  max-width: 52ch;
+}
+
+.cx-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
+  font-size: var(--cx-label);
+  font-weight: 600;
+  letter-spacing: var(--cx-track-label);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+/* A short rule before every eyebrow. Cheap, and most of what makes a label
+   look set rather than typed. */
+.cx-eyebrow::before {
+  content: '';
+  width: 28px;
+  height: 1px;
+  background: var(--sig);
+  flex: none;
+}
+
+.cx-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 11px var(--s-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--fg);
+  background: transparent;
+  transition:
+    background var(--d-base) var(--cx-ease),
+    border-color var(--d-base) var(--cx-ease),
+    color var(--d-base) var(--cx-ease);
+}
+
+.cx-link:hover {
+  background: var(--fg);
+  border-color: var(--fg);
+  color: var(--bg-act);
+}
+
+.cx-link-primary {
+  background: var(--sig);
+  border-color: var(--sig);
+  color: var(--on-sig);
+}
+
+.cx-link-primary:hover {
+  background: var(--fg);
+  border-color: var(--fg);
+  color: var(--bg-act);
+}
+
+/* ==========================================================================
+   FIXED CHROME
+   The frame holds still and the world moves through it.
+   ========================================================================== */
+
+.cx-rail,
+.cx-counter {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  transition: color var(--d-base) var(--ease-soft);
+}
+
+.cx-rail {
+  top: 50%;
+  right: clamp(12px, 2vw, 26px);
+  translate: 0 -50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: min(42vh, 340px);
+}
+
+.cx-rail-line {
+  position: relative;
+  width: 1px;
+  height: 100%;
+  background: var(--chrome-line);
+  overflow: hidden;
+}
+
+.cx-rail-fill {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: calc(var(--doc, 0) * 100%);
+  background: var(--chrome-sig);
+}
+
+.cx-rail-ticks {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+}
+
+.cx-rail-tick {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  border: 1px solid var(--chrome-line);
+  transition:
+    background var(--d-base) var(--cx-ease),
+    border-color var(--d-base) var(--cx-ease),
+    scale var(--d-base) var(--cx-ease);
+}
+
+.cx-rail-tick[data-passed] { background: var(--chrome-dim); border-color: transparent; }
+.cx-rail-tick[data-active] { background: var(--chrome-sig); border-color: transparent; scale: 1.5; }
+
+.cx-counter {
+  left: var(--cx-gutter);
+  bottom: clamp(20px, 3vw, 34px);
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  font-size: var(--cx-label);
+  font-weight: 600;
+  letter-spacing: var(--cx-track-label);
+  text-transform: uppercase;
+}
+
+.cx-counter-index { font-variant-numeric: tabular-nums; color: var(--chrome-sig); }
+.cx-counter-total { color: var(--chrome-dim); }
+.cx-counter-name { color: var(--chrome-fg); }
+
+.cx-hint {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(22px, 4vh, 46px);
+  translate: -50% 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-3);
+  opacity: calc(1 - clamp(0, var(--p, 0) / 0.18, 1));
+}
+
+.cx-hint-label {
+  font-size: var(--cx-label);
+  font-weight: 600;
+  letter-spacing: var(--cx-track-label);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+.cx-hint-line {
+  width: 1px;
+  height: 46px;
+  background: linear-gradient(to bottom, var(--sig), transparent);
+  transform-origin: top;
+  animation: cx-drop 2.4s var(--cx-ease) infinite;
+}
+
+@keyframes cx-drop {
+  0%   { scale: 1 0; opacity: 0; }
+  35%  { scale: 1 1; opacity: 1; }
+  100% { scale: 1 1; opacity: 0; translate: 0 46px; }
+}
+
+/* ==========================================================================
+   ACT I — TITLE
+   ========================================================================== */
+
+.cx-title { height: 240vh; }
+
+.cx-title-stage {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  overflow: hidden;
+  display: grid;
+  /* Bottom-left, not centred. The figure owns the middle of the frame; the
+     type is annotation hung in the corner it leaves free. */
+  align-items: end;
+  justify-items: start;
+}
+
+/* Fallback only — the still portrait, for machines without the world. */
+.cx-title-camera {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: end center;
+  scale: calc(1 + clamp(0, var(--p, 0) / 0.78, 1) * 2.6);
+  /* The camera target: the subject's eye in image coordinates. A percentage
+     origin resolves against this box, so it has to sit at the same level as
+     the picture it frames. */
+  transform-origin: 45% 19%;
+  opacity: calc(1 - clamp(0, (var(--p, 0) - 0.46) / 0.34, 1));
+  will-change: scale, opacity;
+}
+
+.cx-title-plate {
+  height: 100svh;
+  width: auto;
+  max-width: none;
+  object-fit: contain;
+  object-position: bottom center;
+  translate:
+    calc((var(--mx, 0.5) - 0.5) * -3.2vw)
+    calc((var(--my, 0.5) - 0.5) * -1.6vh);
+}
+
+.cx-title-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(46% 44% at 50% 36%, rgba(63, 224, 232, 0.06), transparent 70%),
+    radial-gradient(80% 72% at 50% 44%, transparent 56%, rgba(11, 11, 12, 0.62) 94%);
+}
+
+.cx-title-copy {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: var(--cx-max);
+  padding-inline: var(--cx-gutter);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding-bottom: clamp(72px, 12vh, 132px);
+  opacity: calc(1 - clamp(0, var(--p, 0) / 0.30, 1));
+  translate: 0 calc(clamp(0, var(--p, 0) / 0.30, 1) * -40px);
+  will-change: opacity, translate;
+}
+
+.cx-title-eyebrow { color: var(--sig); }
+
+.cx-title-name {
+  font-size: var(--cx-display);
+  font-weight: 800;
+  letter-spacing: -0.055em;
+  line-height: 0.85;
+  color: #fff;
+  /* The figure sits directly behind the type; without this they fight for the
+     same pixels wherever the render is bright. */
+  text-shadow: 0 4px 60px rgba(0, 0, 0, 0.82);
+  text-wrap: balance;
+}
+
+.cx-title-role {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+  font-size: var(--cx-label);
+  font-weight: 600;
+  letter-spacing: var(--cx-track-label);
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.8);
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.8);
+}
+
+.cx-title-rule {
+  width: clamp(28px, 6vw, 90px);
+  height: 1px;
+  background: currentColor;
+  opacity: 0.4;
+}
+
+.cx-title-statement {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  padding-inline: clamp(24px, 9vw, 140px);
+  text-align: center;
+  pointer-events: none;
+  opacity: clamp(0, (var(--p, 0) - 0.55) / 0.33, 1);
+  translate: 0 calc((1 - clamp(0, (var(--p, 0) - 0.55) / 0.33, 1)) * 30px);
+  will-change: opacity, translate;
+}
+
+.cx-title-statement p {
+  max-width: 22ch;
+  font-size: clamp(1.5rem, 3.6vw, 3.1rem);
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  line-height: 1.14;
+  color: #fff;
+  text-wrap: balance;
+  text-shadow: 0 4px 48px rgba(0, 0, 0, 0.85);
+}
+
+/* ==========================================================================
+   ACT II — DOSSIER
+   ========================================================================== */
+
+.cx-dossier { padding-block: clamp(96px, 16vh, 200px); }
+
+.cx-dossier-inner {
+  width: 100%;
+  max-width: var(--cx-max);
+  margin-inline: auto;
+  padding-inline: var(--cx-gutter);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(40px, 7vh, 88px);
+}
+
+.cx-statement {
+  font-size: clamp(1.9rem, 5.4vw, 4.6rem);
+  font-weight: 300;
+  letter-spacing: -0.038em;
+  line-height: 1.06;
+  color: var(--fg);
+  max-width: 20ch;
+}
+
+/* Each word rides up out of a clipping box. The wrapper clips and the child
+   moves — a single element with overflow:hidden does not work here, because an
+   inline box does not clip. */
+.cx-word {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  /* Descenders need the room; without it, clipping cuts the tail off every g
+     and y at rest, which reads as a font bug rather than a mask. */
+  padding-bottom: 0.12em;
+  margin-bottom: -0.12em;
+}
+
+.cx-word::after { content: ' '; white-space: pre; }
+
+.cx-word > span {
+  display: inline-block;
+  translate: 0 105%;
+  transition: translate var(--cx-d) var(--cx-ease);
+  transition-delay: calc(var(--i, 0) * 32ms);
+}
+
+.cx-statement[data-in] .cx-word > span { translate: 0 0; }
+
+.cx-current {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-5) 0;
+  border-block: 1px solid var(--line-soft);
+  max-width: 560px;
+}
+
+.cx-current-name {
+  font-size: clamp(1.25rem, 2.2vw, 1.75rem);
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  color: var(--fg);
+}
+
+.cx-current-name a { border-bottom: 1px solid var(--sig); }
+
+.cx-current-meter {
+  position: relative;
+  height: 3px;
+  background: var(--line);
+}
+
+.cx-current-meter > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--level, 0%);
+  background: var(--sig);
+  transition: width var(--cx-d) var(--cx-ease);
+}
+
+.cx-current-pct {
+  position: absolute;
+  right: 0;
+  top: -22px;
+  font-size: var(--cx-label);
+  font-weight: 600;
+  font-style: normal;
+  letter-spacing: var(--cx-track-label);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-dim);
+}
+
+.cx-plaques {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1px;
+  background: var(--line-soft);
+  border-block: 1px solid var(--line-soft);
+}
+
+.cx-plaque {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-5) var(--s-4) var(--s-5) 0;
+  background: var(--bg-act);
+  opacity: 0;
+  translate: 0 18px;
+  transition:
+    opacity var(--cx-d) var(--cx-ease),
+    translate var(--cx-d) var(--cx-ease);
+  transition-delay: calc(var(--i, 0) * 70ms);
+}
+
+/* The plaques sit on a 1px grid gap that shows through as hairlines, so each
+   cell needs its own opaque ground — which the transparent act cannot give it
+   when the world is on. */
+:root[data-world='on'] .cx-plaque { background: var(--chrome-veil); }
+
+.cx-plaque[data-in] { opacity: 1; translate: 0 0; }
+
+.cx-plaque-label {
+  font-size: var(--cx-label);
+  font-weight: 600;
+  letter-spacing: var(--cx-track-label);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+.cx-plaque-value {
+  font-size: 1.0625rem;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  color: var(--fg);
+  text-wrap: balance;
+}
+
+.cx-plaque-link .cx-plaque-value { border-bottom: 1px solid var(--sig); }
+
+/* ==========================================================================
+   ACT III — THE WORK
+   ========================================================================== */
+
+.cx-work-intro {
+  width: 100%;
+  max-width: var(--cx-max);
+  margin-inline: auto;
+  padding: clamp(96px, 16vh, 190px) var(--cx-gutter) clamp(48px, 8vh, 90px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(40px, 6vh, 76px);
+}
+
+.cx-sheet { border-top: 1px solid var(--line); }
+
+.cx-sheet li {
+  border-bottom: 1px solid var(--line);
+  opacity: 0;
+  translate: 0 14px;
+  transition:
+    opacity var(--cx-d-fast) var(--cx-ease),
+    translate var(--cx-d-fast) var(--cx-ease);
+  transition-delay: calc(var(--i, 0) * 55ms);
+}
+
+.cx-sheet[data-in] li { opacity: 1; translate: 0 0; }
+
+.cx-sheet-row {
+  display: grid;
+  grid-template-columns: 3.5rem minmax(0, 1fr) minmax(0, auto) 2rem;
+  align-items: center;
+  gap: var(--s-4);
+  padding-block: clamp(16px, 2.4vw, 26px);
+  /* Pointing at one row dims the rest. With a dozen lines on screen the eye
+     has nowhere to rest otherwise. */
+  transition: opacity var(--d-base) var(--cx-ease), padding-left var(--d-base) var(--cx-ease);
+}
+
+.cx-sheet-row[data-dim] { opacity: 0.32; }
+.cx-sheet-row:hover { padding-left: var(--s-4); }
+
+.cx-sheet-index {
+  font-size: var(--cx-label);
+  font-weight: 600;
+  letter-spacing: var(--cx-track-label);
+  font-variant-numeric: tabular-nums;
+  color: var(--sig);
+}
+
+.cx-sheet-title {
+  font-size: clamp(1.125rem, 2.4vw, 1.9rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cx-sheet-tech {
+  font-size: var(--cx-label);
+  font-weight: 600;
+  letter-spacing: var(--cx-track-label);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cx-sheet-arrow {
+  justify-self: end;
+  color: var(--fg-dim);
+  transition: color var(--d-base) var(--cx-ease), translate var(--d-base) var(--cx-ease);
+}
+
+.cx-sheet-row:hover .cx-sheet-arrow { color: var(--sig); translate: 3px -3px; }
+
+.cx-sheet-skeleton { display: block; height: 3.4rem; background: var(--raised); }
+
+.cx-sheet-empty {
+  padding-block: var(--s-6);
+  font-size: var(--cx-lead);
+  font-weight: 300;
+  color: var(--fg-mute);
+}
+
+/* 200vh per project: 100vh of sticky hold plus 100vh of runway, so each beat
+   owns the screen and hands over cleanly. */
+.cx-shot { height: 200vh; }
+
+.cx-shot-stage {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  display: grid;
+  align-items: center;
+  justify-items: start;
+  padding-inline: var(--cx-gutter);
+  /* The ring of slabs owns the middle and right of the frame. The card is an
+     annotation hung in the corner it leaves free — the project itself is the
+     object orbiting the figure, not this. */
+  pointer-events: none;
+}
+
+/* --- The project card ------------------------------------------------------
+   Same device as the caption plaques: hard border, no radius, no shadow. */
+
+.cx-card {
+  pointer-events: auto;
+  width: min(38ch, 42vw);
+  margin: 0;
+  padding: 22px 24px;
+  background: #F4F3F0;
+  border: 2px solid #111111;
+  color: #111111;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  opacity: 0;
+  translate: -28px 0;
+  transition:
+    opacity var(--cx-d) var(--cx-ease),
+    translate var(--cx-d) var(--cx-ease),
+    border-color var(--d-base) var(--cx-ease);
+}
+
+.cx-card[data-in] { opacity: 1; translate: 0 0; }
+
+/* Pointing at this project's slab in the ring lights its card, so the two are
+   visibly the same object. */
+.cx-card[data-hot] { border-color: var(--signal-ink); }
+
+.cx-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.cx-card-index {
+  font-size: var(--cx-label);
+  font-weight: 700;
+  letter-spacing: var(--cx-track-label);
+  font-variant-numeric: tabular-nums;
+  color: var(--signal-ink);
+}
+
+.cx-card-index em { font-style: normal; opacity: 0.45; }
+
+.cx-card-flag {
+  padding: 3px 9px;
+  border: 1.5px solid var(--signal-ink);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: var(--cx-track-label);
+  text-transform: uppercase;
+  color: var(--signal-ink);
+}
+
+.cx-card-title {
+  font-size: clamp(1.3rem, 2.2vw, 2rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 0.98;
+  text-wrap: balance;
+}
+
+.cx-card-summary {
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.6;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.cx-card-tech {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding-top: 2px;
+  border-top: 1px solid rgba(17, 17, 17, 0.18);
+}
+
+.cx-card-tech li {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.62;
+}
+
+/* Disclosure. 0fr to 1fr is a height the browser can interpolate; `auto` is
+   not, which is why this is a grid row rather than a max-height. */
+.cx-card-more {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--d-slow) var(--cx-ease);
+}
+
+.cx-card-more > div { overflow: hidden; }
+
+.cx-card-more p {
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.7;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding-top: 12px;
+}
+
+.cx-card[data-open] .cx-card-more { grid-template-rows: 1fr; }
+
+.cx-card-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: 9px 0 0;
+  border-top: 1px solid rgba(17, 17, 17, 0.18);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: var(--cx-track-label);
+  text-transform: uppercase;
+  color: #111111;
+}
+
+.cx-card-arrow {
+  transition: rotate var(--d-base) var(--cx-ease), color var(--d-base) var(--cx-ease);
+}
+
+.cx-card-toggle:hover .cx-card-arrow { color: var(--signal-ink); }
+/* Points down-right when closed, up-right when open — the same glyph doing
+   both jobs, so nothing swaps under the cursor. */
+.cx-card[data-open] .cx-card-arrow { rotate: 90deg; color: var(--signal-ink); }
+
+.cx-card-links { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.cx-card .cx-link {
+  padding: 7px 14px;
+  border-color: rgba(17, 17, 17, 0.28);
+  border-radius: 0;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: var(--cx-track-label);
+  text-transform: uppercase;
+  color: #111111;
+}
+
+.cx-card .cx-link:hover { background: #111111; color: #F4F3F0; border-color: #111111; }
+
+.cx-card .cx-link-primary {
+  background: var(--signal-ink);
+  border-color: var(--signal-ink);
+  color: #F6F2F1;
+}
+
+.cx-card .cx-link-primary:hover { background: #111111; border-color: #111111; }
+
+/* The cursor over a pickable slab. Set on the root element, because the canvas
+   is pointer-events:none and never becomes the hit target itself. */
+:root[data-picking='on'] { cursor: pointer; }
+
+/* ==========================================================================
+   ACT IV — SYSTEM
+   ========================================================================== */
+
+.cx-system { padding-block: clamp(96px, 16vh, 200px); }
+
+.cx-system-inner {
+  width: 100%;
+  max-width: var(--cx-max);
+  margin-inline: auto;
+  padding-inline: var(--cx-gutter);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(48px, 8vh, 96px);
+}
+
+.cx-sys-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: clamp(28px, 3.5vw, 56px);
+}
+
+.cx-sys-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  opacity: 0;
+  translate: 0 22px;
+  transition:
+    opacity var(--cx-d) var(--cx-ease),
+    translate var(--cx-d) var(--cx-ease);
+  transition-delay: calc(var(--i, 0) * 80ms);
+}
+
+.cx-sys-col[data-in] { opacity: 1; translate: 0 0; }
+
+/* Dimming the columns you are not pointing at is what turns twenty-odd rows
+   into something readable one line at a time. */
+.cx-sys-col[data-dim] { opacity: 0.34; }
+
+.cx-sys-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding-bottom: var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.cx-sys-count {
+  font-size: var(--cx-label);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-dim);
+}
+
+.cx-sys-list { display: flex; flex-direction: column; }
+
+.cx-sys-item {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-block: var(--s-3);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.cx-sys-item:focus-visible { outline-offset: 4px; }
+
+.cx-sys-name {
+  font-size: 0.9375rem;
+  font-weight: 400;
+  letter-spacing: -0.012em;
+  color: var(--fg);
+}
+
+.cx-sys-meter { display: block; height: 2px; background: var(--line); overflow: hidden; }
+
+/* The bar draws to its value on entry. A meter that arrives in front of you
+   reads as a measurement; one that is simply there reads as decoration. */
+.cx-sys-fill {
+  display: block;
+  height: 100%;
+  width: var(--level, 0%);
+  background: var(--sig);
+  transform-origin: left;
+  scale: 0 1;
+  transition: scale var(--cx-d) var(--cx-ease);
+  transition-delay: calc(160ms + var(--i, 0) * 60ms);
+}
+
+.cx-sys-col[data-in] .cx-sys-fill { scale: 1 1; }
+
+/* ==========================================================================
+   ACT V — RECORD
+   ========================================================================== */
+
+.cx-record { padding-block: clamp(96px, 16vh, 200px); }
+
+.cx-record-inner {
+  width: 100%;
+  max-width: var(--cx-max);
+  margin-inline: auto;
+  padding-inline: var(--cx-gutter);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(48px, 8vh, 96px);
+}
+
+.cx-rec-rail {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(28px, 4vh, 56px);
+  padding-left: clamp(28px, 4vw, 56px);
+}
+
+.cx-rec-line {
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 1px;
+  background: var(--line);
+}
+
+/* Scrubbed, not animated: the line draws at exactly the rate you scroll and
+   reverses when you scroll back. */
+.cx-rec-line-fill {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: calc(clamp(0, (var(--p, 0) - 0.05) / 0.7, 1) * 100%);
+  background: linear-gradient(to bottom, var(--sig), color-mix(in srgb, var(--sig) 30%, transparent));
+}
+
+.cx-rec-entry {
+  position: relative;
+  opacity: 0;
+  translate: 0 22px;
+  transition:
+    opacity var(--cx-d) var(--cx-ease),
+    translate var(--cx-d) var(--cx-ease);
+}
+
+.cx-rec-entry[data-in] { opacity: 1; translate: 0 0; }
+
+.cx-rec-node {
+  position: absolute;
+  left: calc(clamp(28px, 4vw, 56px) * -1);
+  top: 10px;
+  width: 7px;
+  height: 7px;
+  translate: -3px 0;
+  border-radius: 50%;
+  background: var(--bg-act);
+  border: 1px solid var(--sig);
+}
+
+:root[data-world='on'] .cx-rec-node { background: var(--chrome-veil); }
+.cx-rec-entry[data-in] .cx-rec-node { background: var(--sig); }
+
+.cx-rec-card { display: flex; flex-direction: column; gap: var(--s-3); align-items: flex-start; }
+
+.cx-rec-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-4);
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.cx-rec-title {
+  font-size: clamp(1.125rem, 2vw, 1.5rem);
+  font-weight: 600;
+  letter-spacing: -0.028em;
+  color: var(--fg);
+}
+
+.cx-rec-period {
+  font-size: var(--cx-label);
+  font-weight: 600;
+  letter-spacing: var(--cx-track-label);
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--sig);
+  white-space: nowrap;
+}
+
+.cx-rec-org { font-size: var(--t-sm); color: var(--fg-mute); }
+.cx-rec-dim { color: var(--fg-dim); }
+
+.cx-rec-badge {
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  font-size: var(--cx-label);
+  font-weight: 600;
+  letter-spacing: var(--cx-track-label);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+.cx-rec-desc {
+  font-size: 0.9375rem;
+  font-weight: 300;
+  line-height: 1.62;
+  color: var(--fg-mute);
+  max-width: 62ch;
+}
+
+.cx-rec-tech { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); }
+
+.cx-rec-tech li {
+  font-size: var(--cx-label);
+  font-weight: 600;
+  letter-spacing: var(--cx-track-label);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+/* ==========================================================================
+   ACT VI — SIGNAL
+   ========================================================================== */
+
+.cx-signal {
+  position: relative;
+  padding-block: clamp(110px, 20vh, 240px) clamp(24px, 4vh, 48px);
+  overflow: hidden;
+}
+
+.cx-signal-inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: var(--cx-max);
+  margin-inline: auto;
+  padding-inline: var(--cx-gutter);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-5);
+  opacity: 0;
+  translate: 0 24px;
+  transition:
+    opacity var(--cx-d) var(--cx-ease),
+    translate var(--cx-d) var(--cx-ease);
+}
+
+.cx-signal-inner[data-in] { opacity: 1; translate: 0 0; }
+
+.cx-signal-title { max-width: 16ch; }
+
+/* The address is content, not a label. After fifteen viewports of scrolling,
+   the one thing a visitor might want to do gets display treatment. */
+.cx-signal-mail {
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(10px, 1.6vw, 22px);
+  margin-top: var(--s-4);
+  font-size: clamp(1.4rem, 4.6vw, 3.6rem);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  color: var(--sig);
+  /* A long address must not push the page sideways at 320px. */
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.cx-signal-mail svg { flex: none; transition: translate var(--d-base) var(--cx-ease); }
+.cx-signal-mail:hover svg { translate: 5px -5px; }
+
+.cx-signal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-4);
+  margin-top: var(--s-4);
+}
+
+.cx-signal-socials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-6);
+  margin-top: var(--s-5);
+  padding-top: var(--s-5);
+  border-top: 1px solid var(--line-soft);
+  width: 100%;
+}
+
+.cx-signal-socials a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
+  font-size: var(--cx-label);
+  font-weight: 600;
+  letter-spacing: var(--cx-track-label);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  transition: color var(--d-base) var(--cx-ease);
+}
+
+.cx-signal-socials a:hover { color: var(--sig); }
+.cx-signal-socials svg { width: 15px; height: 15px; }
+
+.cx-signal-foot {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: var(--cx-max);
+  margin-inline: auto;
+  padding: clamp(48px, 8vh, 110px) var(--cx-gutter) 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--s-3);
+  font-size: var(--cx-label);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+/* ==========================================================================
+   SHARED CHROME OVERRIDES
+   Nav and the ask widget belong to both modes. Restyled here only — no
+   component below has its markup touched.
+   ========================================================================== */
+
+:root[data-mode='cinematic'] .nav {
+  top: 0;
+  height: var(--nav-h);
+  border-bottom: none;
+  background: none;
+  backdrop-filter: none;
+}
+
+:root[data-mode='cinematic'] .nav-inner {
+  max-width: none;
+  padding-inline: var(--cx-gutter);
+  gap: var(--s-3);
+}
+
+/* Logo hard left, everything else clustered right — reachable without touching
+   the nav's markup. */
+:root[data-mode='cinematic'] .nav-brand { margin-right: auto; }
+:root[data-mode='cinematic'] .nav-name { display: none; }
+
+:root[data-mode='cinematic'] .nav-links {
+  padding: 5px 6px;
+  border-radius: var(--r-pill);
+  background: var(--chrome-pill);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid var(--chrome-line);
+  transition: background var(--d-base) var(--ease-soft), border-color var(--d-base) var(--ease-soft);
+}
+
+:root[data-mode='cinematic'] .nav-link {
+  padding: 6px var(--s-4);
+  border-radius: var(--r-pill);
+  font-size: var(--cx-label);
+  font-weight: 600;
+  letter-spacing: var(--cx-track-label);
+  text-transform: uppercase;
+  color: var(--chrome-fg);
+}
+
+:root[data-mode='cinematic'] .nav-link:hover { color: var(--chrome-sig); background: none; }
+
+:root[data-mode='cinematic'] .nav-cta {
+  height: 34px;
+  border-radius: var(--r-pill);
+  border-color: var(--chrome-line);
+  background: var(--chrome-pill);
+  color: var(--chrome-fg);
+  font-size: var(--cx-label);
+  font-weight: 600;
+  letter-spacing: var(--cx-track-label);
+  text-transform: uppercase;
+}
+
+:root[data-mode='cinematic'] .nav-cta:hover {
+  border-color: var(--chrome-sig);
+  color: var(--chrome-sig);
+}
+
+:root[data-mode='cinematic'] .mode-toggle {
+  background: var(--chrome-pill);
+  border-color: var(--chrome-line);
+}
+
+:root[data-mode='cinematic'] .mode-option { color: var(--chrome-dim); }
+:root[data-mode='cinematic'] .mode-option:hover { color: var(--chrome-fg); }
+
+:root[data-mode='cinematic'] .mode-option[aria-pressed='true'] {
+  background: var(--chrome-sig);
+  color: var(--chrome-on-sig);
+}
+
+/* On paper, minimal mode's dark pill reads as a hole punched in the page. */
+:root[data-mode='cinematic'][data-tone='paper'] .ask-fab {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: transparent;
+}
+
+/* ==========================================================================
+   RESPONSIVE
+   Not a shrink. Below the breakpoint the pointer half of the design does not
+   exist, so the layouts are re-cut for one column and scroll carries it all.
+   ========================================================================== */
+
+@media (max-width: 900px) {
+  :root[data-mode='cinematic'] { --nav-h: 64px; }
+
+  /* Less runway on a phone — the opening shot should not cost half a page of
+     thumbing before anything else appears. */
+  .cx-title { height: 185vh; }
+  .cx-title-stage { align-items: end; }
+  .cx-title-copy { justify-content: flex-end; padding-bottom: 26vh; }
+
+  .cx-title-camera { scale: calc(1 + clamp(0, var(--p, 0) / 0.78, 1) * 1.8); }
+
+  /* No pointer, so no orbit. Leaving the translate in would hold the frame at
+     whatever the last touch happened to set. */
+  .cx-title-plate { height: 88svh; translate: 0 0; }
+
+  /* The shots stop being pinned. A sticky stage on a phone competes with the
+     browser's own collapsing toolbar and the result reads as a stutter — the
+     content is identical, it simply scrolls. */
+  .cx-shot { height: auto; }
+  .cx-shot-stage { position: static; height: auto; padding-block: clamp(56px, 10vh, 96px); }
+  .cx-shot-grid { grid-template-columns: minmax(0, 1fr); gap: var(--s-6); }
+  .cx-shot-plate { scale: 1; translate: 0 0; order: -1; }
+
+  .cx-sheet-row { grid-template-columns: 2.75rem minmax(0, 1fr) 1.5rem; }
+  .cx-sheet-tech { display: none; }
+
+  .cx-plaques { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .cx-rail { height: min(30vh, 220px); right: 10px; }
+  .cx-counter { left: var(--cx-gutter); bottom: 14px; }
+}
+
+@media (max-width: 560px) {
+  .cx-plaques { grid-template-columns: minmax(0, 1fr); }
+  .cx-counter-name { display: none; }
+  .cx-rec-rail { padding-left: 22px; }
+  .cx-rec-node { left: -22px; }
+}
+
+/* ==========================================================================
+   REDUCED MOTION
+   useSceneVar parks every scrubbed value at --p: 1, which is right for the acts
+   that reveal content and wrong for the opening shot, where p=1 means "the name
+   has already gone". So Act I gets an explicit static layout.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .cx-title { height: auto; min-height: 100svh; }
+
+  .cx-title-stage {
+    position: relative;
+    height: auto;
+    min-height: 100svh;
+    align-items: end;
+  }
+
+  .cx-title-camera { scale: 1; opacity: 1; }
+  .cx-title-copy { opacity: 1; translate: 0 0; padding-bottom: 20vh; }
+
+  /* It restates the dossier's opening line, so losing it costs nothing. */
+  .cx-title-statement { display: none; }
+  .cx-hint { display: none; }
+  .cx-hint-line { animation: none; }
+
+  .cx-title-plate { translate: 0 0; }
+
+  .cx-shot { height: auto; }
+  .cx-shot-stage { position: static; height: auto; padding-block: clamp(56px, 10vh, 110px); }
+  .cx-shot-plate { scale: 1; translate: 0 0; }
+
+  /* The rail stays live — orientation aid, not decoration. */
+}
+
+/* ==========================================================================
+   PLAQUES
+
+   The characteristic element of the whole language, and the reason the world
+   underneath can stay visible.
+
+   The first cut put body copy straight on the scene and dropped a heavy scrim
+   behind it to keep it readable. That worked, and buried the figure — the
+   entire point of the scene — behind flat colour for four acts out of six. A
+   plaque carries its own contrast in about four hundred square pixels, so the
+   scrim went back to almost nothing and the world stayed on screen.
+
+   Hard border, no radius, no shadow. The border IS the device; softening any
+   part of it turns a printed plaque into a UI tooltip.
+   ========================================================================== */
+
+.cx-plaque-card {
+  position: absolute;
+  top: var(--top, 50%);
+  z-index: 4;
+  max-width: min(38ch, 42vw);
+  margin: 0;
+  padding: 15px 22px;
+  background: #F4F3F0;
+  border: 2px solid #0B0B0C;
+  color: #0B0B0C;
+  font-size: clamp(0.72rem, 0.95vw, 0.84rem);
+  font-weight: 500;
+  line-height: 1.55;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  text-wrap: balance;
+
+  /* Never centred. Hanging off an edge and overlapping the subject is what
+     makes it read as annotation on a plate rather than as a subtitle track. */
+  rotate: var(--tilt, 0deg);
+  opacity: 0;
+  transition:
+    opacity var(--cx-d) var(--cx-ease),
+    translate var(--cx-d) var(--cx-ease);
+  transition-delay: var(--delay, 0ms);
+}
+
+.cx-plaque-card[data-side='left']  { left: 0; translate: -24px 0; }
+.cx-plaque-card[data-side='right'] { right: 0; translate: 24px 0; }
+
+.cx-plaque-card[data-in] { opacity: 1; translate: 0 0; }
+
+/* The dossier is a normal flow column, not a stage — a plaque absolutely
+   positioned against it would land on top of the statement. */
+.cx-dossier .cx-plaque-card { position: relative; top: auto; margin-block: var(--s-4); }
+.cx-dossier .cx-plaque-card[data-side='right'] { margin-left: auto; }
+
+/* --- Display type ----------------------------------------------------------
+   The other half of the system. Nothing exists between these two sizes, and
+   that absence is what makes the hierarchy read instantly. */
+
+.cx-display {
+  font-size: var(--cx-title);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 0.92;
+  color: var(--fg);
+  text-wrap: balance;
+}
+
+.cx-display > span {
+  display: block;
+  overflow: hidden;
+  /* Descenders need the room, or clipping cuts the tail off every g and y at
+     rest, which reads as a font bug rather than as a mask. */
+  padding-bottom: 0.1em;
+  margin-bottom: -0.1em;
+}
+
+.cx-display > span > span {
+  display: block;
+  translate: 0 105%;
+  transition: translate var(--cx-d) var(--cx-ease);
+  transition-delay: var(--delay, 0ms);
+}
+
+.cx-display[data-in] > span > span { translate: 0 0; }
+
+/* ==========================================================================
+   SOUND
+   Five bars, bottom right, exactly where the reference puts it. Flat when
+   muted, moving when playing — the control reports its own state without a
+   label, which is why no text sits next to it.
+   ========================================================================== */
+
+.cx-sound {
+  position: fixed;
+  right: clamp(14px, 2.4vw, 34px);
+  bottom: clamp(20px, 3vw, 34px);
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+}
+
+.cx-sound-bars {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+}
+
+.cx-sound-bars > span {
+  width: 2px;
+  height: 5px;
+  background: var(--chrome-fg);
+  transition: height var(--d-base) var(--cx-ease), background var(--d-base) var(--ease-soft);
+}
+
+.cx-sound:hover .cx-sound-bars > span { background: var(--chrome-sig); }
+
+/* Staggered so the bars never move as one block, which reads as a loading
+   spinner rather than as a level meter. */
+.cx-sound-bars[data-on] > span {
+  animation: cx-meter 900ms var(--ease-soft) infinite alternate;
+  animation-delay: calc(var(--i) * 110ms);
+  background: var(--chrome-sig);
+}
+
+@keyframes cx-meter {
+  from { height: 4px; }
+  to   { height: 17px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The control still has to distinguish its two states, so it does it with
+     height rather than movement. */
+  .cx-sound-bars[data-on] > span { animation: none; height: 14px; }
+}

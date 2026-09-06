@@ -1,0 +1,390 @@
+/* ==========================================================================
+   THE WORLD ROUTE
+
+   A fixed canvas with a scroll extent above it and a thin HUD on top. Every
+   selector here is prefixed w- and only the world route emits those, so nothing
+   in this file can reach the main site.
+   ========================================================================== */
+
+:root[data-route='world'] {
+  --w-ink: #171614;
+  --w-paper: #efece5;
+  --w-warm: #d8b981;
+  --w-meta: 0.6875rem;
+  --w-track: 0.22em;
+  --w-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --w-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  background: #b9c0c7;
+}
+
+/* The scroll extent is a spacer with nothing in it, so the document has no
+   background of its own to show. Matching it to the fog means any moment the
+   canvas has not painted yet reads as the world rather than as a white flash. */
+:root[data-route='world'] body {
+  background: #b9c0c7;
+}
+
+/* --- The canvas ------------------------------------------------------------
+   Fixed, full-viewport, and behind everything. It is not in the scroll flow at
+   all: the spacer scrolls, the world responds. */
+
+/*
+ * The positioned layer is ours. R3F sets position/width/height inline on the
+ * element carrying `.w-canvas`, and inline styles win — so all the layout lives
+ * on this wrapper, and R3F is simply given a full-viewport box to fill.
+ */
+.w-stage {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100svh;
+  z-index: 0;
+}
+
+.w-canvas {
+  display: block;
+  /* Touch scrolling must reach the page, not be swallowed by the canvas. */
+  touch-action: pan-y;
+  outline: none;
+}
+
+/* --- Annotations -----------------------------------------------------------
+   Leader-line labels on the hero object, shown while it is held under the
+   cursor. DOM rather than in-scene text: troika's MSDF renderer would need a
+   font FILE shipped and fetched, and these are chrome pointing AT the world
+   rather than objects in it.
+   ========================================================================== */
+
+.w-annotation-wrap,
+.w-measure-wrap { pointer-events: none; }
+
+/*
+ * The pixel readout on a lifted brick.
+ *
+ * Text content and opacity are written straight to this node from the frame
+ * loop — it changes every frame, and putting it through React state would
+ * re-render the tree sixty times a second to change a number.
+ */
+/*
+ * A node on the measurement chain: a small crosshair with a number beside it,
+ * drawn the way a survey drawing marks a point. Text and opacity are written
+ * straight to the node from the frame loop, because both change every frame and
+ * routing them through React state would re-render the tree at 60Hz.
+ */
+.w-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+  font-family: var(--w-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #ffffff;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.9), 0 2px 6px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+.w-node-cross {
+  display: inline-block;
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: #ffffff;
+  opacity: 0.95;
+  line-height: 1;
+}
+
+.w-node-value {
+  display: inline-block;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.w-measure {
+  display: block;
+  padding: 2px 6px;
+  white-space: nowrap;
+  font-family: var(--w-mono);
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #1f262b;
+  background: rgba(226, 232, 237, 0.84);
+  opacity: 0;
+  transition: none;
+}
+
+.w-annotation {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 9px;
+  /* Sits on the fog rather than in a box on top of it. A filled panel here
+     immediately reads as a tooltip from a different application. */
+  border-left: 1px solid rgba(23, 22, 20, 0.45);
+  white-space: nowrap;
+  font-family: var(--w-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--w-ink);
+  animation: w-annotation-in 260ms var(--w-ease) both;
+}
+
+.w-annotation-code { opacity: 0.45; font-size: 0.5625rem; }
+.w-annotation-value { font-weight: 700; }
+
+@keyframes w-annotation-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .w-annotation { animation: none; }
+}
+
+/* --- HUD -------------------------------------------------------------------
+   Fixed over the canvas. pointer-events are off on the container so the whole
+   overlay never intercepts a scroll or a drag; individual controls opt back in.
+   ========================================================================== */
+
+.w-hud {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(16px, 2.4vw, 34px);
+  pointer-events: none;
+  font-family: var(--w-mono);
+  color: var(--w-ink);
+  text-transform: uppercase;
+  letter-spacing: var(--w-track);
+  font-size: var(--w-meta);
+  font-weight: 500;
+}
+
+.w-hud > * { pointer-events: none; }
+.w-hud a,
+.w-hud button { pointer-events: auto; }
+
+.w-hud-top { display: flex; flex-direction: column; gap: 4px; }
+
+.w-mark {
+  margin: 0;
+  font-size: clamp(0.8rem, 1.1vw, 1rem);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.w-role { margin: 0; opacity: 0.6; }
+
+/* --- The act marker --------------------------------------------------------
+   Keyed on the act id in the component, so React replaces the node on every
+   chapter change and the entry animation re-runs. A CSS transition would not
+   fire, because the element and its computed styles are otherwise identical. */
+
+.w-hud-act {
+  align-self: flex-end;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-block: auto;
+  animation: w-act-in 900ms var(--w-ease) both;
+}
+
+.w-act-num { opacity: 0.5; font-size: 0.625rem; }
+.w-act-label { font-size: clamp(0.75rem, 1vw, 0.9rem); font-weight: 700; }
+
+@keyframes w-act-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* --- Bottom bar ------------------------------------------------------------ */
+
+.w-hud-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(16px, 4vw, 60px);
+}
+
+.w-hint { opacity: 0.55; }
+
+.w-progress {
+  flex: 1;
+  max-width: 260px;
+  height: 1px;
+  background: rgba(23, 22, 20, 0.22);
+  overflow: hidden;
+}
+
+/* Scaled from the left every frame by the component, which writes the transform
+   straight to this node rather than re-rendering. */
+.w-progress i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--w-ink);
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+}
+
+@media (max-width: 700px) {
+  .w-hint { display: none; }
+  .w-progress { max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .w-hud-act { animation: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   Loading screen.
+
+   Painted in the world's own palette rather than a neutral dark overlay, so the
+   transition is a dissolve into the same snowfield rather than a cut from black.
+   The fade only starts once the bar has filled — a bar that vanishes part-way
+   reads as a failure even when nothing failed.
+   --------------------------------------------------------------------------*/
+.w-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  /* Matches the sky's haze end, so the loader and the horizon behind it are the
+     same colour and the dissolve has nothing to give away. */
+  background: linear-gradient(180deg, #b9c0cb 0%, #d3dae4 68%, #dfe5ed 100%);
+  transition: opacity 700ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.w-loader.is-ready {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.w-loader-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.15rem;
+  padding: 0 1.5rem;
+}
+
+.w-loader-mark {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: #3f4855;
+}
+
+.w-loader-bar {
+  display: block;
+  width: min(240px, 52vw);
+  height: 1px;
+  background: rgba(63, 72, 85, 0.22);
+  overflow: hidden;
+}
+
+/* Scaled from the left by the component every frame — never re-rendered. */
+.w-loader-bar i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #3f4855;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  transition: transform 500ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.w-loader-note {
+  margin: 0;
+  font-size: 0.62rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(63, 72, 85, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .w-loader,
+  .w-loader-bar i {
+    transition: none;
+  }
+}
+
+/*
+ * The sound control.
+ *
+ * Sits in the HUD's bottom row and borrows its typography rather than
+ * introducing any: same size, same tracking, same uppercase as the act label
+ * and the scroll hint, so it reads as one more line of chrome instead of as a
+ * widget dropped on the scene.
+ */
+.w-sound {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 260ms ease;
+}
+
+.w-sound:hover,
+.w-sound:focus-visible {
+  opacity: 0.9;
+}
+
+/* Three bars that stand up when the sound is on. The animation is the state:
+   a label alone makes you read to find out, a moving glyph does not. */
+.w-sound-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 9px;
+}
+
+.w-sound-bars i {
+  width: 2px;
+  height: 2px;
+  background: currentColor;
+  transition: height 320ms ease;
+}
+
+.w-sound.is-on .w-sound-bars i {
+  animation: w-sound-bar 1150ms ease-in-out infinite;
+}
+
+.w-sound.is-on .w-sound-bars i:nth-child(2) { animation-delay: 190ms; }
+.w-sound.is-on .w-sound-bars i:nth-child(3) { animation-delay: 380ms; }
+
+@keyframes w-sound-bar {
+  0%, 100% { height: 3px; }
+  50% { height: 9px; }
+}
+
+/* The bars are the only thing on this page that loops visibly, so they are the
+   first thing to go when motion is not wanted. The label still carries the
+   state. */
+@media (prefers-reduced-motion: reduce) {
+  .w-sound.is-on .w-sound-bars i {
+    animation: none;
+    height: 7px;
+  }
+  .w-sound-bars i { transition: none; }
+}

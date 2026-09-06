@@ -1,16 +1,24 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 /**
- * Two presentation modes over one set of content.
+ * The presentation mode, as an attribute on <html>.
  *
- *   minimal   — the default premium-dark layout
- *   cinematic — full-bleed character hero, pill nav, preloader
+ * There is one mode. There were two — a second, cinematic presentation lived
+ * alongside this one — and it has been taken out of the app; the working copy
+ * is in `apps/web/.backup/cinematic-v2/`, with notes on putting it back.
  *
- * Resolution order is deliberate: a visitor's own choice always wins over the
- * admin default. The default decides the *first* impression, not every one.
+ * WHY THIS DID NOT COLLAPSE INTO A CONSTANT. `data-mode="minimal"` still goes
+ * on the root element, and `MODES` still gates what may be stored, because two
+ * things outlive the removal: visitors who chose cinematic have `pf_mode` set
+ * in their browser, and the database still carries a `theme.default` key that
+ * an admin may have set to it. Both now fail `isValid` and fall through to
+ * minimal, which is exactly the behaviour wanted — a stale preference for a
+ * mode that no longer exists resolves silently instead of rendering nothing.
+ * Deleting the validation would have let those values through to an attribute
+ * no stylesheet answers to.
  */
 
-export const MODES = ['minimal', 'cinematic'];
+export const MODES = ['minimal'];
 const STORAGE_KEY = 'pf_mode';
 
 const isValid = (m) => MODES.includes(m);
@@ -46,74 +54,5 @@ export function useThemeMode(content) {
     document.documentElement.dataset.mode = mode;
   }, [mode]);
 
-  const choose = useCallback((next) => {
-    if (!isValid(next)) return;
-    setMode(next);
-    setExplicit(true);
-
-    // Jump to the top. The two modes lay the page out completely differently —
-    // cinematic replaces a 100vh hero with a 240vh scroll scene — so keeping
-    // the scroll offset drops you into the middle of a section that no longer
-    // exists. Instant, not smooth: this is a context switch, not navigation.
-    window.scrollTo({ top: 0, behavior: 'instant' });
-
-    try {
-      localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      /* storage unavailable — the choice still applies for this session */
-    }
-  }, []);
-
-  const toggle = useCallback(() => {
-    choose(mode === 'minimal' ? 'cinematic' : 'minimal');
-  }, [mode, choose]);
-
-  return { mode, choose, toggle, isCinematic: mode === 'cinematic' };
+  return { mode };
 }
-
-/**
- * Progress through a tall "scene" element, as 0..1.
- *
- * The scene is taller than the viewport and holds a `position: sticky` stage;
- * progress is how far the scene has travelled past the top of the viewport.
- * That is what gives a scroll-scrubbed shot a fixed budget of scroll distance
- * without the stage colliding with whatever follows it.
- *
- * Measured from the element's own rect rather than `window.scrollY`, so it
- * stays correct regardless of what sits above it on the page.
- */
-export function useSceneProgress(ref) {
-  const [progress, setProgress] = useState(0);
-
-  useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
-    let ticking = false;
-    const update = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        const rect = node.getBoundingClientRect();
-        const travel = rect.height - window.innerHeight;
-        setProgress(travel <= 0 ? 0 : Math.min(1, Math.max(0, -rect.top / travel)));
-        ticking = false;
-      });
-    };
-
-    window.addEventListener('scroll', update, { passive: true });
-    window.addEventListener('resize', update);
-    update();
-    return () => {
-      window.removeEventListener('scroll', update);
-      window.removeEventListener('resize', update);
-    };
-  }, [ref]);
-
-  return progress;
-}
-
-/** Maps `value` from the range [a,b] onto 0..1, clamped. */
-export const phase = (value, a, b) =>
-  Math.min(1, Math.max(0, (value - a) / (b - a)));

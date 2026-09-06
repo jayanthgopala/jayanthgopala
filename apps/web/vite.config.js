@@ -33,6 +33,22 @@ export default defineConfig(({ mode }) => {
   return {
   plugins: [react()],
   resolve: {
+    /*
+     * One copy of each of these, always.
+     *
+     * This is a workspace, so dependencies hoist to the repo root while some
+     * resolve from the app — and react-three-fiber and drei each declare three
+     * and react as peers. When two copies end up in the graph the failure is
+     * spectacularly unhelpful: three prints "Multiple instances of Three.js
+     * being imported" and instanceof checks silently start returning false,
+     * while a second React throws "Cannot read properties of null (reading
+     * 'useMemo')" from inside R3F's Canvas, because the copy R3F imported has a
+     * null hook dispatcher.
+     *
+     * Neither message points at the real cause, so this is here permanently
+     * rather than as a fix for one bad afternoon.
+     */
+    dedupe: ['three', 'react', 'react-dom', '@react-three/fiber'],
     alias: {
       // Path alias rather than an npm workspace dependency. Cloudflare Pages
       // runs `npm install` inside this app's root directory, where a workspace

@@ -1,32 +1,22 @@
 /**
  * Scroll and pointer plumbing for cinematic mode.
  *
- * Everything here is deliberately kept *out* of React state. A scene running at
- * 60fps that calls `setState` every frame re-renders the whole act sixty times a
- * second; the same value written to a CSS custom property costs one style
- * recalculation on the compositor and nothing else. So the rule in this file is:
+ * One rule governs this file: React owns structure, requestAnimationFrame owns
+ * motion, and the two meet at a CSS custom property. A scene running at 60fps
+ * that calls setState re-reconciles its whole subtree sixty times a second to
+ * change a number no component reads; the same value written to a custom
+ * property costs one style recalculation and nothing else.
  *
- *   React owns structure. rAF owns motion. They meet at a CSS variable.
+ * The only hooks here that return state are the ones whose value changes rarely
+ * — which act is on screen, whether an element has been seen — because those
+ * genuinely do need a render.
  *
- * The only hooks that return state are the ones whose value changes rarely
- * (which act is on screen, whether a shot has been entered) — those genuinely
- * need to re-render.
- *
- * Nothing here is imported by minimal mode.
+ * Nothing in this directory is imported by minimal mode.
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
-
-/** Maps `value` from [a,b] onto 0..1, clamped. The workhorse of every beat sheet. */
-export const phase = (value, a, b) => clamp01((value - a) / (b - a));
-
-/** Smoothstep — takes the corners off a linear ramp so nothing starts or stops abruptly. */
-export const smooth = (t) => {
-  const x = clamp01(t);
-  return x * x * (3 - 2 * x);
-};
 
 export const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -34,25 +24,22 @@ export const reducedMotion = () =>
   typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** Coarse pointer => phone/tablet. Drives every desktop-only interaction. */
+/** Coarse pointer means phone or tablet — every hover-driven affordance checks this. */
 export const isTouch = () =>
   typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
 
 /**
- * Writes a scene's scroll progress (0..1) to `--p` on the element itself, every
- * frame, without a single React render.
+ * Publishes a scene's scroll progress as --p on the element itself, 0 to 1,
+ * once per frame, without a single React render.
  *
- * The scene is taller than the viewport and holds a `position: sticky` stage.
- * Progress is how far the scene has travelled past the top of the viewport, so
- * a shot gets a fixed budget of scroll distance and the stage never collides
- * with whatever follows it.
+ * A scene is taller than the viewport and holds a position:sticky stage inside
+ * it; progress is how far the scene has travelled past the top of the viewport.
+ * That is what gives a shot a fixed budget of scroll distance and stops the
+ * stage colliding with whatever follows it.
  *
- * Measured from the element's own rect rather than `window.scrollY` so it stays
- * correct no matter what sits above it — and so it survives content above it
- * changing height after hydration, which `scrollY` maths does not.
- *
- * Returns the ref to attach. Read the value in CSS as `var(--p)`; read it in JS
- * from `el.style.getPropertyValue('--p')` if you must, but prefer CSS.
+ * Measured from the element's own rect rather than window.scrollY, so it stays
+ * correct no matter what sits above it — including content above it changing
+ * height after the payload lands, which scrollY arithmetic gets wrong.
  */
 export function useSceneVar(varName = '--p') {
   const ref = useRef(null);
@@ -61,12 +48,11 @@ export function useSceneVar(varName = '--p') {
     const node = ref.current;
     if (!node) return;
 
-    // Under reduced motion the shot never plays. Pin it at the resting state
-    // rather than 0 — several beats treat 0 as "nothing revealed yet", and a
-    // scene stuck there would show an empty stage.
+    // Under reduced motion nothing scrubs. Parking at 1 is right for scenes
+    // that reveal content — they read as "already revealed" — and the one act
+    // where it is wrong overrides it in CSS.
     if (reducedMotion()) {
       node.style.setProperty(varName, '1');
-      node.dataset.static = '';
       return;
     }
 
@@ -79,7 +65,7 @@ export function useSceneVar(varName = '--p') {
       const travel = rect.height - window.innerHeight;
       const p = travel <= 0 ? 0 : clamp01(-rect.top / travel);
 
-      // Sub-thousandth changes are invisible and still cost a style recalc.
+      // Changes below a thousandth are invisible and still cost a recalc.
       if (Math.abs(p - last) < 0.0005) return;
       last = p;
       node.style.setProperty(varName, p.toFixed(4));
@@ -105,22 +91,21 @@ export function useSceneVar(varName = '--p') {
 }
 
 /**
- * Pointer position as two smoothed 0..1 values on `--mx` / `--my`.
+ * Pointer position as two eased 0..1 values on --mx and --my.
  *
- * Raw pointer coordinates are far too responsive to read as a camera — the
+ * Raw pointer coordinates are far too responsive to read as a camera: the
  * scene snaps to the cursor and feels weightless. Easing toward the target on
- * a rAF loop is what gives it mass, and it is the same interpolation the video
- * scrubber uses, for the same reason.
+ * a rAF loop is what gives it mass.
  *
- * The loop parks itself when the value has settled: a portfolio left open in a
- * background tab should not burn a core holding 0.5 steady.
+ * The loop parks itself once the value has settled. A portfolio left open in a
+ * background tab should not hold a core busy interpolating 0.5 toward 0.5.
  */
-export function usePointerVar({ ease = 0.07, enabled = true } = {}) {
+export function usePointerVar({ ease = 0.07 } = {}) {
   const ref = useRef(null);
 
   useEffect(() => {
     const node = ref.current;
-    if (!node || !enabled || isTouch() || reducedMotion()) return;
+    if (!node || isTouch() || reducedMotion()) return;
 
     const target = { x: 0.5, y: 0.5 };
     const current = { x: 0.5, y: 0.5 };
@@ -137,10 +122,10 @@ export function usePointerVar({ ease = 0.07, enabled = true } = {}) {
       current.y = lerp(current.y, target.y, ease);
       write();
 
-      const settled =
-        Math.abs(current.x - target.x) < 0.0005 && Math.abs(current.y - target.y) < 0.0005;
-
-      if (settled) {
+      if (
+        Math.abs(current.x - target.x) < 0.0005 &&
+        Math.abs(current.y - target.y) < 0.0005
+      ) {
         running = false;
         frame = 0;
         return;
@@ -160,8 +145,9 @@ export function usePointerVar({ ease = 0.07, enabled = true } = {}) {
       start();
     };
 
-    // Recentre when the pointer leaves the window, otherwise the camera stays
-    // yawed at whatever angle it was at when the cursor crossed the edge.
+    // Recentre when the pointer leaves the window. Without this the frame
+    // stays yawed at whatever angle the cursor exited at, and someone who
+    // switches windows comes back to a crooked shot.
     const onLeave = () => {
       target.x = 0.5;
       target.y = 0.5;
@@ -177,15 +163,14 @@ export function usePointerVar({ ease = 0.07, enabled = true } = {}) {
       window.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerleave', onLeave);
     };
-  }, [ease, enabled]);
+  }, [ease]);
 
   return ref;
 }
 
 /**
- * True once the element has been on screen. Used for one-shot entrance reveals,
- * so this is one of the few places a render is the right answer — it fires once
- * per element for the whole session.
+ * True once the element has been on screen. One of the few places a render is
+ * the right answer, because it fires exactly once per element per session.
  */
 export function useEntered({ threshold = 0.25, rootMargin = '0px 0px -12% 0px' } = {}) {
   const ref = useRef(null);
@@ -212,23 +197,23 @@ export function useEntered({ threshold = 0.25, rootMargin = '0px 0px -12% 0px' }
 }
 
 /**
- * Tracks which act owns the viewport, and mirrors its tone onto <html>.
+ * Which act owns the viewport.
  *
- * The acts paint their own backgrounds, so the ink→paper cut happens
- * geometrically at the section seam — no JavaScript involved, and therefore no
- * strobing when a scroll lands exactly on the boundary. What *does* need
- * telling is the fixed chrome: the nav, the progress rail and the ask button
- * float above whichever act is behind them and have to invert with it.
+ * rootMargin collapses the viewport to a thin band at 45% height, so exactly
+ * one act qualifies at a time and the handover happens on a defined line
+ * rather than wherever two observers happen to overlap. The 3D engine measures
+ * against the same line, which is what keeps the world's palette cut and the
+ * text's colour change on the same frame.
  *
- * `rootMargin` collapses the viewport to a thin band at 45% height, so exactly
- * one act qualifies at a time and the handover happens at a well-defined line
- * rather than wherever two observers happen to overlap.
+ * `ids` must be a stable array. Passing a freshly-built one on every render
+ * re-creates the observer continuously, and — when the same array feeds the
+ * world — tears down and rebuilds a WebGL context along with it.
  */
-export function useActTracker(actIds) {
+export function useActTracker(ids) {
   const [active, setActive] = useState(0);
 
   useEffect(() => {
-    const nodes = actIds
+    const nodes = ids
       .map((id, index) => ({ index, node: document.getElementById(id) }))
       .filter((entry) => entry.node);
 
@@ -247,17 +232,17 @@ export function useActTracker(actIds) {
 
     nodes.forEach(({ node }) => observer.observe(node));
     return () => observer.disconnect();
-  }, [actIds]);
+  }, [ids]);
 
   return active;
 }
 
 /**
- * Overall scroll progress through the document, on `--doc` of <html>.
+ * Overall document progress on --doc of the root element.
  *
- * Cheap enough to run unconditionally and it drives the progress rail, which is
- * the one piece of chrome that must stay live even under reduced motion — it is
- * an orientation aid, not decoration.
+ * Cheap enough to run unconditionally, and it drives the progress rail — the
+ * one piece of chrome that stays live under reduced motion, because it is an
+ * orientation aid in a document with no visible chapters, not decoration.
  */
 export function useDocumentProgress() {
   useEffect(() => {
@@ -267,7 +252,10 @@ export function useDocumentProgress() {
     const measure = () => {
       frame = 0;
       const travel = root.scrollHeight - window.innerHeight;
-      root.style.setProperty('--doc', travel <= 0 ? '0' : clamp01(window.scrollY / travel).toFixed(4));
+      root.style.setProperty(
+        '--doc',
+        travel <= 0 ? '0' : clamp01(window.scrollY / travel).toFixed(4)
+      );
     };
 
     const schedule = () => {
@@ -286,15 +274,4 @@ export function useDocumentProgress() {
       root.style.removeProperty('--doc');
     };
   }, []);
-}
-
-/**
- * Splits a string into words wrapped in spans, for staggered line reveals.
- *
- * Returns plain data rather than JSX so the caller decides the element and can
- * key the stagger off the index. Whitespace is preserved by rendering the
- * spaces between words, not by relying on `display: inline-block` collapsing.
- */
-export function useWords(text) {
-  return useCallback(() => String(text || '').split(/\s+/).filter(Boolean), [text])();
 }

@@ -1,0 +1,1519 @@
+/* ==========================================================================
+   CINEMATIC MODE — a dark editorial canvas.
+
+   Activated by data-mode="cinematic" on <html>. Every selector is either scoped
+   under that attribute or prefixed cx-, which only cinematic components emit,
+   so nothing here can reach minimal mode.
+
+   THE MOTION SYSTEM IS TWO CUSTOM PROPERTIES AND NOTHING ELSE.
+     --mx / --my   eased pointer position, written once per frame while moving
+     --scroll      document scroll offset, written once per frame while scrolling
+
+   Both stop being written the moment the user stops. Every drifting layer reads
+   them at its own depth through a calc(), so the page is completely still when
+   idle — no loops, and no keyframes except the ambient drift on the organic
+   seams, which is the only thing meant to move on its own.
+   ========================================================================== */
+
+:root[data-mode='cinematic'] {
+  /* --- Colour -----------------------------------------------------------
+     Charcoal, not black. Pure #000 leaves the brush texture nowhere to put its
+     darker strokes, and half the marks in the field are darker than the ground
+     rather than lighter. */
+  --cx-ink: #1F1F1F;
+  --cx-ink-2: #181818;
+  /* The banked shapes at the section seams. Three steps up from the ground, far
+     enough apart to read as separate layers and all still unmistakably the same
+     dark — white banks turned the bottom of the hero into a different page. */
+  --cx-bank: #24242A;
+  --cx-paper: #F2F0EA;
+  --cx-mute: #8A8A8A;
+  /* The existing JG gold, kept for the monogram and almost nothing else. */
+  --cx-gold: #C9A961;
+
+  /* --- Act II's world ----------------------------------------------------
+     The walk happens on paper, not on ink, and needs its own short palette:
+     four steps from the sky down to the earth he is standing on.
+
+     They are close together on purpose. A high-contrast landscape competes
+     with the figure, and the figure is the only thing in that shot anyone is
+     meant to be looking at. The cloud is the one step with real separation
+     from the sky, because the whole act turns on being able to see it move. */
+  --cx-cloud: #D6D2C6;
+  --cx-hill:  #DFDBD1;
+  --cx-earth: #C2BCAD;
+
+  --bg: var(--cx-ink);
+  --bg-elevated: var(--cx-ink-2);
+
+  /* --- Type -------------------------------------------------------------
+     Two faces, three sizes. Display serif for the hero and section titles, the
+     existing sans for body, small tracked-out caps for metadata. Nothing sits
+     between the display sizes and the metadata size, and that absence is what
+     makes the hierarchy read instantly. */
+  --cx-serif: 'Bodoni Moda', 'Playfair Display', 'Didot', 'Times New Roman', serif;
+  --cx-hero: clamp(2rem, 6.6vw, 7rem);
+  --cx-title: clamp(2.2rem, 6vw, 5.6rem);
+  --cx-work: clamp(1.8rem, 4.4vw, 4rem);
+  --cx-lead: clamp(1rem, 1.15vw, 1.1875rem);
+  --cx-meta: 0.6875rem;
+  --cx-track: 0.2em;
+
+  --cx-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --cx-d: 900ms;
+  --cx-gutter: clamp(20px, 5.6vw, 100px);
+  --cx-max: 1440px;
+}
+
+/* Tone. A section declares one and inherits a complete palette. */
+[data-tone='ink'] {
+  --fg: var(--cx-paper);
+  --fg-mute: rgba(242, 240, 234, 0.56);
+  --fg-dim: rgba(242, 240, 234, 0.3);
+  --ground: var(--cx-ink);
+}
+
+[data-tone='paper'] {
+  --fg: #141414;
+  --fg-mute: rgba(20, 20, 20, 0.62);
+  --fg-dim: rgba(20, 20, 20, 0.38);
+  --ground: var(--cx-paper);
+}
+
+.cx {
+  position: relative;
+  /* clip rather than hidden: hidden on a page-level element creates a scroll
+     container and breaks position:sticky anywhere inside it. */
+  overflow-x: clip;
+}
+
+.cx-wrap {
+  width: 100%;
+  max-width: var(--cx-max);
+  margin-inline: auto;
+  padding-inline: var(--cx-gutter);
+}
+
+/* ==========================================================================
+   BRUSH LAYERS
+   ========================================================================== */
+
+.cx-brush {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* base.css sets `max-width: 100%` on every svg — right for content images and
+     silently wrong for a full-bleed layer, which it clamps with no visual cue
+     that it happened. This was the cause of an unpainted strip down the right
+     of wide screens. */
+  max-width: none;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Each bundle reads the shared pointer values at its own --depth. The spread
+   between depths is the parallax; one shared multiplier would slide the whole
+   field as a single sheet. */
+.cx-bundle {
+  translate:
+    calc((var(--mx, 0.5) - 0.5) * var(--depth, 1) * -96px)
+    calc((var(--my, 0.5) - 0.5) * var(--depth, 1) * -58px);
+}
+
+/* ==========================================================================
+   HERO
+   ========================================================================== */
+
+.cxh {
+  position: relative;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--cx-ink);
+  isolation: isolate;
+  --fg: var(--cx-paper);
+  --fg-mute: rgba(242, 240, 234, 0.56);
+  --fg-dim: rgba(242, 240, 234, 0.3);
+}
+
+/* The second pass sits at a different scale, not a different opacity — the
+   masses are already faint, and halving them again would leave nothing. */
+.cxh-paint-low { transform: scale(1.35) rotate(-1.2deg); transform-origin: 60% 40%; }
+
+/* A pool of light behind the type, tracking the cursor. It is what stops the
+   painted field reading as flat wallpaper. */
+.cxh::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(
+    46vw 46vw at calc(var(--mx, 0.5) * 100%) calc(var(--my, 0.5) * 100%),
+    rgba(255, 255, 255, 0.05),
+    transparent 62%
+  );
+}
+
+/* Vignette, painted over the type as well as the ground, which is what ties the
+   layers into one image rather than a stack of them. */
+.cxh::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  background: radial-gradient(86% 80% at 50% 44%, transparent 46%, rgba(8, 8, 9, 0.66) 100%);
+}
+
+.cxh-type {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  max-width: 1320px;
+  padding-inline: var(--cx-gutter);
+  text-align: center;
+  max-height: 72svh;
+  /* The nearest layer, so it moves most — and it also lifts and clears as the
+     act ends, so the descending bank arrives at an empty frame rather than
+     landing on top of the words. The two terms share one translate because a
+     second one would replace the first. */
+  translate:
+    calc((var(--mx, 0.5) - 0.5) * 24px)
+    calc((var(--my, 0.5) - 0.5) * 14px - clamp(0, var(--t, 0), 1) * 14vh);
+  opacity: calc(1 - clamp(0, calc((var(--t, 0) - 0.28) / 0.42), 1));
+}
+
+/* --- Act I's weather --------------------------------------------------------
+   The bank that hangs at the top of the opening frame and comes down as the
+   hero leaves, handing the screen to act II. Behind the type (z 3) and in front
+   of the paint (z 0), so it reads as sky rather than as an overlay.
+
+   Dark, in the ground's own family. A white bank at the top of a black hero is
+   a lens flare. */
+
+.cxh-sky {
+  position: absolute;
+  left: -6%;
+  right: -6%;
+  top: 0;
+  z-index: 2;
+  height: 52%;
+  pointer-events: none;
+  /* Sits mostly off the top edge at rest, and travels a full frame and a half
+     over the hero's exit — by the time the hero has gone, the bank has the
+     screen and act II is waiting underneath it. */
+  translate: 0 calc(-34% + clamp(0, var(--t, 0), 1) * 150%);
+}
+
+/* The transition is normally a seam between two sections and pulls itself half
+   into each. Used as a layer, those offsets have to go. */
+.cxh-sky .cx-organic,
+.cx-walk-cloud .cx-organic,
+.cx-walk-hills .cx-organic,
+.cx-walk-ground .cx-organic {
+  height: 100%;
+  margin-block: 0;
+}
+
+.cxh-quote { margin: 0; }
+
+/* Each line is its own block, so the break is the one the component chose and
+   never one the container decided on. */
+.cxh-quote p {
+  margin: 0;
+  font-family: var(--cx-serif);
+  /* --fit is set per-quote; a long sentence scales down rather than running off
+     the bottom of the viewport. */
+  font-size: calc(var(--cx-hero) * var(--fit, 1));
+  font-weight: 700;
+  line-height: 0.98;
+  letter-spacing: -0.015em;
+  text-transform: uppercase;
+  text-wrap: balance;
+
+  /* Lit rather than flat-filled. The slight top-down fall reads as a painted
+     sign catching light, which is most of what separates this from white text
+     on a dark background. */
+  background: linear-gradient(180deg, #FFFFFF 18%, #C9C7C1 96%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 8px 44px rgba(0, 0, 0, 0.6));
+}
+
+.cxh-quote p + p { margin-top: 0.02em; }
+
+.cxh-attrib {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-4);
+  margin-top: clamp(22px, 3.4vw, 44px);
+  font-size: var(--cx-meta);
+  font-weight: 600;
+  letter-spacing: var(--cx-track);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+.cxh-rule {
+  width: clamp(28px, 5vw, 64px);
+  height: 1px;
+  background: currentColor;
+  opacity: 0.6;
+}
+
+.cxh-dots {
+  position: absolute;
+  right: clamp(16px, 2.4vw, 34px);
+  bottom: clamp(18px, 2.4vw, 30px);
+  z-index: 5;
+  display: flex;
+  gap: 5px;
+}
+
+.cxh-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(242, 240, 234, 0.5);
+}
+
+/* ==========================================================================
+   ORGANIC TRANSITIONS
+   The seams. Three layered bands drifting at different speeds, bleeding one
+   ground into the next.
+   ========================================================================== */
+
+.cx-organic {
+  position: relative;
+  z-index: 6;
+  height: clamp(150px, 24vh, 300px);
+  /* Pulled half into each neighbour, so the shape overlaps both grounds rather
+     than sitting in a gap between them. */
+  margin-block: calc(clamp(150px, 24vh, 300px) * -0.5);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.cx-organic-band {
+  position: absolute;
+  /* Wider than the frame and offset left, so a very wide window never runs off
+     the end of the shape. */
+  left: -10%;
+  width: 120%;
+  max-width: none; /* see the note on .cx-brush */
+  height: 100%;
+  fill: var(--organic-fill);
+
+  /*
+   * VERTICAL, driven by the cursor. Raise the pointer and the bank rises with
+   * it; drop it and the bank settles.
+   *
+   * There was a continuous sideways drift here, on the theory that a slow loop
+   * would feel alive. It read as a scrolling banner: the eye locks onto lateral
+   * motion and follows it, so the one element meant to be ambient became the
+   * thing you watched. Tying it to the pointer instead means it only moves when
+   * you do, which is what the rest of the page already does.
+   *
+   * --my runs 0 at the top of the viewport to 1 at the bottom, so subtracting a
+   * half gives a negative number up top and the bank lifts without the sign
+   * needing to be inverted anywhere.
+   */
+  translate:
+    calc((var(--mx, 0.5) - 0.5) * var(--depth, 1) * -8px)
+    calc((var(--my, 0.5) - 0.5) * var(--depth, 1) * 78px);
+}
+
+.cx-organic[data-direction='up'] .cx-organic-band { bottom: 0; }
+.cx-organic[data-direction='down'] .cx-organic-band { top: 0; }
+
+/* ==========================================================================
+   EDITORIAL SECTIONS
+   ========================================================================== */
+
+.cx-section {
+  position: relative;
+  background: var(--ground);
+  color: var(--fg);
+  padding-block: clamp(96px, 16vh, 220px);
+  isolation: isolate;
+}
+
+.cx-section > .cx-wrap { position: relative; z-index: 1; }
+.cx-section-brush { opacity: 0.7; z-index: 0; }
+
+/* The head is NOT centred. A centred heading over left-aligned body copy is the
+   layout every developer portfolio arrives at by default, and it is most of
+   what makes them look alike. */
+.cx-head {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: clamp(20px, 4vw, 64px);
+  align-items: start;
+  margin-bottom: clamp(56px, 9vh, 130px);
+}
+
+/* Hangs in the margin, aligned to the title's cap height. */
+.cx-index {
+  font-family: var(--cx-serif);
+  font-size: clamp(0.9rem, 1.4vw, 1.35rem);
+  font-weight: 700;
+  color: var(--fg-dim);
+  padding-top: 0.5em;
+  font-variant-numeric: tabular-nums;
+}
+
+.cx-head-body { display: flex; flex-direction: column; gap: var(--s-4); max-width: 22ch; }
+
+.cx-eyebrow {
+  font-size: var(--cx-meta);
+  font-weight: 600;
+  letter-spacing: var(--cx-track);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+.cx-title {
+  font-family: var(--cx-serif);
+  font-size: var(--cx-title);
+  font-weight: 700;
+  line-height: 0.92;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: var(--fg);
+  text-wrap: balance;
+}
+
+.cx-lead {
+  font-size: var(--cx-lead);
+  font-weight: 300;
+  line-height: 1.55;
+  color: var(--fg-mute);
+  max-width: 46ch;
+}
+
+/* One reveal, on entry, and never again. */
+.cx-head,
+.cx-work-entry,
+.cx-row,
+.cx-stack-col,
+.cx-contact {
+  opacity: 0;
+  translate: 0 26px;
+  transition:
+    opacity var(--cx-d) var(--cx-ease),
+    translate var(--cx-d) var(--cx-ease);
+}
+
+.cx-section[data-in] .cx-head,
+.cx-work-entry[data-in],
+.cx-row[data-in],
+.cx-stack-col[data-in],
+.cx-contact[data-in] { opacity: 1; translate: 0 0; }
+
+.cx-stack-col,
+.cx-row { transition-delay: calc(var(--i, 0) * 70ms); }
+
+/* --- Metadata --------------------------------------------------------------
+   The only small type in the design, always tracked out and always uppercase. */
+
+.cx-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.cx-meta li,
+.cx-meta-single {
+  font-size: var(--cx-meta);
+  font-weight: 600;
+  letter-spacing: var(--cx-track);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+.cx-accent { color: var(--cx-gold); }
+.cx-dim { color: var(--fg-dim); }
+
+/* Underlined links, not buttons. A pill here would be the only rounded thing on
+   the page. */
+.cx-underline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid currentColor;
+  font-size: var(--cx-meta);
+  font-weight: 600;
+  letter-spacing: var(--cx-track);
+  text-transform: uppercase;
+  color: var(--fg);
+  transition: color var(--d-base) var(--cx-ease), gap var(--d-base) var(--cx-ease);
+}
+
+.cx-underline:hover { color: var(--cx-gold); gap: 13px; }
+
+/* ==========================================================================
+   WORK
+   ========================================================================== */
+
+.cx-work-list {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(90px, 16vh, 200px);
+}
+
+/* The composition alternates. A column of identically-arranged blocks is a
+   table however large you set the type. */
+.cx-work-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: clamp(28px, 5vw, 84px);
+  align-items: center;
+}
+
+.cx-work-entry[data-flip] { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); }
+.cx-work-entry[data-flip] .cx-work-plate { order: 2; }
+
+.cx-work-plate {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: rgba(128, 128, 128, 0.1);
+}
+
+.cx-work-plate-btn { display: block; width: 100%; height: 100%; padding: 0; }
+
+.cx-work-plate img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: scale 1.2s var(--cx-ease);
+}
+
+.cx-work-plate-btn:hover img { scale: 1.04; }
+
+.cx-work-plate-empty {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-family: var(--cx-serif);
+  font-size: clamp(4rem, 10vw, 9rem);
+  color: var(--fg-dim);
+}
+
+.cx-work-copy { display: flex; flex-direction: column; gap: var(--s-4); align-items: flex-start; }
+
+.cx-work-index {
+  font-family: var(--cx-serif);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.cx-work-title {
+  font-family: var(--cx-serif);
+  font-size: var(--cx-work);
+  font-weight: 700;
+  line-height: 0.94;
+  letter-spacing: -0.025em;
+  text-transform: uppercase;
+  color: var(--fg);
+  text-wrap: balance;
+}
+
+.cx-work-summary {
+  font-size: var(--cx-lead);
+  font-weight: 300;
+  line-height: 1.6;
+  color: var(--fg-mute);
+  max-width: 42ch;
+}
+
+.cx-work-links { display: flex; flex-wrap: wrap; gap: var(--s-5); padding-top: var(--s-2); }
+
+.cx-work-skeleton { min-height: 40vh; opacity: 0.35; translate: 0 0; }
+
+.cx-work-skeleton::before {
+  content: '';
+  display: block;
+  aspect-ratio: 16 / 10;
+  background: rgba(128, 128, 128, 0.12);
+}
+
+/* ==========================================================================
+   ROWS — the path
+   ========================================================================== */
+
+.cx-rows { display: flex; flex-direction: column; padding: 0; margin: 0; list-style: none; }
+
+.cx-row { position: relative; padding-block: clamp(30px, 5vh, 62px); }
+
+/* Separated by a painted rule, not a border. */
+.cx-rule {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 46px;
+  opacity: 0.55;
+}
+
+.cx-row-body {
+  display: grid;
+  grid-template-columns: minmax(0, 12rem) minmax(0, 1fr);
+  gap: clamp(16px, 3vw, 56px);
+  align-items: start;
+}
+
+.cx-row-main { display: flex; flex-direction: column; gap: var(--s-3); align-items: flex-start; }
+
+.cx-row-title {
+  font-family: var(--cx-serif);
+  font-size: clamp(1.4rem, 2.6vw, 2.4rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+}
+
+.cx-row-org { font-size: 0.9375rem; color: var(--fg-mute); }
+
+.cx-row-desc {
+  font-size: 0.9375rem;
+  font-weight: 300;
+  line-height: 1.65;
+  color: var(--fg-mute);
+  max-width: 58ch;
+}
+
+/* ==========================================================================
+   STACK
+   ========================================================================== */
+
+.cx-stack {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: clamp(32px, 4vw, 72px);
+}
+
+.cx-stack-col { display: flex; flex-direction: column; gap: var(--s-4); }
+
+.cx-stack-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.cx-stack-list li {
+  font-family: var(--cx-serif);
+  font-size: clamp(1rem, 1.5vw, 1.35rem);
+  font-weight: 400;
+  color: var(--fg);
+}
+
+/* ==========================================================================
+   CONTACT
+   ========================================================================== */
+
+.cx-contact {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: clamp(28px, 5vh, 60px);
+}
+
+/* The largest thing in the section. After a page this long the one thing a
+   visitor might want to do should not be behind a button labelled "Contact". */
+.cx-mail {
+  font-family: var(--cx-serif);
+  font-size: clamp(1.3rem, 4.6vw, 4rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--fg);
+  border-bottom: 2px solid transparent;
+  /* A long address must not push the page sideways at 320px. */
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  transition: border-color var(--d-base) var(--cx-ease), color var(--d-base) var(--cx-ease);
+}
+
+.cx-mail:hover { border-color: var(--cx-gold); color: var(--cx-gold); }
+
+.cx-socials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 34px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.cx-socials a {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--cx-meta);
+  font-weight: 600;
+  letter-spacing: var(--cx-track);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  transition: color var(--d-base) var(--cx-ease);
+}
+
+.cx-socials a:hover { color: var(--cx-gold); }
+.cx-socials svg { width: 14px; height: 14px; }
+
+.cx-colophon {
+  font-size: var(--cx-meta);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+/* ==========================================================================
+   NAVIGATION
+   A printed label sitting on the artwork, not an operating-system chrome bar.
+   ========================================================================== */
+
+.cx-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: clamp(14px, 2vw, 26px) var(--cx-gutter);
+  /* The bar spans the viewport but must not swallow clicks across it. */
+  pointer-events: none;
+}
+
+.cx-nav > * { pointer-events: auto; }
+
+/* Small, and given room. Identity, not a headline. */
+.cx-mark {
+  margin-right: auto;
+  opacity: 0.9;
+  transition: opacity var(--d-base) var(--cx-ease);
+}
+
+.cx-mark:hover { opacity: 1; }
+.cx-mark img { display: block; height: 21px; width: auto; }
+
+.cx-nav-right { display: flex; align-items: center; gap: 10px; }
+
+/* Solid, sharp-cornered, dark text. Glass would read as an operating system
+   rather than as part of the image. */
+.cx-plaque {
+  display: flex;
+  align-items: center;
+  background: var(--cx-paper);
+  padding: 10px 6px;
+}
+
+.cx-plaque-link {
+  padding: 2px 16px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #141414;
+  transition: color var(--d-fast) var(--cx-ease);
+}
+
+.cx-plaque-link:hover { color: #8A6A22; }
+
+.cx-switch { display: flex; align-items: center; border: 1px solid rgba(242, 240, 234, 0.22); }
+
+.cx-switch-option {
+  padding: 9px 13px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(242, 240, 234, 0.5);
+  transition: color var(--d-fast) var(--cx-ease), background var(--d-fast) var(--cx-ease);
+}
+
+.cx-switch-option:hover { color: var(--cx-paper); }
+.cx-switch-option[aria-pressed='true'] { background: var(--cx-paper); color: #141414; }
+
+.cx-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 15px;
+  border: 1px solid rgba(242, 240, 234, 0.22);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(242, 240, 234, 0.78);
+  transition: border-color var(--d-base) var(--cx-ease), color var(--d-base) var(--cx-ease);
+}
+
+.cx-ghost:hover { border-color: var(--cx-paper); color: var(--cx-paper); }
+
+/* The whole page is one ground now, so the fixed chrome never has to invert.
+   The paper-tone overrides that used to live here went with the paper section —
+   [data-tone='paper'] is still defined above and still works, so bringing a
+   light section back is a one-line change rather than a rewrite. */
+
+/* ==========================================================================
+   RESPONSIVE
+   Re-cut, not shrunk. The pointer half of the design does not exist below the
+   breakpoint, so everything that drifts is pinned and the layouts go to one
+   column while keeping the type scale and the whitespace.
+   ========================================================================== */
+
+@media (max-width: 900px) {
+  .cx-head { grid-template-columns: minmax(0, 1fr); gap: var(--s-4); }
+  .cx-index { padding-top: 0; }
+  .cx-head-body { max-width: none; }
+
+  .cx-work-entry,
+  .cx-work-entry[data-flip] { grid-template-columns: minmax(0, 1fr); gap: var(--s-6); }
+  .cx-work-entry[data-flip] .cx-work-plate { order: 0; }
+
+  .cx-row-body { grid-template-columns: minmax(0, 1fr); gap: var(--s-3); }
+
+  /* No pointer, so nothing drifts. Leaving the translations in would hold each
+     layer at whatever the last touch happened to set. */
+  .cx-bundle,
+  .cx-organic-band { translate: 0 0; }
+
+  /* The pointer half goes; the scroll half stays. Pinning the whole
+     translate here would also freeze the hero's exit, and the exit is the
+     hand-off into act II. */
+  .cxh-type { translate: 0 calc(clamp(0, var(--t, 0), 1) * -10vh); }
+
+  /* One brush field is plenty on a phone, and the filter is the most expensive
+     thing on the page. */
+  .cxh-paint-low { display: none; }
+
+  .cx-nav { padding-inline: clamp(16px, 5vw, 28px); }
+  .cx-nav-right { gap: 6px; }
+  .cx-plaque { display: none; }
+}
+
+@media (max-width: 560px) {
+  .cx-switch-option { padding: 8px 10px; }
+  .cx-ghost span { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cx-bundle,
+  .cxh-type,
+  .cx-organic-band { translate: 0 0; }
+
+  .cx-head,
+  .cx-work-entry,
+  .cx-row,
+  .cx-stack-col,
+  .cx-contact { opacity: 1; translate: 0 0; transition: none; }
+}
+
+/* ==========================================================================
+   ACT II — THE WALK
+
+   A 260vh scene with a sticky stage inside it: the stage holds the screen while
+   you scroll past, and the section's own scroll fraction (--t, published onto
+   it by useProgress) drives every layer in the shot.
+
+   Two derived numbers do all the choreography, and they are declared here
+   rather than in the component so the timing of the act lives in one place:
+
+     --reveal   0 to 1 over the first third. The cloud parting.
+     --march    0 to 1 over the rest, starting slightly before the parting
+                finishes. The gait, the traverse, and the parallax.
+
+   They overlap on purpose — he is already walking as he comes into view, which
+   is a figure caught mid-journey rather than one that appears and then starts.
+   ========================================================================== */
+
+.cx-walkscene {
+  position: relative;
+  /* 260vh leaves about 160vh of scroll to spend: roughly a third on the
+     parting and the rest on the walk. Shorter and the reveal is over before
+     you have registered that there was a figure behind the cloud. */
+  height: 260vh;
+  background: var(--cx-paper);
+  color: #141414;
+
+  --reveal: clamp(0, calc(var(--t, 0) / 0.32), 1);
+  --march: clamp(0, calc((var(--t, 0) - 0.2) / 0.8), 1);
+}
+
+.cx-walk-stage {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* --- The world -------------------------------------------------------------
+   Back to front: sky, far hills, the earth he is on. Each drifts against his
+   traverse at its own rate. A single sliding backdrop reads as a treadmill;
+   the difference between the rates is the depth. */
+
+.cx-walk-sky {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(120% 76% at 50% 98%, rgba(20, 20, 20, 0.1), transparent 62%),
+    linear-gradient(180deg, #E7E4DC 0%, #F4F2EC 54%, #ECE9E1 100%);
+}
+
+.cx-walk-hills,
+.cx-walk-ground,
+.cx-walk-cloud {
+  position: absolute;
+  left: -12%;
+  right: -12%;
+  pointer-events: none;
+}
+
+.cx-walk-hills {
+  bottom: 0;
+  z-index: 1;
+  height: 32%;
+  /* Furthest away, so it barely moves. */
+  translate: calc(var(--march) * -5%) 0;
+}
+
+.cx-walk-ground {
+  bottom: 0;
+  z-index: 3;
+  height: 19%;
+  /* Nearest, so it moves most — and it is in FRONT of the figure, which is what
+     puts his feet into the ground rather than on a line drawn behind him. */
+  translate: calc(var(--march) * -16%) 0;
+}
+
+/* --- The figure ------------------------------------------------------------
+   A full-width strip with the figure sitting on its bottom edge, so he can be
+   moved across the frame with a translate without fighting a centring offset.
+
+   --walk is set here and inherited by every joint in the rig. It is a phase in
+   radians: thirty of them over the act is a little under five strides, which at
+   this scroll length is an unhurried walking pace. */
+
+.cx-walk-figure {
+  /*
+   * Sized in both axes from one number rather than being given a height and
+   * an aspect-ratio to work the width out from. The rig is an <svg> whose own
+   * rule sets width and height to 100%, and an auto-width replaced element
+   * inside a grid resolves its percentage height against a track that is not
+   * definite until the item has been sized — a circular dependency the browser
+   * breaks by stretching it to the container width and deriving a height from
+   * the ratio, which produced a figure several thousand pixels tall.
+   *
+   * Both dimensions computed from --fig-h has no such loop, and the centring
+   * offset comes off the same number.
+   */
+  --fig-h: clamp(250px, 62vh, 600px);
+  position: absolute;
+  bottom: 15%;
+  left: 50%;
+  z-index: 2;
+  width: calc(var(--fig-h) * 220 / 470);
+  height: var(--fig-h);
+  margin-left: calc(var(--fig-h) * -110 / 470);
+  pointer-events: none;
+
+  /* A phase in radians, inherited by every joint in the rig. Thirty of them
+     over the act is a little under five strides, which at this scroll length
+     is an unhurried walking pace. */
+  --walk: calc(var(--march) * 30rad);
+
+  /* Fades up out of the cloud rather than switching on, and slightly ahead of
+     the parting — a shape in the weather before he is a person. */
+  opacity: clamp(0, calc((var(--t, 0) - 0.04) / 0.24), 1);
+  /* Crosses the frame left to right, and comes very slightly toward camera. */
+  translate: calc(-9vw + var(--march) * 19vw) 0;
+  scale: calc(0.9 + var(--reveal) * 0.1);
+  transform-origin: 50% 100%;
+}
+
+/* --- The parting -----------------------------------------------------------
+   Two banks that start overlapped — 122% of the stage between them, so the
+   frame is packed solid — and separate. The lower one is in front of the
+   figure so it crosses his legs as it settles; the upper one is in front of
+   everything. A curtain, not a fade. */
+
+/*
+ * The heights are generous because a bank is not solid for its full box: the
+ * lobed edge occupies roughly the outer half of it, and only the rest is filled
+ * mass. Sizing these to the coverage you want leaves the middle of the opening
+ * frame a lattice of gaps with sky behind it.
+ */
+.cx-walk-cloud-under {
+  bottom: 0;
+  z-index: 4;
+  height: 66%;
+  translate: calc(var(--march) * -7%) calc(var(--reveal) * 76%);
+}
+
+.cx-walk-cloud-over {
+  top: 0;
+  z-index: 6;
+  height: 88%;
+  translate: calc(var(--march) * -10%) calc(var(--reveal) * -70%);
+}
+
+/* --- Narration -------------------------------------------------------------
+   A bordered plaque, the way a comic hangs its caption. */
+
+.cx-walk-caption {
+  position: absolute;
+  left: clamp(16px, 6vw, 96px);
+  bottom: clamp(24px, 8vh, 84px);
+  z-index: 7;
+  max-width: min(40ch, 44vw);
+  margin: 0;
+  padding: 14px 20px;
+  background: #F4F3F0;
+  border: 2px solid #141414;
+  font-size: clamp(0.66rem, 0.82vw, 0.78rem);
+  font-weight: 600;
+  line-height: 1.6;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #141414;
+  opacity: 0;
+  translate: -20px 0;
+  transition:
+    opacity var(--cx-d) var(--cx-ease),
+    translate var(--cx-d) var(--cx-ease);
+}
+
+.cx-walk-caption[data-in] { opacity: 1; translate: 0 0; }
+
+.cx-walk-hint {
+  position: absolute;
+  right: clamp(16px, 6vw, 96px);
+  /* Cleared above the floating Ask button, which is fixed to the same corner. */
+  bottom: clamp(76px, 11vh, 112px);
+  z-index: 7;
+  font-size: var(--cx-meta);
+  font-weight: 600;
+  letter-spacing: var(--cx-track);
+  text-transform: uppercase;
+  color: rgba(20, 20, 20, 0.42);
+  /* Gone once it has been obeyed. */
+  opacity: calc(1 - clamp(0, calc(var(--t, 0) / 0.16), 1));
+}
+
+@media (max-width: 900px) {
+  .cx-walkscene { height: 220vh; }
+  .cx-walk-figure { height: clamp(180px, 36vh, 320px); inset: auto 0 18% 0; }
+  .cx-walk-caption { max-width: none; right: clamp(16px, 6vw, 96px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* One composed frame: the cloud already parted, the figure mid-stride. The
+     stage stops being sticky, so the scene is a single screen you scroll past
+     like any other section. */
+  .cx-walkscene { height: 100svh; }
+  .cx-walk-stage { position: static; height: 100svh; }
+  .cx-walk-caption { opacity: 1; translate: 0 0; transition: none; }
+  .cx-walk-hint { display: none; }
+}
+
+/* ==========================================================================
+   THE WALKING FIGURE
+
+   Every angle below is a sine of --walk, a phase in radians published by the
+   panel from its own scroll position. Scroll forward and he walks forward;
+   scroll back and he walks backward; stop and he stops mid-stride.
+
+   A time-driven cycle would march on the spot whenever the page was still,
+   which reads instantly as a looping GIF sitting behind a website.
+
+   transform-origin is ON each joint. That is what makes the hierarchy work —
+   rotating a thigh has to carry its shin and foot with it.
+   ========================================================================== */
+
+.cx-walker {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  overflow: visible;
+}
+
+/* Whole-body rise and fall. Two beats per stride, because the body lifts on
+   each foot-plant rather than once per cycle. Pivoted low, near the feet, so
+   the lift reads as the whole body rising off the ground rather than as the
+   figure sliding up and down a pole. */
+.cx-walk-body {
+  translate: 0 calc(sin(var(--walk, 0rad) * 2) * 5px);
+  rotate: calc(sin(var(--walk, 0rad) * 2) * -0.7deg);
+  transform-origin: 110px 400px;
+}
+
+/* The shadow belongs to the ground, so it does not rise with him — it only
+   tightens as he lifts and spreads as he lands. */
+.cx-walk-shadow {
+  transform-origin: 110px 446px;
+  scale: calc(1 - max(0, sin(var(--walk, 0rad) * 2)) * 0.18) 1;
+  opacity: calc(0.16 - max(0, sin(var(--walk, 0rad) * 2)) * 0.05);
+}
+
+/* --- Legs ------------------------------------------------------------------
+   Hips at (110, 244). The far leg runs half a cycle behind the near one, which
+   is the entire difference between walking and hopping. */
+
+.cx-leg { transform-origin: 110px 244px; }
+.cx-leg-near { rotate: calc(sin(var(--walk, 0rad)) * 27deg); }
+.cx-leg-far { rotate: calc(sin(var(--walk, 0rad) + 3.1416rad) * 27deg); }
+
+/* Knees at y=330. Clamped to bend one way only: a knee that hyperextends is
+   the single most obvious tell that a rig is being driven by a raw sine. */
+.cx-shin { transform-origin: 110px 330px; }
+
+.cx-leg-near .cx-shin {
+  rotate: calc(max(0, sin(var(--walk, 0rad) - 0.9rad)) * -48deg);
+}
+
+.cx-leg-far .cx-shin {
+  rotate: calc(max(0, sin(var(--walk, 0rad) + 3.1416rad - 0.9rad)) * -48deg);
+}
+
+/* Ankles at y=408. The foot levels out as it plants and points as it lifts. */
+.cx-foot { transform-origin: 110px 408px; }
+.cx-leg-near .cx-foot { rotate: calc(sin(var(--walk, 0rad) + 1.2rad) * 17deg); }
+.cx-leg-far .cx-foot { rotate: calc(sin(var(--walk, 0rad) + 3.1416rad + 1.2rad) * 17deg); }
+
+/* --- Arms ------------------------------------------------------------------
+   Shoulders at (110, 118). Arms swing OPPOSITE their same-side leg — that
+   counter-rotation is what keeps a walk from looking like a shamble. */
+
+.cx-arm { transform-origin: 110px 118px; }
+.cx-arm-near { rotate: calc(sin(var(--walk, 0rad) + 3.1416rad) * 21deg); }
+.cx-arm-far { rotate: calc(sin(var(--walk, 0rad)) * 21deg); }
+
+/* Elbows at y=194, and they only ever flex. */
+.cx-forearm { transform-origin: 110px 194px; }
+.cx-arm-near .cx-forearm { rotate: calc(max(0, sin(var(--walk, 0rad) + 2.2rad)) * 26deg); }
+.cx-arm-far .cx-forearm { rotate: calc(max(0, sin(var(--walk, 0rad) - 0.9rad)) * 26deg); }
+
+/* --- Head ------------------------------------------------------------------
+   Barely moves, and lags the body. A head locked rigid to the torso is the
+   other big tell; one that moves as much as the shoulders looks like a nod. */
+.cx-head {
+  transform-origin: 110px 100px;
+  rotate: calc(sin(var(--walk, 0rad) * 2 + 0.6rad) * 2deg);
+}
+
+.cx-torso {
+  transform-origin: 110px 250px;
+  rotate: calc(sin(var(--walk, 0rad)) * 2.4deg);
+}
+
+/* --- The scarf -------------------------------------------------------------
+   Pinned at the neck and streaming behind. It lifts on the stride and lags the
+   body, at roughly twice the swing of anything else — cloth in wind is the one
+   part of a walking figure that is allowed to be exaggerated, and holding it to
+   the same amplitude as the limbs makes it look starched. */
+.cx-scarf {
+  transform-origin: 106px 112px;
+  rotate: calc(sin(var(--walk, 0rad) - 0.7rad) * 7deg - 3deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Held at a quarter-phase, which is mid-stride with the legs clearly apart —
+     a resting figure at phase zero has both legs together and reads as
+     standing, not as a walk that has been paused. */
+  .cx-walker { --walk: 1.57rad; }
+}
+
+/* ==========================================================================
+   THE ACT RAIL
+
+   Fixed to the right edge: where you are in the sequence, and how much of it
+   is left. A hairline and a few words, which is all the reference uses and all
+   this needs.
+
+   It inverts with the ground rather than blending. mix-blend-mode: difference
+   would handle ink and paper automatically and would also mangle its colour
+   over the brush texture and the cloud banks, which are neither. The component
+   reads the active section's own data-tone instead, so the rail is always
+   exactly one of two known colours.
+   ========================================================================== */
+
+.cx-rail {
+  position: fixed;
+  right: clamp(10px, 1.5vw, 26px);
+  top: 50%;
+  translate: 0 -50%;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--cx-paper);
+  transition: color var(--cx-d) var(--cx-ease);
+}
+
+.cx-rail[data-tone='paper'] { color: #141414; }
+
+.cx-rail-line {
+  position: relative;
+  width: 1px;
+  height: clamp(120px, 22vh, 210px);
+  background: currentColor;
+  opacity: 0.22;
+}
+
+/* The travelled part. Scales from the top on --page, the document progress the
+   page already publishes — the rail costs no scroll handler of its own. */
+.cx-rail-line i {
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  transform-origin: 50% 0;
+  scale: 1 clamp(0, var(--page, 0), 1);
+}
+
+.cx-rail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: right;
+}
+
+.cx-rail-act {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 8px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: var(--cx-track);
+  text-transform: uppercase;
+  color: currentColor;
+  text-decoration: none;
+  opacity: 0.3;
+  transition: opacity var(--cx-d) var(--cx-ease);
+}
+
+.cx-rail-act:hover { opacity: 0.7; }
+.cx-rail-act[data-active] { opacity: 1; }
+
+.cx-rail-num { font-size: 0.5625rem; opacity: 0.6; }
+
+/* The name is only there for the act you are in. Seven names stacked down the
+   edge of the screen is a table of contents competing with the page; one is a
+   label on the frame you are watching. */
+.cx-rail-name {
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  transition:
+    max-width var(--cx-d) var(--cx-ease),
+    opacity var(--cx-d) var(--cx-ease);
+}
+
+.cx-rail-act[data-active] .cx-rail-name,
+.cx-rail:hover .cx-rail-name { max-width: 14ch; opacity: 1; }
+
+/* ==========================================================================
+   ACT III — THE STATEMENT
+
+   One sentence, read word by word as you scroll through it. Every word's
+   opacity is an expression in --t and its own index, so the sweep IS the
+   scroll position: stop and it holds, scroll back and it un-reads.
+   ========================================================================== */
+
+.cx-manifesto {
+  position: relative;
+  height: 220vh;
+  background: var(--cx-ink);
+  color: var(--cx-paper);
+  --fg: var(--cx-paper);
+  --fg-mute: rgba(242, 240, 234, 0.56);
+  --fg-dim: rgba(242, 240, 234, 0.3);
+}
+
+.cx-manifesto-stage {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: clamp(20px, 4vh, 44px);
+  padding: clamp(60px, 10vh, 120px) var(--cx-gutter);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.cx-manifesto-paint { opacity: 0.55; z-index: 0; }
+
+.cx-manifesto-type {
+  position: relative;
+  z-index: 1;
+  max-width: 20ch;
+  margin: 0;
+  font-family: var(--cx-serif);
+  font-size: clamp(1.75rem, 5vw, 4.4rem);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.012em;
+  text-transform: uppercase;
+}
+
+.cx-manifesto-word {
+  /*
+   * --lit is where the sweep has got to relative to this word. The leading edge
+   * is at t * (n + lead); dividing by the softness spreads the transition over
+   * a couple of words, so the sentence lights like a wipe rather than snapping
+   * on one word at a time.
+   *
+   * The + 5 lead means the sweep finishes a little before the scene does, so
+   * the completed sentence is readable for a beat before it leaves.
+   */
+  --lit: clamp(0, calc((var(--t, 0) * (var(--n, 8) + 5) - var(--i, 0)) / 2.2), 1);
+  display: inline-block;
+  opacity: calc(0.14 + 0.86 * var(--lit));
+  translate: 0 calc((1 - var(--lit)) * 0.18em);
+}
+
+.cx-manifesto-kicker {
+  position: relative;
+  z-index: 1;
+  font-size: var(--cx-meta);
+  font-weight: 600;
+  letter-spacing: var(--cx-track);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+/* ==========================================================================
+   THE TALLY
+
+   Three counts under the statement, every one of them the length of a list the
+   admin panel already owns.
+   ========================================================================== */
+
+.cx-band {
+  position: relative;
+  background: var(--cx-ink);
+  color: var(--cx-paper);
+  padding-block: clamp(48px, 9vh, 110px);
+  --fg: var(--cx-paper);
+  --fg-mute: rgba(242, 240, 234, 0.56);
+  --fg-dim: rgba(242, 240, 234, 0.3);
+}
+
+.cx-stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+  opacity: 0;
+  translate: 0 24px;
+  transition:
+    opacity var(--cx-d) var(--cx-ease),
+    translate var(--cx-d) var(--cx-ease);
+}
+
+.cx-stats[data-in] { opacity: 1; translate: 0 0; }
+
+.cx-stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--s-6);
+  margin: 0;
+}
+
+.cx-stat { display: flex; flex-direction: column; gap: var(--s-2); }
+
+.cx-stat-value {
+  font-family: var(--cx-serif);
+  font-size: clamp(2.6rem, 6vw, 5rem);
+  font-weight: 700;
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+  color: var(--cx-paper);
+}
+
+.cx-stat-label {
+  margin: 0;
+  font-size: var(--cx-meta);
+  font-weight: 600;
+  letter-spacing: var(--cx-track);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+.cx-stats-note {
+  margin: 0;
+  padding-top: var(--s-4);
+  border-top: 1px solid rgba(242, 240, 234, 0.12);
+  font-size: var(--cx-meta);
+  font-weight: 600;
+  letter-spacing: var(--cx-track);
+  text-transform: uppercase;
+  color: var(--cx-gold);
+}
+
+/* ==========================================================================
+   THE CLOSING FRAME
+   ========================================================================== */
+
+.cx-footer {
+  position: relative;
+  background: var(--cx-ink-2);
+  color: var(--cx-paper);
+  padding-top: clamp(60px, 11vh, 130px);
+  padding-bottom: clamp(28px, 4vh, 46px);
+  border-top: 1px solid rgba(242, 240, 234, 0.1);
+  --fg-dim: rgba(242, 240, 234, 0.3);
+}
+
+.cx-footer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--s-8) var(--s-6);
+  padding-bottom: clamp(40px, 7vh, 90px);
+}
+
+.cx-footer-name {
+  font-family: var(--cx-serif);
+  font-size: clamp(1.6rem, 3.2vw, 2.6rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.015em;
+}
+
+.cx-footer-role {
+  margin-top: var(--s-2);
+  font-size: var(--cx-meta);
+  font-weight: 600;
+  letter-spacing: var(--cx-track);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+.cx-footer-head {
+  display: block;
+  margin-bottom: var(--s-4);
+  font-size: var(--cx-meta);
+  font-weight: 600;
+  letter-spacing: var(--cx-track);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+.cx-footer-nav ul,
+.cx-footer-socials {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cx-footer-nav a,
+.cx-footer-socials a {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: 0.8125rem;
+  color: rgba(242, 240, 234, 0.72);
+  text-decoration: none;
+  transition: color 200ms var(--cx-ease);
+}
+
+.cx-footer-nav a:hover,
+.cx-footer-socials a:hover { color: var(--cx-gold); }
+.cx-footer-socials svg { width: 14px; height: 14px; }
+
+.cx-footer-num {
+  font-size: 0.5625rem;
+  font-weight: 600;
+  letter-spacing: var(--cx-track);
+  color: var(--fg-dim);
+}
+
+.cx-footer-reach { display: flex; flex-direction: column; }
+
+.cx-footer-mail {
+  margin-bottom: var(--s-5);
+  align-self: flex-start;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(242, 240, 234, 0.24);
+  font-size: clamp(0.9rem, 1.4vw, 1.125rem);
+  color: var(--cx-paper);
+  text-decoration: none;
+  transition: border-color 200ms var(--cx-ease), color 200ms var(--cx-ease);
+}
+
+.cx-footer-mail:hover { color: var(--cx-gold); border-color: var(--cx-gold); }
+
+.cx-footer-base {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding-top: var(--s-5);
+  border-top: 1px solid rgba(242, 240, 234, 0.1);
+  font-size: var(--cx-meta);
+  font-weight: 600;
+  letter-spacing: var(--cx-track);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+.cx-footer-top {
+  color: var(--fg-dim);
+  text-decoration: none;
+  transition: color 200ms var(--cx-ease);
+}
+
+.cx-footer-top:hover { color: var(--cx-gold); }
+
+@media (max-width: 900px) {
+  /* The rail is a pointer affordance, and on a phone the page is already one
+     column of sections with an index of them in the footer. */
+  .cx-rail { display: none; }
+
+  .cx-manifesto { height: 180vh; }
+  .cx-manifesto-type { max-width: none; }
+
+  .cx-footer-grid { grid-template-columns: minmax(0, 1fr); gap: var(--s-7); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cx-stats { opacity: 1; translate: 0 0; transition: none; }
+  .cx-rail-act,
+  .cx-rail-name { transition: none; }
+
+  /* The statement is held fully read rather than mid-wipe. useProgress parks
+     --t at 0.85 for this scene, which is past the end of the sweep. */
+  .cx-manifesto { height: 100svh; }
+  .cx-manifesto-stage { position: static; height: 100svh; }
+  .cx-manifesto-word { opacity: 1; translate: 0 0; }
+}

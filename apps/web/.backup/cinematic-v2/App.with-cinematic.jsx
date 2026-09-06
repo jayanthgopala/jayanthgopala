@@ -1,9 +1,12 @@
-import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { fetchSite, fetchStatus, EMPTY_SITE } from './lib/api.js';
 import { useThemeMode } from './lib/theme.jsx';
 import Backdrop from './components/Backdrop.jsx';
 import Nav from './components/Nav.jsx';
 import Hero from './components/Hero.jsx';
+import CinematicSite from './cinematic/CinematicSite.jsx';
+import CinematicNav from './cinematic/CinematicNav.jsx';
+import Preloader from './components/Preloader.jsx';
 import StatusCard from './components/StatusCard.jsx';
 import Projects from './components/Projects.jsx';
 import Stack from './components/Stack.jsx';
@@ -14,36 +17,13 @@ import ErrorBanner from './components/ErrorBanner.jsx';
 import AskWidget from './components/AskWidget.jsx';
 import { recordVisit } from './lib/visit.js';
 
-/*
- * The 3D world, behind a lazy import.
- *
- * three + @react-three/fiber + drei is by far the largest thing in the
- * repository, and the overwhelming majority of visitors land on the normal site
- * and never ask for the world. A static import would put all of it in the main
- * bundle and make every one of those visits pay for it. Lazy means Vite emits it
- * as its own chunk that is fetched only when this route is actually opened.
- */
-const WorldSite = lazy(() => import('./world/WorldSite.jsx'));
-
-/*
- * Routing, such as it is.
- *
- * The app has never had a router and does not need one for a second route —
- * pulling in react-router to answer a single boolean would add a dependency and
- * a provider to a site that is otherwise one page. Read once at module scope
- * because this cannot change without a navigation, which reloads the document.
- */
-const IS_WORLD =
-  typeof window !== 'undefined' &&
-  window.location.pathname.replace(/\/+$/, '') === '/world';
-
 const STATUS_POLL_MS = 60_000;
 
 export default function App() {
   const [site, setSite] = useState(EMPTY_SITE);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  useThemeMode(site.content);
+  const { mode, choose, isCinematic } = useThemeMode(site.content);
 
   const load = useCallback(async (signal) => {
     try {
@@ -91,16 +71,6 @@ export default function App() {
     };
   }, []);
 
-  // Lets world.css scope every rule under an attribute the normal site never
-  // sets, the same way the old cinematic mode was isolated.
-  useEffect(() => {
-    if (!IS_WORLD) return;
-    document.documentElement.dataset.route = 'world';
-    return () => {
-      delete document.documentElement.dataset.route;
-    };
-  }, []);
-
   // The edge middleware already put the right title in the served HTML; this
   // keeps it correct after a client-side content change without a reload.
   useEffect(() => {
@@ -114,16 +84,37 @@ export default function App() {
   }, [site.content]);
 
   /*
-   * The world replaces the page entirely — no nav, no backdrop, no sections.
-   * It is a single continuous scene, and the normal site's chrome laid over it
-   * would be exactly the "3D hero with a website underneath" this is meant not
-   * to be.
+   * The two modes have diverged past the point where one tree can serve both.
+   * Cinematic is a sequence of acts with its own layout, its own palette and its
+   * own scroll behaviour; minimal is a stack of sections. Sharing a tree meant
+   * every section carrying branches for a mode it never renders in.
+   *
+   * So they are two returns. What they share is what should be shared: the
+   * payload, the nav, the ask widget and the error banner.
    */
-  if (IS_WORLD) {
+  if (isCinematic) {
     return (
-      <Suspense fallback={null}>
-        <WorldSite site={site} />
-      </Suspense>
+      <>
+        <Preloader content={site.content} ready={!loading} />
+
+        {/* Its own nav rather than a restyling of the shared one: the two want
+            genuinely different markup, and giving cinematic its own leaves
+            minimal mode's completely untouched. */}
+        <CinematicNav
+          profile={site.profile}
+          socials={site.socials}
+          content={site.content}
+          mode={mode}
+          onChooseMode={choose}
+          hasExperience={site.experience?.length > 0 || site.education?.length > 0}
+        />
+
+        <CinematicSite site={site} loading={loading} />
+
+        <AskWidget content={site.content} profile={site.profile} />
+
+        {error && <ErrorBanner message={error} onRetry={() => load()} />}
+      </>
     );
   }
 
@@ -138,12 +129,16 @@ export default function App() {
 
   return (
     <>
+      {/* The ambient blobs belong to the minimal theme; behind a full-bleed
+          character they only add haze. */}
       <Backdrop />
 
       <Nav
         profile={site.profile}
         socials={site.socials}
         content={site.content}
+        mode={mode}
+        onChooseMode={choose}
         hasEducation={site.education?.length > 0}
         hasExperience={site.experience?.length > 0}
       />
