@@ -74,7 +74,29 @@ const HAZE = [0xd6, 0xe2, 0xef];
  * fastest way to make a render look wrong, and it is the kind of wrong people
  * see without being able to name.
  */
-const SUN = [0.9, 0.09];
+/*
+ * SOLVED FROM THE KEY LIGHT, NOT PICKED — AND THE OLD PAIR DISAGREED BADLY.
+ *
+ * This is an equirectangular map, so the two numbers are a BEARING and an
+ * ELEVATION, not a position on the screen. three samples it with
+ *
+ *   u = atan2( dir.z, dir.x ) / 2pi + 0.5
+ *   v = 0.5 + asin( dir.y ) / pi      ... and flipY puts row 0 at the zenith,
+ *
+ * which makes this file's own `v` run 0 at the zenith to 1 at the horizon, so
+ * an elevation of e degrees is v = 1 - e/90.
+ *
+ * At [0.9, 0.09] that put the painted sun 82 degrees up — within eight degrees
+ * of straight overhead — while the key light in Atmosphere sat at 29. The sky
+ * and the shading were lit by two different suns, which is exactly the failure
+ * the note below warns about, committed in the numbers rather than in the side
+ * of frame.
+ *
+ * The key is now [101, 94, -272]; normalised that is (0.332, 0.309, -0.891),
+ * so the arithmetic above gives u = 0.3068 and an elevation of 18 degrees,
+ * v = 0.80. Move the light and both of these move with it.
+ */
+const SUN = [0.3068, 0.80];
 
 /* ===========================================================================
    CLOUDS
@@ -393,7 +415,29 @@ const skyRamp = (t) => {
    * out looking like a gradient tool was used on it. The extra stop at AZURE is
    * what gives it a shoulder.
    */
-  const k = Math.pow(t, 1.7);
+  /*
+   * EXPONENT 3.4, UP FROM 1.7, AND IT IS A FRAMING CONSTRAINT RATHER THAN A
+   * TASTE ONE.
+   *
+   * The note above is right that haze is compressed into the last stretch
+   * above the horizon. What it did not account for is how little of the sky
+   * this shot actually contains: the lens is 42 degrees vertically and pitched
+   * down, so the top of frame sits about 15 degrees above the horizon and
+   * EVERY sky pixel in the picture comes from t > 0.83.
+   *
+   * At 1.7 that whole strip evaluates past the shoulder and lands in the
+   * AZURE-to-HAZE half — measured, the top row of frame came out (170, 204,
+   * 233), a pale blue-white. So the sky was correct as a sky and the visible
+   * fifteen degrees of it were all haze, which is why the frame read as
+   * overcast while the texture was demonstrably blue.
+   *
+   * At 3.4 the same t = 0.867 lands at k = 0.63, barely past the shoulder, so
+   * the strip the camera can see holds close to AZURE and the wash is squeezed
+   * into the last few degrees where the ridges are anyway. The sky above the
+   * frame is unchanged in kind — it is the same three stops in the same order,
+   * just reached later.
+   */
+  const k = Math.pow(t, 3.4);
   if (k < 0.55) {
     const u = k / 0.55;
     return ZENITH.map((z, i) => z + (AZURE[i] - z) * u);
@@ -458,10 +502,64 @@ export default function Sky() {
          * than it is tall. That is what atmosphere does to a low sun, and it
          * also keeps the glow from running off the top of the frame.
          */
-        const du = (u - SUN[0]) * 0.62;
-        const dv = v - SUN[1];
-        const d = Math.sqrt(du * du + dv * dv);
-        const glow = Math.pow(Math.max(0, 1 - d / 0.62), 2.4);
+        /*
+         * WIDER AND HARDER-CENTRED, from radius 0.62 with an exponent of 2.4.
+         *
+         * The reference's sun is a BLOWOUT: a core that has gone completely to
+         * paper, wrapped in a wash that carries most of the way down the right
+         * side of the frame and washes the ridge in front of it. One curve
+         * cannot be both — a single power falls off at one rate, so tuning it
+         * to reach that far leaves the middle grey, and tuning the middle
+         * leaves it a small bright spot with nothing around it.
+         *
+         * So it is two: a broad low-exponent wash that carries the reach, and a
+         * tight high-exponent core on top of it that saturates. That is also
+         * physically what is being drawn — forward-scattered light through a
+         * lot of atmosphere, plus the disc itself.
+         */
+        /*
+         * THE DISTANCE IS MEASURED IN DEGREES, AND UNTIL NOW IT WAS NOT.
+         *
+         * This was written when the sky was a SCREEN FILL — three draws a
+         * plain-mapped background as a viewport quad — so u and v both ran
+         * across the frame and treating them as one flat space was right. As an
+         * equirectangular map they are a bearing over 360 degrees and an
+         * elevation over 90, so one unit of u is four times the angle of one
+         * unit of v, and a radius quoted in mixed units means nothing.
+         *
+         * Measured, the old radius of 0.66 in that mixed space reached 384
+         * degrees horizontally — more than all the way round the sky — against
+         * 119 vertically. The result was not a sun with a glow: it was a wash
+         * over the whole upper hemisphere, brightest along a band rather than
+         * at a point, which is exactly what the render showed. It also erased
+         * the blue the ramp had just been retuned to hold.
+         *
+         * Converting both axes to degrees first makes the radii mean what they
+         * say. The horizontal is then divided by 1.35 rather than left equal,
+         * which is the ONE piece of the old anisotropy that was correct and
+         * deliberate: atmosphere spreads a low sun sideways, so the glow really
+         * is wider than it is tall — just by a third, not by a factor of four.
+         */
+        let du = u - SUN[0];
+        /* Shortest way round the sphere: at a bearing near the seam the naive
+           difference is nearly 1, which would put the sun 360 degrees away. */
+        du -= Math.round(du);
+        const dh = (du * 360) / 1.35;
+        const dv = (v - SUN[1]) * 90;
+        const d = Math.sqrt(dh * dh + dv * dv);
+
+        /*
+         * A BROAD WASH PLUS A TIGHT CORE, in degrees. The reference's sun is a
+         * blowout: a centre gone completely to paper inside a glare that
+         * carries a good forty degrees. One curve cannot be both — tuned to
+         * reach that far it leaves the middle grey, tuned for the middle it is
+         * a bright dot with nothing around it — so it is two, which is also
+         * physically what is there: forward scatter through a lot of air, and
+         * the disc.
+         */
+        const wash = Math.pow(Math.max(0, 1 - d / 46), 2.1) * 0.66;
+        const core = Math.pow(Math.max(0, 1 - d / 13), 2.4);
+        const glow = Math.min(1, wash + core);
 
         const cloud = sampleField(clouds, u, v);
 
@@ -584,8 +682,19 @@ export function makeWinterSkyEnv() {
      the light that snow returns, so if the ground goes white this has to. */
   const GROUND = [0xd2, 0xd8, 0xe2];
   /* Where the sun sits on the sphere. */
-  const SUN_U = 0.17;
-  const SUN_V = 0.3;
+  /*
+   * SAME SUN AS THE BACKGROUND'S, IN THIS FUNCTION'S OWN PARAMETERISATION.
+   *
+   * Here v runs 0 at the zenith to 1 at the NADIR over the full sphere, so the
+   * sky occupies 0..0.5 and an elevation of e degrees is v = ( 1 - e/90 ) / 2.
+   * At 18 degrees that is 0.40. u is the same bearing the background uses.
+   *
+   * They were [0.17, 0.3] against the background's [0.9, 0.09] — two different
+   * bearings and two different elevations, so the glint on the ice came from
+   * somewhere the sky had nothing in it.
+   */
+  const SUN_U = 0.3068;
+  const SUN_V = 0.40;
 
   for (let y = 0; y < H; y += 1) {
     /* v: 0 at the zenith, 1 at the nadir. */
@@ -599,10 +708,15 @@ export function makeWinterSkyEnv() {
         c = skyRamp(v / 0.5);
 
         /* The sun's broad glow, in angular distance on the sphere. */
-        const du = Math.min(Math.abs(u - SUN_U), 1 - Math.abs(u - SUN_U));
-        const dv = v - SUN_V;
-        const d = Math.sqrt(du * du * 4 + dv * dv * 6);
-        const glow = Math.max(0, 1 - d / 0.55) ** 2;
+        /* In degrees, for the reason given on the background's glow: here v
+           runs over the whole 180-degree sphere, so one unit of v is 180 and
+           one unit of u is 360. Same 1.35 sideways stretch. */
+        let du = u - SUN_U;
+        du -= Math.round(du);
+        const dh = (du * 360) / 1.35;
+        const dv = (v - SUN_V) * 180;
+        const d = Math.sqrt(dh * dh + dv * dv);
+        const glow = Math.max(0, 1 - d / 42) ** 2;
         c = c.map((n) => n + glow * 95);
       } else {
         /* Ground bounce, fading a little toward the nadir. */

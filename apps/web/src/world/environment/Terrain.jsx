@@ -440,7 +440,25 @@ const FOG_WISP_DRIFT = [34.0, 4.0];
  * The igloo's dome, at 47, sits about half way up the layer — air moves past
  * its shoulders and is gone by the crown.
  */
-const FOG_WISP_HEIGHT = 44.0;
+/*
+ * RAISED TO 90, from 44, AND IT IS WHERE THE VEILS ARE THAT FORCED IT.
+ *
+ * The note above is a good description of ground-hugging spindrift and it put
+ * the layer in the wrong half of the frame. At a 44-unit scale height and a
+ * base of 14 the medium is effectively gone by y = 100, and the lens now sits
+ * at 60 looking slightly UP at hills whose crests run 100 to 200 — so every
+ * ray that reaches the middle distance climbs out of the layer almost at once
+ * and came back with a few per cent of mist on it.
+ *
+ * The reference's wind is not at ankle height. It streams across the flanks of
+ * the mid-ground hills and pours through the cols between the ranges, which is
+ * a boundary layer a hundred-odd units deep at this landscape's scale. At 90
+ * the medium still thins with altitude — the summits and the sky above them
+ * stay clear, which is the property that lets the exposed rock survive it (see
+ * FOG_WISP_DENSITY) — but it now actually reaches the ground the veils are
+ * supposed to be seen against.
+ */
+const FOG_WISP_HEIGHT = 90.0;
 
 /**
  * How much extinction a saturated wisp adds, as an ABSOLUTE density.
@@ -520,7 +538,31 @@ const FOG_WISP_COLOR = [0.94, 0.96, 0.99];
  * march, the drift, the wind axis, the crest threshold — so restoring the
  * weather is this one number and nothing else.
  */
-const FOG_WISP_DENSITY = 0.0;
+/*
+ * BACK ON AT 0.0030, AND THE ARGUMENT THAT SWITCHED IT OFF HAS A SIDE IT
+ * MISSED.
+ *
+ * The note above is exact about the conflict: the wisps are near-white, they
+ * are drawn IN FRONT of the hills, and the exposed stone lives on those hills,
+ * so density here is contrast taken off the rock. It concluded that there is
+ * no setting at which both survive, and switched the layer off.
+ *
+ * What that skips is HEIGHT. FOG_WISP_HEIGHT is 44 units and the layer is
+ * based on the ground, so it is a boundary-layer medium — it lies in the
+ * hollows and streams through the cols, and the summits stand out of it. The
+ * ranges' stone is on their upper flanks, above it; the pixels the two
+ * actually compete for are the low ground in between, which is precisely where
+ * the reference puts its wind. Its ridges are clean dark rock and the white is
+ * pouring through the gaps between them.
+ *
+ * So the conflict is real at a uniform density and mostly dissolves once the
+ * layer is allowed to be shallow. 0.0030 sits between the 0.0042 that erased
+ * the stone and the 0.0022 that was judged too faint to read on a moving
+ * image — and what it is now seen against is the new far ranges, which are
+ * themselves half-dissolved in aerial perspective and a far more forgiving
+ * backdrop than the near hills it was last measured on.
+ */
+const FOG_WISP_DENSITY = 0.006;
 
 /**
  * Where the wisps stop, in world units from the lens.
@@ -535,10 +577,30 @@ const FOG_WISP_DENSITY = 0.0;
  * streamers cross it. That is the shot in the reference — wisps in front of the
  * mountains, mountains themselves stable.
  */
-const FOG_WISP_REACH = 520.0;
-const FOG_WISP_STEPS = 7;
+/*
+ * PUSHED BACK TO 900, from 520, WITH THE FADE AND THE STEP COUNT.
+ *
+ * The gate is still a look rather than an optimisation and the note above is
+ * still the reason for it — air a kilometre out is moving too, and if all of it
+ * is drawn moving then the whole frame churns with nothing still to measure the
+ * movement against. What changed is where "the far ranges" are: they used to be
+ * placed hills at four to six hundred units, and there are now real ranges
+ * behind those at nine hundred and fifteen hundred. 520 cut the layer off in
+ * the middle of the ground it was written to cross.
+ *
+ * 900 reaches the mid range and stops in front of the far one, so the veils
+ * pour through the near cols and the back of the picture stays calm — which is
+ * the arrangement the reference has and the whole point of gating it at all.
+ *
+ * THE STEP COUNT HAS TO GO UP WITH IT. FOG_WISP_SCALE is a 165-unit crosswind
+ * feature and its note calls out that the march must keep about two samples
+ * across one; at 900 units over 7 steps that is 129 units per step and the
+ * wisps would alias into flicker. Nine steps holds it at 100.
+ */
+const FOG_WISP_REACH = 900.0;
+const FOG_WISP_STEPS = 9;
 /** Where the layer starts falling away, so the gate has no edge on it. */
-const FOG_WISP_FADE = 240.0;
+const FOG_WISP_FADE = 420.0;
 
 /**
  * The threshold that turns a noise field into filaments.
@@ -1298,7 +1360,7 @@ const screeAndSnow = (shader) => {
       * The direction is the same constant the igloo uses, normalised off the
       * key in Atmosphere.jsx. Both have to move if that light moves.
       */
-     float sunFace = clamp( dot( wGeo, vec3( 0.6916, 0.4940, -0.5269 ) ), 0.0, 1.0 );
+     float sunFace = clamp( dot( wGeo, vec3( 0.3324, 0.3090, -0.8910 ) ), 0.0, 1.0 );
      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0 ), smoothstep( 0.30, 0.92, sunFace ) * 0.50 );
      /* Dry snow scatters almost completely; bare rock keeps its sheen. */
      roughnessFactor = mix( roughnessFactor, 0.96, lay * 0.85 );

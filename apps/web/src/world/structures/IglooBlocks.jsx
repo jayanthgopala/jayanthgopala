@@ -441,7 +441,7 @@ const iceShader = (shader) => {
        * jump. Ours is already near-white at rest, so the same jump is smaller —
        * and faking the difference is what turned the blocks into panels.
        */
-      'vec3 sunDir = vec3( 0.6916, 0.4940, -0.5269 );',
+      'vec3 sunDir = vec3( 0.3324, 0.3090, -0.8910 );',
       'vec3 wNrm = inverseTransformDirection( normalize( vNormal ), viewMatrix );',
       'float sunDot = dot( wNrm, sunDir );',
       'float sunFace = clamp( sunDot, 0.0, 1.0 );',

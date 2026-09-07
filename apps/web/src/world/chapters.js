@@ -157,11 +157,37 @@ const CAMERA_POINTS = [
    * units of air under the camera the whole way and makes the rise part of the
    * shot instead of an artefact of avoiding the ground.
    */
-  [1.6, 42, 370], // 1  the held opening frame — unchanged, this is the hero
-  [3, 58, 402], //   1  starting back and up, the dome still filling the frame
-  [5, 82, 438], //   2  the drift and the near hills come into view around it
-  [8, 112, 478], //  2  the igloo is one object in a landscape now
-  [11, 150, 522], // 3  and finally a mark on an empty white plain
+  /*
+   * RE-SOLVED AGAINST THE REFERENCE FRAME, and the three measurements are:
+   *
+   *   the dome spans 18% of frame width      (it was 26%)
+   *   its centre sits 58% down the frame     (it was 50%)
+   *   the far valley floor sits 37% down     (it was off the top of frame)
+   *
+   * Every one of those is an angle, so the solve is direct. 26 to 18 per cent
+   * of width is a distance multiplied by 1.43, which takes the lens from 124
+   * units out to 177. The dome's centre 8.3% below frame centre is 3.5 degrees
+   * below the axis, and the valley floor 13% above it is 5.5 degrees above —
+   * which fixes the pitch at 5.5 degrees down and, with the dome's centre 9
+   * degrees below the lens's own horizontal, puts the lens at 60.
+   *
+   * THE AIM IS DELIBERATELY NOT ON THE DOME any more. Pitch and subject height
+   * are two constraints and one point cannot satisfy both: aiming at the igloo
+   * pins it to the exact middle of frame by construction, which is where it
+   * was and is not where the reference has it. So the aim sits about eleven
+   * units above the crown and the dome hangs below it.
+   *
+   * WHAT THIS BUYS BEYOND THE SUBJECT'S SIZE is the sky. At the old pitch the
+   * horizon sat above the top of the frame and there was no sky in the picture
+   * at all — which is why the sun could not be seen, why the ranges had nothing
+   * to stand against, and why the blue in Sky.jsx was invisible however it was
+   * graded.
+   */
+  [12.8, 60, 422], // 1  the held opening frame — solved above
+  [15, 80, 468], //   1  starting back and up, the dome still reads as the subject
+  [18, 112, 524], //  2  the drift and the near hills come into view around it
+  [22, 155, 588], //  2  the igloo is one object in a landscape now
+  [27, 210, 660], //  3  and finally a mark on an empty white plain
 ];
 
 /*
@@ -186,7 +212,13 @@ const TARGET_POINTS = [
   /* Level with the lens — see above — and nudged 3 units to the dome's right
      so the dome itself lands 2.4% left of frame centre, where the reference
      puts it, leaving the entrance the room it needs on the right. */
-  [-24.4, 24.1, 250], // 1  the hero framing — unchanged
+  /*
+   * RAISED TO 42.8 WITH THE REFRAME. See the camera points above: the aim is
+   * what sets the PITCH, and it is no longer the same thing as the subject.
+   * Eleven units over the crown, which at 176 units out is 5.5 degrees of
+   * downward pitch and drops the dome to 58% of frame height.
+   */
+  [-24.4, 42.8, 250], // 1  the hero framing
   /*
    * THE AIM BARELY MOVES, AND THAT IS THE ENTIRE SHOT.
    *
@@ -206,10 +238,10 @@ const TARGET_POINTS = [
    * a divide by zero and the whole path comes out NaN. Where the aim is
    * conceptually holding still it still creeps.
    */
-  [-25, 24.5, 250.5], // 1
-  [-26, 25.5, 251], //   2
-  [-27, 27, 251.5], //   2
-  [-28, 29, 252], //     3
+  [-25, 43.5, 250.5], // 1
+  [-26, 45, 251], //     2
+  [-27, 47, 251.5], //   2
+  [-28, 50, 252], //     3
 ];
 
 const toVec = (p) => new Vector3(p[0], p[1], p[2]);

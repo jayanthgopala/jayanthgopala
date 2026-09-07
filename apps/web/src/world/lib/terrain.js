@@ -70,13 +70,29 @@ export const MOUND_AT = [-30, 252];
  * is a fixed shot: the peaks need to sit behind the igloo IN FRAME, and that is
  * a place, not a radius.
  */
-const MID_NEAR = -60;
-const MID_FAR = -760;
-const MID_HEIGHT = 310;
+/*
+ * PUSHED WELL BEHIND THE PLACED HILLS, from -60/-760 and -420/-1450.
+ *
+ * The old MID band began at z = -60, which is in among the placed hills
+ * themselves (they sit between -210 and -430), so switching it on would have
+ * raised the middle ground rather than put anything behind it. These ranges
+ * only do their job if there is a clear run of LOWER ground between them and
+ * the hills in front — that gap is what the haze fills, and the filled gap is
+ * what makes them read as distance rather than as more hill.
+ *
+ * Heights are solved from the frame rather than picked. The lens now sits at
+ * y 60 with the top of frame 15.5 degrees above the horizon, so a summit 900
+ * units out wanting to reach 10 degrees needs 159 units of height, and one at
+ * 1500 wanting 13 needs 346. crest() peaks around 0.8 in practice, hence 210
+ * and 430.
+ */
+const MID_NEAR = -500;
+const MID_FAR = -1100;
+const MID_HEIGHT = 210;
 
-const FAR_NEAR = -420;
-const FAR_FAR = -1450;
-const FAR_HEIGHT = 640;
+const FAR_NEAR = -900;
+const FAR_FAR = -1550;
+const FAR_HEIGHT = 430;
 
 const smoothstep = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -582,24 +598,111 @@ function rawHeight(x, z) {
     placedHill(155, 308, 68, 14) +
     placedHill(-60, 288, 52, 10);
 
+  /*
+   * A SHARP RANGE, NOT A DOME — and this is the one place in the landscape
+   * where this file's own argument for rounding does not apply.
+   *
+   * dome() puts every form through a smoothstep, and the note above it is
+   * right about why: deep snow does not hold an edge, and folding the noise
+   * the usual way made the near hills read as crumpled foil. That is an
+   * argument about SNOW. These ranges are not snowfields — they are the rock
+   * spine along the back of the reference, grey aretes with white only in the
+   * gullies, and rock holds an edge because stone does. Drawn as domes they
+   * came out as more white humps behind the white humps, which is why the
+   * layer was switched off rather than fixed.
+   *
+   * So this is the ridged construction the near hills gave up: 1-|n| folds
+   * each octave at zero, turning a smooth swell into a crest with a V-shaped
+   * valley beside it, and squaring keeps the valleys wide and the crests
+   * narrow — the profile a real range reads in. Three octaves weighted hard to
+   * the low end, because at fifteen hundred units the fine ones cannot resolve
+   * anyway.
+   *
+   * THE CONTRAST RAMP IS WHAT MAKES THEM SEPARATE PEAKS. Raw ridged noise is a
+   * continuous gradient — every value between valley and crest is present — so
+   * the range comes out as one corrugated mass with a level top. Pulling the
+   * black and white points together pushes the middle of that range out to the
+   * ends: broad low ground, a defined break, and narrow summits standing out
+   * of it, which is what gives the sky something to show BETWEEN them.
+   *
+   * It reads the warped coordinates, like everything else at this scale, so
+   * the range has a direction instead of being isotropic noise.
+   */
+  const crest = (f, ox, oz) => {
+    let sum = 0;
+    let amp = 1;
+    let freq = f;
+    let norm = 0;
+    for (let i = 0; i < 3; i += 1) {
+      const n = 1 - Math.abs(mountain(wx * freq + ox * (i + 1), wz * freq + oz * (i + 1)));
+      sum += n * n * amp;
+      norm += amp;
+      amp *= 0.42;
+      /* Not exactly 2, so the octaves never line their lattices up. */
+      freq *= 2.11;
+    }
+    const v = sum / norm;
+
+    /*
+     * THE RAMP IS CLAMPED AT THE BOTTOM ONLY, AND CLAMPING THE TOP GAVE MESAS.
+     *
+     * A plain smoothstep saturates: every value above the upper stop returns
+     * exactly 1. Ridged-squared noise spends a real fraction of its time up
+     * there, so the whole of that fraction came back at the same height — and a
+     * broad area at one height with a steep edge round it is a butte. The first
+     * render of this range was a row of flat-topped columns, which is the one
+     * landform a snow-and-rock skyline must not have.
+     *
+     * So the low end keeps its cut, because that is what makes the valleys
+     * broad and the crests narrow, and the high end is allowed to keep
+     * climbing — at a reduced rate, so the contrast the ramp bought is not
+     * simply given back. Summits then differ from one another, which is what
+     * makes a skyline read as a range rather than as a wall.
+     */
+    const t = Math.max(0, (v - 0.28) / 0.46);
+    const shaped = t < 1 ? t * t * (3 - 2 * t) : 1 + (t - 1) * 0.55;
+
+    /*
+     * AND AN AMPLITUDE ENVELOPE, the same device dome() uses one scale down.
+     * Without it every summit that clears the ramp reaches a similar height and
+     * the skyline is level however sharp the individual peaks are. A very slow
+     * second field gates whole stretches of the range up and down, so one
+     * section stands and the next is a saddle.
+     */
+    const env = 0.42 + 0.58 * Math.abs(drift(wx * f * 0.4 + ox, wz * f * 0.4 - oz));
+    return shaped * env;
+  };
+
   const mid = smoothstep(MID_NEAR, MID_FAR, z);
   const far = smoothstep(FAR_NEAR, FAR_FAR, z);
 
+  /*
+   * MAX, NOT SUM, and it is the difference between two ranges and one very
+   * tall one. Where the bands overlap — z between -900 and -1100 — adding them
+   * would stack a mid summit on a far one and raise a wall six hundred units
+   * high that neither layer asked for. Taking the greater lets the far range
+   * simply stand THROUGH the near one wherever it is higher, which is what
+   * being behind something looks like.
+   */
   let peaks = 0;
-  if (mid > 0) peaks = dome(0.0019, 0, 0) * MID_HEIGHT * mid;
-  if (far > 0) peaks = Math.max(peaks, dome(0.00095, 41, -93) * FAR_HEIGHT * far);
+  if (mid > 0) peaks = crest(0.0019, 0, 0) * MID_HEIGHT * mid;
+  if (far > 0) peaks = Math.max(peaks, crest(0.00095, 41, -93) * FAR_HEIGHT * far);
 
   /*
-   * NO DISTANT RANGES.
+   * THE DISTANT RANGES ARE BACK, and the note that removed them is kept
+   * because it was right about the version it removed.
    *
-   * The two pale ridge layers that used to sit along the back are gone. They
-   * were fogged almost to the sky colour, so they read as a flat white band
-   * rather than as landscape, and with real hills now standing in the near and
-   * middle ground they were competing with the thing the shot is actually
-   * about. The horizon belongs to the placed hills now.
+   * It read: they "were fogged almost to the sky colour, so they read as a
+   * flat white band rather than as landscape". True, and both halves of that
+   * have since changed. They were domes, so there was no shape in them for the
+   * haze to leave behind; and the standing haze was at 0.0042, which at a
+   * kilometre is total erasure. They are crests now, and the fog is at 0.0009
+   * — 48 per cent at nine hundred units and 84 at fifteen hundred, which is
+   * aerial perspective rather than a curtain.
    *
-   * MID_* and FAR_* are left defined above so the layers can be brought back
-   * by re-adding `peaks` here.
+   * That is the reference's back third exactly: pale grey-blue silhouettes
+   * with their ridge lines still legible, each plane lighter than the one in
+   * front of it, and white haze lying in the valleys between them.
    */
   /*
    * SHARP CUTS: terracing the hill mass.
@@ -761,7 +864,16 @@ function rawHeight(x, z) {
     cragRamp *
     hillEnv;
 
-  return drifts + sculpted + mound + cut + hills + bowlRim + crag;
+  /*
+   * peaks JOINS BY MAX RATHER THAN BY SUM, for the same reason the two bands
+   * do between themselves: everything before it is near and middle ground, and
+   * a range standing behind that ground should stand THROUGH it where it is
+   * higher rather than be stacked on top of it. Summing would ride the far
+   * summits up on whatever the hummocks happen to be doing underneath and lift
+   * the whole back of the frame with them.
+   */
+  const front = drifts + sculpted + mound + cut + hills + bowlRim + crag;
+  return Math.max(front, peaks);
 }
 
 /**

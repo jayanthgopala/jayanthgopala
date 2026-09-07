@@ -248,7 +248,47 @@ export default function Atmosphere() {
          * onBeforeCompile. Both Terrain.jsx and IglooBlocks.jsx have
          * vec3( 0.6916, 0.4940, -0.5269 ) and both must move if this does.
          */
-        position={[210, 150, -160]}
+        /*
+         * SWUNG INTO FRAME, from [210, 150, -160].
+         *
+         * The reference has the sun IN THE PICTURE — a blowout at the top right
+         * corner, half-hidden behind the near ridge — and that is not a
+         * decoration, it is the whole reason its ridges have bright rims and
+         * its valleys glow. A sun you cannot see is a sun the frame has to be
+         * told about; a sun you can see is one the frame demonstrates.
+         *
+         * The old position was 73 degrees off the lens axis, so nothing of it
+         * was ever on screen however bright the sky painted it. Solved instead
+         * from where it has to LAND: the camera sits at [1.6, 42, 370] looking
+         * at [-24.4, 24.1, 250], so its forward is (-0.212, -0.147, -0.966) and
+         * its right is (0.966, 0, -0.210). Measured off the reference, its sun
+         * sits 32 degrees right of the lens axis and about 16 above it; placing
+         * ours at 33 degrees of bearing and 18 of elevation gives (0.332,
+         * 0.309, -0.891), which puts the disc just past the top right corner
+         * and its wash across it — the reference's framing exactly, where the
+         * core is clipped and what you actually see is the glare.
+         *
+         * ELEVATION COMES DOWN — 29 degrees to 18 — and deliberately not further.
+         * The note above records that the 30-degree height is not a look but the
+         * result of a measurement: it is what gives the snow a p10-to-p90 spread
+         * of 48 instead of 8, and that a razor-low 13 degrees puts the shading
+         * on the steep part of the cosine curve where fine normal detail turns
+         * into hard banding. The reference's own sun solves to about 11, which
+         * is inside that failure; 18 buys most of the raking without entering
+         * it, and the glare still clips the corner because the wash is broad.
+         *
+         * IT IS NOW A BACKLIGHT, which is the other half of the reference. With
+         * the sun in front of the camera the light travels TOWARD the lens, so
+         * every ridge between here and it is rimmed and every face turned to us
+         * falls into its own shade. That is where the reference's separation
+         * between planes comes from.
+         *
+         * THREE OTHER PLACES CARRY THIS DIRECTION, normalised, and none of them
+         * read it from here: Sky.jsx's SUN and makeWinterSkyEnv's SUN_U/SUN_V,
+         * and the sunFace terms in Terrain.jsx and IglooBlocks.jsx, which are
+         * now vec3( 0.3324, 0.3090, -0.8910 ). All must move if this does.
+         */
+        position={[101, 94, -272]}
         // Raised with the environment cut, so the total light on the scene
         // holds roughly steady while far more of it arrives from one direction.
         // That trade is the whole of "modelling": same exposure, more form.
