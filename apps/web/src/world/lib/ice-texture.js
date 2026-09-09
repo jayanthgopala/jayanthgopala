@@ -580,7 +580,8 @@ function buildFields(size, frequency, rock, pebbles) {
          protect, so the cloud field drives the normal directly. */
       relief[n] = clamp01(rockField[n] * 1.0 + micro[n] * 0.3);
     } else {
-      relief[n] = clamp01(rockField[n] * 1.0 + micro[n] * 0.3);
+      /* Smooth packed snow relief without fractured rock pits or pimple dots */
+      relief[n] = clamp01(cloud[n] * 0.70 + 0.30 + micro[n] * 0.10);
     }
   }
 

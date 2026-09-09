@@ -594,6 +594,7 @@ export default function Atmosphere() {
          */
         shadow-bias={-0.00025}
         shadow-normalBias={0.85}
+        shadow-radius={4}
         shadow-camera-near={1}
         shadow-camera-far={620}
         /* Wide enough to contain the whole colonnade. A shadow camera that

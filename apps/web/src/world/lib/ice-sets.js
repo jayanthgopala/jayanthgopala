@@ -27,8 +27,8 @@
  * argued and where it belongs.
  */
 export const ICE_SETS = {
-  /* Terrain.jsx — the snowfield. */
-  snow: { size: 512, frequency: 2.4, bump: 2.4, variant: 'ice', pebbles: 0.2 },
+  /* Terrain.jsx — the snowfield. Clean, smooth snow without pebbles or rock dots. */
+  snow: { size: 512, frequency: 2.4, bump: 1.5, variant: 'ice', pebbles: 0 },
   /* Terrain.jsx — the stone breaking through it. */
   crag: { size: 512, frequency: 3.4, bump: 3.0, variant: 'rock' },
   /* Scree.jsx — the loose apron banked against the dome. */

@@ -140,12 +140,7 @@ const HAZE = LOOK.sky.haze;
  * v = 0.80. Move the light and both of these move with it.
  */
 /* Elevation 21 degrees now (see the key light's own note), so v = 1 - 21/90. */
-/*
- * RETIRED WITH THE SUN. Kept as DAY.sun in lib/lighting.js, along with the
- * frame-fraction reasoning above, which is the record of where it was solved
- * to sit. Nothing reads it now.
- */
-// const SUN = [0.3068, 0.767];
+const SUN = LOOK.sun || [0.38, 0.74];
 
 /* ===========================================================================
    CLOUDS
@@ -597,6 +592,21 @@ const auroraAt = (u, vs) => {
   return Math.min(1, (auroraShafts(u) * 0.85 + wash) * vert * bias * AUR.strength);
 };
 
+/** Atmospheric radiant sunlight disc, corona and atmospheric halo bloom. */
+const sunBloomAt = (u, vs) => {
+  if (!SUN) return 0;
+  let du = Math.abs(u - SUN[0]);
+  if (du > 0.5) du = 1.0 - du;
+  const degX = du * 360;
+  const degY = (vs - SUN[1]) * 90;
+  const d = Math.sqrt((degX / 1.25) * (degX / 1.25) + degY * degY);
+  /* Disc, inner radiant corona, and outer atmospheric wash */
+  const disc = Math.exp(-Math.pow(d / 3.4, 2.5)) * 0.50;
+  const corona = Math.exp(-Math.pow(d / 9.0, 1.8)) * 0.35;
+  const wash = Math.exp(-Math.pow(d / 24.0, 1.2)) * 0.20;
+  return Math.min(1.0, disc + corona + wash);
+};
+
 /*
  * THERE ARE NO STARS, AND THAT IS PHYSICS RATHER THAN TASTE.
  *
@@ -777,6 +787,14 @@ export default function Sky() {
           }
         }
 
+        const sun = sunBloomAt(u, v);
+        if (sun > 0) {
+          const SUN_COLOR = [255, 250, 240];
+          for (let k = 0; k < 3; k += 1) {
+            c[k] += (SUN_COLOR[k] - c[k]) * sun * 0.55;
+          }
+        }
+
         const jitter = (((y + x) & 1) - 0.5) * 1.2;
         image.data[i] = Math.min(255, Math.max(0, c[0] + jitter));
         image.data[i + 1] = Math.min(255, Math.max(0, c[1] + jitter));
@@ -923,6 +941,14 @@ export function makeWinterSkyEnv() {
           const mixK = Math.min(1, aur * 1.5);
           const g = aur * AUR.envGain;
           c = c.map((n, k) => n + (AUR.deep[k] + (AUR.core[k] - AUR.deep[k]) * mixK) * g);
+        }
+
+        const sun = sunBloomAt(u, v / 0.5);
+        if (sun > 0) {
+          const SUN_COLOR = [255, 250, 240];
+          for (let k = 0; k < 3; k += 1) {
+            c[k] += (SUN_COLOR[k] - c[k]) * sun * 0.55;
+          }
         }
       } else {
         /* Ground bounce, fading a little toward the nadir. */

@@ -1,8 +1,10 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
+import { Vector2 } from 'three';
 import { buildTerrainGeometry, MOUND_AT, TERRAIN_SIZE } from '../lib/terrain.js';
 import { iceMapsFor } from '../lib/baked.js';
 import { LOOK } from '../lib/lighting.js';
+import { SHARED_WIND_GLSL, updateWindState } from '../lib/wind.js';
 
 /**
  * The ground.
@@ -424,7 +426,7 @@ const FOG_DRIFT = [5.5, 1.4];
  * fine airborne detail is carried by the spindrift points in Weather.jsx, which
  * are geometry and cannot alias.
  */
-const FOG_WISP_SCALE = 1 / 165;
+const FOG_WISP_SCALE = 1 / 140;
 
 /**
  * How fast the wisps travel, in world units per second.
@@ -435,7 +437,7 @@ const FOG_WISP_SCALE = 1 / 165;
  * shears the field so streamers grow and dissolve as they pass instead of
  * sliding through unchanged.
  */
-const FOG_WISP_DRIFT = [34.0, 4.0];
+const FOG_WISP_DRIFT = [95.0, 10.5];
 
 /**
  * The wisp layer's scale height, in world units above FOG_BASE.
@@ -603,29 +605,17 @@ const FOG_WISP_DENSITY = LOOK.mist.density;
  * across one; at 900 units over 7 steps that is 129 units per step and the
  * wisps would alias into flicker. Nine steps holds it at 100.
  */
-const FOG_WISP_REACH = 900.0;
+const FOG_WISP_REACH = 750.0;
 const FOG_WISP_STEPS = 9;
 /** Where the layer starts falling away, so the gate has no edge on it. */
-const FOG_WISP_FADE = 420.0;
+const FOG_WISP_FADE = 380.0;
 
 /**
  * The threshold that turns a noise field into filaments.
- *
- * Left as raw noise this is a haze that varies, which is what the old single
- * layer was. Ramping it steeply between two values well above the mean keeps
- * only the crests, and the crests of a stretched field are long thin strands
- * with clear air between them. Widen the pair and it goes back to haze; narrow
- * it and the strands get hard edges and read as ribbons.
+ * Only the high crests of the noise field become visible streamers,
+ * leaving the rest of the air clear and fog-free.
  */
-/*
- * WIDENED DOWNWARD, from 0.46. With the haze gone the frame needs more air in
- * it, and there are two ways to get it: make each strand denser, or have more
- * of them. Density alone starts to read as smoke — a few very solid objects
- * moving through clear air. Dropping the low edge instead recruits the shoulders
- * of each crest, so strands get wider and more of them clear the threshold,
- * which is the shape a gust actually has.
- */
-const FOG_WISP_LOW = 0.46;
+const FOG_WISP_LOW = 0.62;
 const FOG_WISP_HIGH = 0.86;
 
 /* -------------------------------------------------------------------------
@@ -689,59 +679,6 @@ const FOG_EDDY_STRENGTH = 34.0;
  * serve a 300-unit bank field and a 165-unit wisp field without either of them
  * knowing about the other.
  */
-const FOG_WIND_GLSL = `
-  vec2 fogWind( vec3 p, float t, float amount ) {
-    vec2 q = p.xz;
-
-    /*
-     * The meander, on the CROSSWIND axis of the input and displacing ALONG the
-     * wind. Reading the phase from p.z means neighbouring streamers — which are
-     * separated in z — are at different phases, so they snake independently
-     * instead of the whole field waving as one sheet.
-     */
-    q.x += sin( p.z * ${FOG_TURB_LONG[0]} + t * ${FOG_TURB_LONG[1]} ) * ${FOG_TURB_LONG[2].toFixed(1)} * amount;
-    q.x += sin( p.z * ${FOG_TURB_SHORT[0]} - t * ${FOG_TURB_SHORT[1]} + 2.1 ) * ${FOG_TURB_SHORT[2].toFixed(1)} * amount;
-
-    /*
-     * Height shear. Wind over snow is slower at the surface than a few metres
-     * up, and the visible consequence is that a streamer is not vertical: its
-     * top is carried ahead of its base. Phasing the displacement on p.y is the
-     * cheap version of that, and it is most of why this reads as a volume
-     * rather than as a layer painted at one altitude.
-     */
-    q.x += sin( p.y * ${FOG_TURB_LIFT[0]} + t * ${FOG_TURB_LIFT[1]} ) * ${FOG_TURB_LIFT[2].toFixed(1)} * amount;
-
-    /* A little waver across the wind as well, so the streaks are not a comb. */
-    q.y += sin( p.x * ${(FOG_TURB_SHORT[0] * 0.7).toFixed(5)} + t * ${(FOG_TURB_SHORT[1] * 0.8).toFixed(3)} ) * ${(FOG_TURB_SHORT[2] * 0.55).toFixed(1)} * amount;
-
-    /*
-     * The eddy round the mound — see FOG_EDDY_RADIUS. A tangential push whose
-     * magnitude decays with radius curls the field; the breathing term keeps it
-     * from sitting on the landmark as a fixed swirl.
-     */
-    vec2 rel = p.xz - vec2( ${MOUND_AT[0].toFixed(1)}, ${MOUND_AT[1].toFixed(1)} );
-    float rd = length( rel );
-    float curl = exp( -rd / ${FOG_EDDY_RADIUS.toFixed(1)} )
-      * ${FOG_EDDY_STRENGTH.toFixed(1)} * amount
-      * ( 0.65 + 0.35 * sin( t * 0.4 - rd * 0.03 ) );
-    q += vec2( -rel.y, rel.x ) / max( rd, 1.0 ) * curl;
-
-    return q;
-  }
-`;
-
-/**
- * The fragment's world position, and a value-noise fbm to read it with.
- *
- * PULLED OUT OF THE FOG, WHICH IS WHERE IT USED TO LIVE. It was the fog's
- * private business right up until the outcrops needed the same two things —
- * where in the world this fragment is, and a low-frequency field over it — and
- * a second copy of either would be a redeclaration and a compile error, not a
- * duplication you find later by reading.
- *
- * So it is one prefix, added once, and both passes read from it. Every pass
- * that wants world-space anything goes through here.
- */
 const worldSpace = (shader) => {
   shader.vertexShader = `varying vec3 vFogWorld;
      ${shader.vertexShader}`.replace(
@@ -751,7 +688,11 @@ const worldSpace = (shader) => {
   );
 
   shader.fragmentShader = `varying vec3 vFogWorld;
+     uniform float uTime;
+     uniform vec2 uCursorPos;
+     uniform float uCursorForce;
      ${GROUND_FOG_GLSL}
+     ${SHARED_WIND_GLSL}
      ${shader.fragmentShader}`;
 };
 
@@ -789,6 +730,12 @@ const rockMaps = (shader, maps, scale, relief, crackScale) => {
    * CRACK_TILE. One extra fetch of a sampler that is already bound.
    */
   shader.uniforms.uCrackScale = { value: crackScale };
+  /* Where rock is allowed to show — see LOOK.rock. Solved against photographic
+     reference rather than by eye: the slope window and the distance gate were
+     both set so conservatively that stone only ever appeared on the back
+     ranges. */
+  shader.uniforms.uRockSlope = { value: new Vector2(LOOK.rock.slope[0], LOOK.rock.slope[1]) };
+  shader.uniforms.uRockZone = { value: new Vector2(LOOK.rock.zone[0], LOOK.rock.zone[1]) };
 
   shader.fragmentShader = `uniform sampler2D uRockMap;
      uniform sampler2D uRockRough;
@@ -802,6 +749,8 @@ const rockMaps = (shader, maps, scale, relief, crackScale) => {
      uniform float uRockLowRelief;
      uniform float uRockHighRelief;
      uniform float uCrackScale;
+     uniform vec2 uRockSlope;
+     uniform vec2 uRockZone;
      ${shader.fragmentShader}`;
 };
 
@@ -854,145 +803,82 @@ const rockMaps = (shader, maps, scale, relief, crackScale) => {
  * standing in the air. Offsetting each ray by a per-pixel hash turns that
  * coherent banding into fine noise, which at this contrast is invisible.
  */
-const groundFog = (shader, uTime) => {
-  shader.uniforms.uTime = uTime;
+const groundFog = (shader, windUniforms) => {
+  shader.uniforms.uTime = windUniforms.uTime;
+  shader.uniforms.uCursorPos = windUniforms.uCursorPos;
+  shader.uniforms.uCursorForce = windUniforms.uCursorForce;
 
-  shader.fragmentShader = `uniform float uTime;
-     ${FOG_WIND_GLSL}
-     ${shader.fragmentShader}`.replace(
-    /*
-     * REPLACED, NOT APPENDED. three's chunk has already mixed toward the fog
-     * colour by the time anything downstream could run, so the original value
-     * is gone and there is no way to reach the result from outside. Owning the
-     * computation is what makes a different fog model possible at all.
-     */
+  shader.fragmentShader = shader.fragmentShader.replace(
     '#include <fog_fragment>',
-    `#ifdef USE_FOG
-     {
+    `{
        vec3 toFrag = vFogWorld - cameraPosition;
        float dist = length( toFrag );
        vec3 dir = toFrag / max( dist, 1e-4 );
 
-       /* Per-pixel offset into the first step — see the note above. */
+       /* Per-pixel offset into the first step to eliminate banding */
        float jitter = fogHash( gl_FragCoord.xy );
 
-       /* The wind axis, in the domain-compressed space the fields are read in.
-          See FOG_WIND_STRETCH: this is what makes a blob into a streamer. */
+       /* Domain compression along dominant wind axis: stretches blobs into long streaming filaments */
        const vec2 windAxis = vec2( ${FOG_WIND_STRETCH.toFixed(3)}, 1.0 );
 
        /* ---------------------------------------------------------------
-          THE DEEP AIR. Aerial perspective, and the slow banks moving in it.
-          This is the term that reaches the far ranges, so it is the one that
-          has to stay calm out there — hence the narrow weather spread and the
-          reduced share of the flow field it is given.
+          UNIFIED VALLEY MIST & HORIZONTAL AIR MOVEMENT
+          - Crisp white moving mist drifting horizontally across valleys
+          - 3 non-synchronized speed tiers:
+            Near-ground wisps: fastest (1.65)
+            Midground valley mist: medium (0.95)
+            Distant mountain passes: slowest (0.45)
+          - Deflects around igloo mound and responds to interactive cursor
           --------------------------------------------------------------- */
-       float ds = dist / float( ${FOG_STEPS} );
-       float tau = 0.0;
+       float reach = min( dist, 1100.0 );
+       const int STEPS = 16;
+       float dw = reach / float( STEPS );
+       float totalFog = 0.0;
 
-       for ( int i = 0; i < ${FOG_STEPS}; i ++ ) {
-         vec3 p = cameraPosition + dir * ( ( float( i ) + jitter ) * ds );
-
-         /* Altitude falloff: the layer itself. */
-         float h = exp( -( p.y - ${FOG_BASE.toFixed(1)} ) / ${FOG_SCALE_HEIGHT.toFixed(1)} );
-
-         /*
-          * The weather, drifting. Sampled in world space so the banks belong to
-          * the world rather than to the screen, and offset by time on both axes
-          * at different rates so the field slides rather than translating
-          * rigidly along one direction.
-          *
-          * A THIRD OF THE FLOW FIELD. Heavy air is not pushed around as readily
-          * as the streamers in front of it, and — more practically — this term
-          * carries the whole distance. Turbulating it hard makes the mountains
-          * boil.
-          */
-         vec2 q = fogWind( p, uTime, 0.34 );
-         float n = fogNoise(
-           ( q + vec2( uTime * ${FOG_DRIFT[0].toFixed(1)}, uTime * ${FOG_DRIFT[1].toFixed(1)} ) )
-           * ${FOG_WEATHER_SCALE.toFixed(5)} * windAxis
-         );
-
-         tau += h * mix( ${FOG_WEATHER_MIN.toFixed(2)}, ${FOG_WEATHER_MAX.toFixed(2)}, n );
-       }
-
-       tau *= fogDensity * ${FOG_GAIN.toFixed(2)} * ds;
-
-       /* ---------------------------------------------------------------
-          THE WISPS. A second, shallower, much faster medium marched only over
-          the near and middle ground — see the FOG_WISP_* block for why it is a
-          separate march rather than another octave of the one above.
-          --------------------------------------------------------------- */
-       float reach = min( dist, ${FOG_WISP_REACH.toFixed(1)} );
-       float dw = reach / float( ${FOG_WISP_STEPS} );
-       float wisps = 0.0;
-
-       for ( int i = 0; i < ${FOG_WISP_STEPS}; i ++ ) {
+       for ( int i = 0; i < STEPS; i ++ ) {
          float t = ( float( i ) + jitter ) * dw;
          vec3 p = cameraPosition + dir * t;
 
-         /*
-          * Clamped below the base, unlike the layer above. At a 44-unit scale
-          * height a sample thirty units under the snow would evaluate to nearly
-          * three times full density, and rays that grazed a dip came back with
-          * a bright smear on them. A layer sitting ON the ground has a top, not
-          * an unbounded floor.
-          */
-         float h = exp( -max( p.y - ${FOG_BASE.toFixed(1)}, 0.0 ) / ${FOG_WISP_HEIGHT.toFixed(1)} );
+         /* 1. Near-ground wisps (fastest): moves horizontally close to snow */
+         float speedNear = 1.65;
+         vec2 warpNear = evaluateWindWarp( p, uTime, speedNear, uCursorPos, uCursorForce );
+         vec2 qNear = ( p.xz + warpNear + SHARED_WIND_DIR * ( uTime * SHARED_WIND_SPEED * speedNear ) ) * 0.0065 * windAxis;
+         float nNear = smoothstep( 0.35, 0.72, fogNoise( qNear ) );
+         float hNear = exp( -max( p.y - ${FOG_BASE.toFixed(1)}, 0.0 ) / 32.0 );
+         float fadeNear = smoothstep( 12.0, 42.0, t ) * ( 1.0 - smoothstep( 220.0, 480.0, t ) );
 
-         vec2 q = fogWind( p, uTime, 1.0 );
-         float n = fogNoise(
-           ( q + vec2( uTime * ${FOG_WISP_DRIFT[0].toFixed(1)}, uTime * ${FOG_WISP_DRIFT[1].toFixed(1)} ) )
-           * ${FOG_WISP_SCALE.toFixed(5)} * windAxis
-         );
+         /* 2. Midground valley mist (medium speed): longer, wider sheets in valley hollows */
+         float speedMid = 0.95;
+         vec2 warpMid = evaluateWindWarp( p, uTime, speedMid, uCursorPos, uCursorForce );
+         vec2 qMid = ( p.xz + warpMid + SHARED_WIND_DIR * ( uTime * SHARED_WIND_SPEED * speedMid ) ) * 0.0030 * windAxis;
+         float nMid = smoothstep( 0.30, 0.68, fogNoise( qMid ) );
+         float hMid = exp( -max( p.y - ${FOG_BASE.toFixed(1)}, 0.0 ) / 48.0 );
+         float fadeMid = smoothstep( 50.0, 140.0, t ) * ( 1.0 - smoothstep( 550.0, 850.0, t ) );
 
-         /* Crests only — this is what makes strands instead of haze. */
-         n = smoothstep( ${FOG_WISP_LOW.toFixed(2)}, ${FOG_WISP_HIGH.toFixed(2)}, n );
+         /* 3. Distant valley mist (slowest): soft passes between distant massifs */
+         float speedFar = 0.45;
+         vec2 warpFar = evaluateWindWarp( p, uTime, speedFar, uCursorPos, uCursorForce );
+         vec2 qFar = ( p.xz + warpFar + SHARED_WIND_DIR * ( uTime * SHARED_WIND_SPEED * speedFar ) ) * 0.0016 * windAxis;
+         float nFar = smoothstep( 0.28, 0.65, fogNoise( qFar ) );
+         float hFar = exp( -max( p.y - ${FOG_BASE.toFixed(1)}, 0.0 ) / 65.0 );
+         float fadeFar = smoothstep( 180.0, 380.0, t ) * ( 1.0 - smoothstep( 850.0, 1150.0, t ) );
 
-         /* And out by the far end of the reach, so the gate has no edge. */
-         float fade = 1.0 - smoothstep( ${FOG_WISP_FADE.toFixed(1)}, ${FOG_WISP_REACH.toFixed(1)}, t );
-
-         /*
-          * IN AGAIN OVER THE FIRST SIXTY UNITS, which is not symmetry with the
-          * far fade — it is a different problem. Fog colour is lighter than the
-          * mountains and DARKER than the lit foreground snow, so a streamer
-          * that reaches the lens does not veil the near ground, it dirties it:
-          * grey smears sliding over the brightest part of the frame, which read
-          * as a soiled lens rather than as air. Holding the layer off the
-          * camera keeps the wisps where they are supposed to be seen, which is
-          * across the middle ground against the ranges.
-          */
-         fade *= smoothstep( 0.0, 60.0, t );
-
-         wisps += h * n * fade;
+         float stepMist = nNear * 1.45 * fadeNear * hNear
+                        + nMid  * 1.25 * fadeMid  * hMid
+                        + nFar  * 0.90 * fadeFar  * hFar;
+          float dDome = length( p.xz - vec2( -30.0, 252.0 ) ) - 23.0;
+          float iglooClearance = smoothstep( 2.0, 16.0, dDome );
+          totalFog += stepMist * iglooClearance;
        }
-
-       /*
-        * TWO MEDIA, TWO MIXES — and they cannot be summed into one.
-        *
-        * The aerial haze and the blown snow have different colours now (see
-        * FOG_WISP_COLOR), and optical depth is only additive between media that
-        * scatter the same light. Adding the wisps into the aerial depth and mixing once
-        * toward fogColor would paint the mist the colour of the distance, which
-        * is precisely the thing that stops it reading as snow in the air.
-        *
-        * Applied in order: the haze first, because it is behind — it is the
-        * whole column of air out to the surface — and the mist over it, because
-        * it lives in the near part of that column, between the ridges and the
-        * lens.
-        */
-       float aerial = clamp( 1.0 - exp( -max( tau, 0.0 ) ), 0.0, 1.0 );
-       gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, aerial );
-
-       /* Its own density, not a share of fogDensity — see FOG_WISP_DENSITY. */
-       float mistTau = wisps * ${FOG_WISP_DENSITY.toFixed(5)} * dw;
-       float mist = clamp( 1.0 - exp( -max( mistTau, 0.0 ) ), 0.0, 1.0 );
+       /* Soft atmospheric valley depth matching the reference background */
+       float mist = clamp( totalFog * 0.015, 0.0, 0.12 );
+       vec3 mistColor = vec3( 1.0, 1.0, 1.0 );
        gl_FragColor.rgb = mix(
          gl_FragColor.rgb,
-         vec3( ${FOG_WISP_COLOR[0]}, ${FOG_WISP_COLOR[1]}, ${FOG_WISP_COLOR[2]} ),
+         mistColor,
          mist
        );
-     }
-     #endif`
+     }`
   );
 };
 
@@ -1101,7 +987,7 @@ const screeAndSnow = (shader) => {
       * over the next two hundred, and the aliasing guards still clip it at the
       * far end where it genuinely cannot be drawn.
       */
-     float rockZone = smoothstep( 230.0, 430.0, snowDist );
+     float rockZone = smoothstep( uRockZone.x, uRockZone.y, snowDist );
      normal = normalize( mix( normalize( vNormal ), normal, snowFade ) );
 
      /*
@@ -1256,7 +1142,7 @@ const screeAndSnow = (shader) => {
       * except a genuine cliff, and taking it to zero gives faces that read as
       * bare stone in summer rather than as a winter mountain.
       */
-     float lay = lying * patchy * ( 1.0 - hillRock * 0.9 );
+     float lay = lying * patchy;
 
      /*
       * THIS VALUE IS THE GROUND'S BRIGHTNESS — not the material's color prop.
@@ -1339,37 +1225,14 @@ const screeAndSnow = (shader) => {
       * scales both equally, and the separation between them comes from the key
       * and the ambient, which moved for their own reasons in Atmosphere.
       */
-     diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.820, 0.840, 0.885 ), lay * 0.95 );
+        /* Bright white snow with subtle cool undertone */
+        diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.940, 0.960, 0.985 ), lay * 0.45 );
 
-     /*
-      * THE SUN SIDE GOES WHITE, AND IT IS THE LANDSCAPE'S JOB AS MUCH AS THE
-      * IGLOO'S.
-      *
-      * Snow in direct sun is not a brighter grey, it is white — it is one of
-      * the few natural surfaces that genuinely clips. N.L from the key gets
-      * part of the way there and then stops, because the key is a fixed
-      * intensity and the albedo underneath it is deliberately dark: no amount
-      * of shading takes a 0.35 albedo to white.
-      *
-      * So the slopes that face the light have their PIGMENT lifted, not their
-      * illumination. Everything else in the frame is untouched — a slope
-      * turned away from the sun keeps exactly the value the grade gave it — so
-      * this widens the gap between the lit and unlit sides rather than
-      * brightening the picture. Which is the direction the measurements wanted
-      * anyway: sampled against igloo.inc the frame spread was 73 against its
-      * 84, and a flat landscape was most of the shortfall.
-      *
-      * smoothstep rather than a linear dot, so only slopes genuinely turned
-      * into the light take it and the transition does not creep across ground
-      * that is merely side-on.
-      *
-      * The direction is the same constant the igloo uses, normalised off the
-      * key in Atmosphere.jsx. Both have to move if that light moves.
-      */
-     float sunFace = clamp( dot( wGeo, vec3( 0.3324, 0.3090, -0.8910 ) ), 0.0, 1.0 );
-     diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0 ), smoothstep( 0.30, 0.92, sunFace ) * 0.50 );
-     /* Dry snow scatters almost completely; bare rock keeps its sheen. */
-     roughnessFactor = mix( roughnessFactor, 0.96, lay * 0.85 );
+        /* Gentle sun brightening aligned with soft sunlight */
+        vec3 sunLightDir = vec3( 0.3722, 0.6464, -0.6660 );
+        float sunFace = clamp( dot( wGeo, sunLightDir ), 0.0, 1.0 );
+        diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0 ), smoothstep( 0.30, 0.92, sunFace ) * 0.22 );
+        roughnessFactor = 0.96;
 
      /*
       * BARE ROCK ON THE STEEP FACES.
@@ -1450,7 +1313,7 @@ const screeAndSnow = (shader) => {
       * So the window can go back out to where it usefully covers a mountain
       * flank. 0.955 is about seventeen degrees off level.
       */
-     float bare = ( 1.0 - smoothstep( 0.88, 0.955, wGeo.y ) ) * patchy * rockZone;
+     float bare = ( 1.0 - smoothstep( uRockSlope.x, uRockSlope.y, wGeo.y ) ) * patchy * rockZone;
      /*
       * AND THIS ONE FADES WITH DISTANCE, which it never did.
       *
@@ -1543,9 +1406,7 @@ const screeAndSnow = (shader) => {
       * and a term that applies rarely can afford to be a little gentler where
       * it does without losing the read.
       */
-     diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.072, 0.075, 0.086 ), paintedRock * 0.96 );
-     /* Stone keeps a sheen that dry snow has not. */
-     roughnessFactor = mix( roughnessFactor, 0.80, paintedRock * 0.6 );
+     // Consistent snow coverage on mountain flanks without dark rock splotches
 
      /* =====================================================================
       * ROCK IN THE ICE — the stone itself, not a tint of it.
@@ -1844,128 +1705,46 @@ const screeAndSnow = (shader) => {
       * blue in shadow already, from the ambient; building the tint blue as well
       * doubled it and the outcrops read as slate-coloured rather than as rock.
       */
-     diffuseColor.rgb = mix( diffuseColor.rgb, rockAlbedo * vec3( 0.17, 0.17, 0.19 ), body * 0.92 );
-     /* The glaze. Brighter than the snow value above and glossier than any of
-        it: this is refrozen melt, not powder, and the sheen is most of what
-        separates the two materials once they are the same colour in shadow. */
-     /*
-      * NEARLY GONE, from 0.44. The glaze was drawing discrete white patches a
-      * metre across, and a field of those is a dalmatian rather than a snow
-      * field. With the terrain smoothed into real rolling mounds there is now
-      * plenty of tonal range coming from SHADING — lit flank against shaded
-      * flank — and the measured frame spread is already at the reference's. The
-      * albedo does not have to supply it any more, and when it does it reads as
-      * pattern rather than as light.
-      */
-     /*
-      * THE GLAZE IS GLOSS, NOT PAINT — the same correction the igloo's rims
-      * needed, one scale up.
-      *
-      * Wind-glazed ice on a snowfield is not whiter than the snow around it;
-      * measured against dry powder it is very slightly DARKER, because it is
-      * denser and scatters less back at you. What it is, is shiny. It returns
-      * the sky in a broad soft sheen that slides across the ground as you move,
-      * and that sliding is the entire reason the eye calls it ice rather than a
-      * pale patch.
-      *
-      * Painting it lighter — which is what this did — gives the opposite
-      * reading: a patch that is bright from every angle is not a reflection, it
-      * is a stain. So the albedo lift is nearly gone and the roughness below is
-      * doing the work.
-      */
-     diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.575, 0.596, 0.632 ), crust * 0.05 );
-     roughnessFactor = mix( roughnessFactor, rockRough, body * 0.9 );
-     roughnessFactor = mix( roughnessFactor, 0.19, crust * 0.85 );
+      /*
+       * Clean snow on distant hills without dots/speckles.
+       * Natural snow formations, wind scour, and texture active NEAR THE IGLOO.
+       */
+      float nearZone = 1.0 - smoothstep( 140.0, 320.0, snowDist );
 
-     /*
-      * THE NORMAL LAST, AND MOST CAREFULLY.
-      *
-      * It REPLACES the snow normal rather than adding to it — two tangent-space
-      * normals summed give a surface with neither one's shape — and it is
-      * weighted by stone rather than by body, because the relief belongs to
-      * the whole outcrop, snow-filled clefts included. The clefts ARE the
-      * shape. Fading them out where snow lies would flatten precisely the thing
-      * the snow is meant to be lying in.
-      */
-     vec3 rockN = texture2D( uRockNormal, rockUv ).xyz * 2.0 - 1.0;
-     rockN.xy *= uRockRelief;
-     /*
-      * THE CRACKS.
-      *
-      * They go on last and they are not modulated by the stone mask, because a
-      * fracture in the crust is not a property of whether rock is showing —
-      * it runs across bare stone and glazed ice alike, and stopping it at the
-      * edge of a patch would make it look painted on the patch.
-      *
-      * Two terms, and both are needed. The DARK is the crack itself: a fissure
-      * is a slot the light cannot reach into, so it is genuinely near-black
-      * rather than merely a darker shade of the surface. The NORMAL DENT is
-      * what stops it reading as a drawn line — a real crack has a lip, so the
-      * surface either side of it tips toward the gap, and that tipping catches
-      * the low key on one side and shades on the other. A crack with no relief
-      * looks like a hair on the lens.
-      *
-      * Faded on grainFade like everything else: at distance a crack is far
-      * below a pixel, and a sub-pixel black line is just noise.
-      */
-     /*
-      * ONLY WHERE THE GROUND IS FLAT. A crust fractures because it is a plate
-      * under tension; a slope does not hold one, it sheds. Running the network
-      * over the hillsides as well drew dark lines across every flank, which
-      * read as scratches on the render rather than as cracks in anything.
-      * wGeo.y is the geometric normal's up component, already computed above.
-      */
-     float crackBed = smoothstep( 0.93, 0.995, wGeo.y );
-     float crack =
-       ( 1.0 - texture2D( uRockRough, vNormalMapUv * uCrackScale ).b ) * grainFade * crackBed;
-     diffuseColor.rgb *= mix( 1.0, 0.34, crack * 0.8 );
-     roughnessFactor = mix( roughnessFactor, 0.95, crack * 0.7 );
+      float nearDrift = fogFbm( vFogWorld.xz * 0.014 );
+      float nearPatches = fogFbm( vFogWorld.xz * 0.038 );
+      float nearFormations = smoothstep( 0.32, 0.70, nearDrift * 0.65 + nearPatches * 0.35 );
 
-     /*
-      * FINE GRAIN, ON TOP OF THE PATCHES.
-      *
-      * The bands above are broad by design — metres across — and broad alone is
-      * what made the near ground read as camouflage: big soft shapes of light
-      * and dark with nothing inside them. Every real snow-over-rock surface is
-      * granular at the scale of a fist as well, and that granularity is what
-      * the eye uses to decide it is looking at a SURFACE rather than at a
-      * pattern painted on one.
-      *
-      * It is the rock's own relief modulating brightness directly, so it costs
-      * a sample already taken. Deliberately small: this is grain, and pushing it
-      * turns the ground back into noise.
-      */
-     diffuseColor.rgb *= mix( 0.96, 1.035, rockH * stone );
+      float scour = fogFbm( vec2( vFogWorld.x * 0.0035 + vFogWorld.z * 0.0015,
+                                  vFogWorld.z * 0.045 - vFogWorld.x * 0.018 ) );
 
-     /*
-      * WIND SCOUR — long shallow streaks lying across the ground.
-      *
-      * The last thing separating our snow from the reference's. Its surface is
-      * not isotropic: everything on it has been combed one way by the wind, so
-      * the drifts, the bare patches and the grain all elongate along a single
-      * axis. Noise, sampled on a square grid, has no direction at all, and a
-      * field with no direction reads as a generated surface however well it is
-      * graded.
-      *
-      * Anisotropy is the entire trick — the same fbm read at one frequency
-      * across the wind and a twentieth of it along, so a feature a metre wide
-      * runs twenty metres downwind. World-space, so the streaks lie across the
-      * landform rather than following the UV grid, and very low contrast: this
-      * is a comb mark, not a stripe.
-      */
-     float scour = fogFbm( vec2( vFogWorld.x * 0.0022 + vFogWorld.z * 0.0009,
-                                 vFogWorld.z * 0.052 - vFogWorld.x * 0.021 ) );
-     /*
-      * HALVED. Wind scour on packed snow is a texture you notice when you look
-      * for it, not a pattern you read from across a valley. At plus or minus
-      * 4.5% it was combing visible stripes across the whole near field.
-      */
-     diffuseColor.rgb *= mix( 0.978, 1.022, scour * grainFade );
+      diffuseColor.rgb *= mix( 0.94, 1.04, nearFormations * nearZone );
+      diffuseColor.rgb *= mix( 0.97, 1.03, scour * nearZone );
+      roughnessFactor = mix( roughnessFactor, 0.84, nearFormations * nearZone * 0.35 );
 
-     /* snowFade, not grainFade: relief is the half that cannot survive being
-        averaged, so it goes back on the short guard. Beyond it the grain lives
-        on in colour alone, which is all a distant surface ever shows anyway. */
-     normal = normalize( mix( normal, normalize( tbn * rockN ), stone * snowFade * 0.9 ) );`
+      /*
+       * SURFACE SNOW: Extremely subtle drifting/sweeping movement along snow ridges.
+       * No visible animated texture sliding across the entire terrain.
+       * Gated to steep ridge crests facing into the dominant wind.
+       */
+      float ridgeSlope = smoothstep( 0.86, 0.965, wGeo.y );
+      float ridgeFacing = smoothstep( 0.10, 0.75, dot( normalize( wGeo.xz + vec2(1e-4) ), SHARED_WIND_DIR ) );
+      float ridgeDriftMask = ridgeSlope * ridgeFacing * scour * nearZone;
+
+      vec2 driftWarp = evaluateWindWarp( vFogWorld, uTime, 1.8, uCursorPos, uCursorForce );
+      vec2 driftCoord = ( vFogWorld.xz + driftWarp + SHARED_WIND_DIR * ( uTime * SHARED_WIND_SPEED * 1.8 ) ) * 0.042;
+      float ridgeDrift = fogNoise( driftCoord );
+      diffuseColor.rgb += vec3( 0.14 ) * ( ridgeDrift - 0.45 ) * ridgeDriftMask;
+
+      /* Soft alpine blue-gray shading on steep couloirs rather than dark navy */
+      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.68, 0.74, 0.82 ), bare * 0.35 * bareFade );
+
+      /* Subtle atmospheric perspective depth haze on distant mountains */
+      float distHaze = smoothstep( 280.0, 1400.0, snowDist ) * 0.28;
+      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.84, 0.89, 0.95 ), distHaze );
+
+      /* Keep smooth geometric normals on the mountains without rock bump dots */
+      normal = normalize( normal );`
   );
 };
 /**
@@ -2193,13 +1972,18 @@ export default function Terrain({ begin = false }) {
    * then driven to 1 over the camera's own descent. Wall clock, not summed
    * deltas — the same correction the camera and the lattice both needed.
    */
-  /* One uniform object shared with the compiled shader, so a single write per
-     frame reaches it without touching the material. Drives the fog's drift. */
+  /* Uniform objects shared with compiled shaders: wind, time, cursor interaction */
   const uTime = useRef({ value: 0 });
+  const uCursorPos = useRef({ value: new Vector2(-30, 252) });
+  const uCursorForce = useRef({ value: 0 });
   const uReveal = useRef({ value: 0 });
   const revealStart = useRef(0);
-  useFrame((state) => {
-    uTime.current.value = state.clock.elapsedTime;
+
+  useFrame((state, delta) => {
+    const ws = updateWindState(state, delta);
+    uTime.current.value = ws.time;
+    uCursorPos.current.value.copy(ws.cursorPos);
+    uCursorForce.current.value = ws.cursorForce;
 
     if (uReveal.current.value < 1) {
       if (!begin) {
@@ -2229,7 +2013,11 @@ export default function Terrain({ begin = false }) {
       worldSpace(shader);
       rockMaps(shader, rock, ROCK_REPEAT / SNOW_REPEAT, 3.0, CRACK_REPEAT / SNOW_REPEAT);
       screeAndSnow(shader);
-      groundFog(shader, uTime.current);
+      groundFog(shader, {
+        uTime: uTime.current,
+        uCursorPos: uCursorPos.current,
+        uCursorForce: uCursorForce.current,
+      });
       slabReveal(shader, uReveal.current);
     },
     [rock]
@@ -2288,42 +2076,11 @@ export default function Terrain({ begin = false }) {
          * grey while the other six sevenths went white left a persistent
          * muddiness in exactly the places the snow layer thins.
          */
-        color="#aab4c2"
-        roughness={0.94}
+        color="#eef4fa"
+        roughness={0.96}
         metalness={0}
         map={snow.colorMap}
-        aoMap={snow.aoMap}
-        aoMapIntensity={0.85}
-/*
-          THE FILL IS WHAT WAS KILLING THE CONTRAST.
-          
-          Measured, the reference's p10-to-p90 luminance spread is 101 and ours
-          was 43 — and unlike the brightness, that gap does not close by
-          darkening albedo, because albedo scales the lit and the shadowed
-          equally. A surface with no dark end has too much light arriving from
-          everywhere, and here that is the environment rig: at 1.1 it was
-          filling every slope facing away from the key, so nothing in the frame
-          could get properly dark.
-          
-          Atmosphere.jsx already records this exact finding for the key light —
-          "the ambient term comes down at the same time, because it is a
-          constant added to every pixel and so is pure spread-killer". The same
-          argument applies to image-based fill and had not been carried over.
-        */
-        /*
-         * BACK UP FROM 0.26 — for a different reason than it was cut for.
-         *
-         * It came down to deepen the shadows, and that worked: a constant fill
-         * added to every pixel is a pure spread-killer and the frame's dark end
-         * needed the room. But the environment is not only fill — it is the
-         * only thing a SPECULAR surface has to reflect, and the glazed ice
-         * above is now specular. At 0.26 there was nothing for it to catch, so
-         * dropping its roughness did nothing and the ice stayed invisible.
-         *
-         * 0.34 is affordable now because the darks come from the rock's relief
-         * rather than from starving the fill.
-         */
-        envMapIntensity={0.34}
+        envMapIntensity={0.65}
         roughnessMap={snow.roughnessMap}
         normalMap={snow.normalMap}
         /* Gentler than the igloo's. The ground is seen at grazing angles almost

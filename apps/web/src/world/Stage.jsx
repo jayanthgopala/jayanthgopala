@@ -4,8 +4,6 @@ import { AdaptiveEvents, Preload } from '@react-three/drei';
 import Atmosphere from './environment/Atmosphere.jsx';
 import Sky from './environment/Sky.jsx';
 import Clouds from './environment/Clouds.jsx';
-import AirFilaments from './environment/AirFilaments.jsx';
-import WindField from './environment/WindField.jsx';
 import Terrain from './environment/Terrain.jsx';
 import Scree from './environment/Scree.jsx';
 import Weather from './environment/Weather.jsx';
@@ -312,14 +310,7 @@ export default function Stage({ onIglooReady, begin = false }) {
           {/* The moving deck, over the gradient Sky paints. See Clouds.jsx for
               why the cloud in the sky texture is switched off and this draws it
               instead. */}
-          {/* Advances the one wind field and projects the pointer into it.
-              Renders nothing; everything else only reads. See lib/wind-field.js. */}
-          <WindField />
           <Clouds />
-          {/* Hair-thin blown-snow strands. See AirFilaments.jsx for why the
-              ridge-of-warped-noise primitive is the only one of the five tried
-              that can produce a line rather than a patch. */}
-          <AirFilaments />
           {/* begin drives the opening slab: the ground starts as a block and
               uncovers the land and hills as the camera comes down. */}
           <Terrain begin={begin} />
@@ -356,7 +347,7 @@ export default function Stage({ onIglooReady, begin = false }) {
             structures/Igloo.jsx is left in the tree. It is the procedural
             version this replaces and it still builds; nothing imports it.
           */}
-          <IglooBlocks at={[-30, 252]} onReady={onIglooReady} />
+          <IglooBlocks at={[-30, 252]} tint="#c2d6ea" onReady={onIglooReady} />
 
           <Preload all />
         </Suspense>

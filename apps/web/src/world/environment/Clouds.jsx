@@ -1,6 +1,6 @@
 import { useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { BackSide, Color, ShaderMaterial, SphereGeometry } from 'three';
+import { BackSide, Color, ShaderMaterial, SphereGeometry, Vector3 } from 'three';
 import { LOOK } from '../lib/lighting.js';
 
 /**
@@ -58,6 +58,7 @@ const CLOUD_SHADER = /* glsl */ `
   uniform float uSoftness;
   uniform float uOpacity;
   uniform float uHorizonFade;
+  uniform vec3 uSunDir;
 
   float hash( vec2 p ) {
     return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 );
@@ -74,17 +75,12 @@ const CLOUD_SHADER = /* glsl */ `
     );
   }
 
-  /* Four octaves, normalised so the result genuinely spans 0..1 — without the
-     divide the field sits around 0.47 and every coverage threshold written for
-     a 0..1 signal lands in the wrong place. Same correction, and the same
-     reason, as the ground fog's fbm in Terrain.jsx. */
+  /* Four octaves, normalised so the result genuinely spans 0..1 */
   float fbm( vec2 p ) {
     float v = 0.0;
     float a = 0.5;
     for ( int i = 0; i < 4; i ++ ) {
       v += a * vnoise( p );
-      /* Not exactly 2, so the octaves never line their grids up and the lattice
-         the value noise is built on stays invisible. */
       p *= 2.03;
       a *= 0.5;
     }
@@ -94,58 +90,28 @@ const CLOUD_SHADER = /* glsl */ `
   void main() {
     vec3 d = normalize( vDir );
 
-    /*
-     * Everything below the horizon is discarded rather than faded. The dome is a
-     * full sphere because that is the cheapest geometry to be inside of, but
-     * there is no cloud under the ground and drawing any would put a band of it
-     * behind the terrain, where the fog would then have to remove it again.
-     */
     if ( d.y <= 0.0 ) discard;
 
-    /* The clamp is what stops the projection going to infinity at the skyline.
-       It also fixes the finest feature size the field can reach, which is what
-       keeps the horizon from aliasing into noise. */
     vec2 p = d.xz / max( d.y, 0.06 );
 
-    /*
-     * THREE LAYERS AT THREE SPEEDS, WHICH IS THE WHOLE TRICK.
-     *
-     * One scrolling field reads as a texture being dragged across the sky: every
-     * feature moves the same way at the same rate, which nothing in the
-     * atmosphere does. Three fields at different scales moving at different
-     * speeds shear against each other continuously, so the SHAPES change as well
-     * as their positions — and shapes changing is the difference between weather
-     * and moving wallpaper.
-     *
-     * The directions differ as well as the rates. A common prevailing drift with
-     * a cross-component per layer is what real decks do, and it means the
-     * interference pattern never repeats.
-     */
     float f = 0.0;
     f += 0.50 * fbm( p * uScale.x + uTime * uSpeed.x * vec2( 1.00,  0.22 ) );
     f += 0.32 * fbm( p * uScale.y + uTime * uSpeed.y * vec2( 0.88, -0.30 ) );
     f += 0.18 * fbm( p * uScale.z + uTime * uSpeed.z * vec2( 0.60,  0.50 ) );
 
-    /*
-     * COVERAGE AND SOFTNESS. The threshold decides how much sky is cloud; the
-     * width of the ramp around it decides what KIND of cloud. A narrow ramp
-     * gives hard-edged cumulus in clear air; a wide one gives an overcast deck
-     * with no edges anywhere, which is the weather this look is after.
-     */
     float a = smoothstep( uCoverage - uSoftness * 0.5, uCoverage + uSoftness * 0.5, f );
 
-    /* Denser is brighter: the thick parts of a deck are what the light is
-       reaching first. Using the raw field rather than the alpha keeps some
-       shading inside a cloud instead of a flat fill at full opacity. */
-    vec3 col = mix( uShade, uLit, smoothstep( uCoverage, 1.0, f ) );
+    vec3 col = mix( uShade, uLit, smoothstep( uCoverage * 0.85, 0.82, f ) );
 
-    /*
-     * FADED OUT ALONG THE SKYLINE. Not because there is no cloud there — there
-     * is more of it than anywhere — but because the terrain's own aerial haze
-     * already owns that band of the frame, and two systems drawing the same
-     * white in the same place is how a seam appears. This hands the horizon to
-     * the fog and keeps the dome above it.
-     */
+    float sunDot = max( 0.0, dot( d, uSunDir ) );
+    float sunAura = pow( sunDot, 12.0 );
+    float sunCore = pow( sunDot, 46.0 );
+    vec3 sunRimCol = vec3( 1.0, 0.97, 0.90 );
+    col = mix( col, sunRimCol, ( sunAura * 0.40 + sunCore * 0.25 ) * ( 1.0 - a * 0.40 ) );
+
+    /* Cloud gently veils the sun so it is a soft atmospheric glow */
+    a *= mix( 1.0, 0.55, sunCore );
+
     a *= smoothstep( 0.0, uHorizonFade, d.y );
 
     gl_FragColor = vec4( col, a * uOpacity );
@@ -174,6 +140,15 @@ export default function Clouds() {
   const material = useMemo(() => {
     const lit = new Color(`rgb(${C.lit.join(',')})`);
     const shade = new Color(`rgb(${C.shade.join(',')})`);
+    const sunPos = LOOK.sun || [0.235, 0.88];
+    const sunAngle = (sunPos[0] - 0.5) * 2 * Math.PI;
+    const sunElev = (1 - sunPos[1]) * (Math.PI / 2);
+    const sunDir = new Vector3(
+      Math.cos(sunElev) * Math.cos(sunAngle),
+      Math.sin(sunElev),
+      Math.cos(sunElev) * Math.sin(sunAngle)
+    ).normalize();
+
     return new ShaderMaterial({
       vertexShader: CLOUD_VERT,
       fragmentShader: CLOUD_SHADER,
@@ -181,12 +156,13 @@ export default function Clouds() {
         uTime: { value: 0 },
         uLit: { value: lit },
         uShade: { value: shade },
-        uScale: { value: { x: C.scale[0], y: C.scale[1], z: C.scale[2] } },
-        uSpeed: { value: { x: C.speed[0], y: C.speed[1], z: C.speed[2] } },
+        uScale: { value: new Vector3(C.scale[0], C.scale[1], C.scale[2]) },
+        uSpeed: { value: new Vector3(C.speed[0], C.speed[1], C.speed[2]) },
         uCoverage: { value: C.coverage },
         uSoftness: { value: C.softness },
         uOpacity: { value: C.opacity },
         uHorizonFade: { value: C.horizonFade },
+        uSunDir: { value: sunDir },
       },
       /* Seen from the inside. */
       side: BackSide,

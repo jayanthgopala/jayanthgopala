@@ -63,10 +63,11 @@ export const BRIGHT = {
    * ramp is about thirty luminance points.
    */
   sky: {
-    zenith: [0xbe, 0xd2, 0xe2],
-    azure: [0xd8, 0xe4, 0xed],
-    haze: [0xf1, 0xf5, 0xf8],
+    zenith: [0x52, 0x64, 0x7a],
+    azure: [0x74, 0x86, 0x9a],
+    haze: [0x9e, 0xae, 0xbe],
   },
+  sun: [0.235, 0.88],
 
   /*
    * THE AURORA, SWITCHED OFF.
@@ -131,44 +132,17 @@ export const BRIGHT = {
    * which is a different weather from the one in the reference.
    */
   clouds: {
-    /*
-     * LIT TOP AND SHADED UNDERSIDE — AND THE SHADE HAS TO BE GENUINELY DARKER
-     * THAN THE SKY, WHICH IS NOT OBVIOUS IN THIS LOOK.
-     *
-     * The first pass had both of these within a few points of paper, on the
-     * correct-sounding reasoning that cloud in a white-out is white. It is, and
-     * the result was a deck that compiled, animated, and could not be seen at
-     * all: the sky's horizon stop is 0xf1f5f8 and the clouds were 0xffffff, so
-     * the whole layer was three points of luminance against its background.
-     *
-     * The reference resolves this the way a photograph does. Its cloud is not
-     * brighter than its sky, it is DARKER — a grey-blue mass with the sky
-     * showing through the gaps — because an overcast deck is lit from above and
-     * seen from below. So the shade end carries the contrast and the lit end
-     * only just reaches the sky's own value.
-     */
-    lit: [0xfa, 0xfc, 0xff],
-    shade: [0xa6, 0xbb, 0xd0],
-    coverage: 0.42,
-    softness: 0.38,
+    lit: [0xdc, 0xe6, 0xf0],
+    shade: [0x64, 0x74, 0x86],
+    coverage: 0.52,
+    softness: 0.22,
     /** Overall alpha ceiling, so the dome never fully hides the ramp behind it. */
-    opacity: 0.85,
-    /*
-     * SPEED AND SCALE ARE IN SKY-PLANE UNITS, which is the space Clouds.jsx
-     * samples in — one unit is one cloud-deck height, so at the 15 degrees of
-     * sky this shot contains the visible strip runs from about p=4 to p=17.
-     *
-     * `scale` is therefore a FREQUENCY: 0.35 puts roughly four features across
-     * that strip, and the finer layers break those up rather than replacing
-     * them. `speed` is units per second — 0.055 moves a feature its own width in
-     * about a minute, which reads as still until you look away and back. Cloud
-     * you can watch move is cloud in a timelapse.
-     */
-    speed: [0.055, 0.038, 0.022],
-    scale: [0.35, 0.78, 1.6],
+    opacity: 0.95,
+    speed: [0.18, 0.11, 0.06],
+    scale: [0.45, 0.95, 2.0],
     /** Below this height above the horizon the dome fades out, so it never
         crosses the skyline and fights the terrain's own haze. */
-    horizonFade: 0.06,
+    horizonFade: 0.04,
   },
 
   /*
@@ -180,7 +154,7 @@ export const BRIGHT = {
    * white sky several times, which is precisely why there are no shadows in the
    * reference and why the modelling is so soft.
    */
-  env: { ground: [0xe6, 0xec, 0xf2] },
+  env: { ground: [0xd8, 0xe2, 0xec], sunU: 0.235, sunV: 0.44 },
 
   /*
    * DISTANCE HAZE, AND THIS IS THE TERM THAT MAKES THE PICTURE.
@@ -210,130 +184,69 @@ export const BRIGHT = {
    * Depth in a still image is not geometry. The perspective was already
    * correct and it did nothing on its own. Depth is CONTRAST LOST TO DISTANCE,
    * and haze is the only term in this scene that produces it.
-   *
-   * 0.00058 rather than the 0.00115 the white-out used. That value was chosen
-   * to dissolve the mountains entirely, which is a different picture; this is
-   * enough to separate the planes and leave the ranges legible.
    */
-  fog: { color: '#f0f4f7', density: 0.0 },
+  fog: { color: '#dde6ef', density: 0.0 },
 
   /*
-   * WIND-BLOWN FILAMENTS. See environment/AirFilaments.jsx.
+   * NO VISIBLE AIR EFFECT, AND THIS IS THE RECORD OF SIX ATTEMPTS AT ONE.
    *
-   * The close reference is hair-thin white strands that braid, split and rejoin,
-   * with no containing shape anywhere. Two settings carry that and the rest are
-   * placement:
+   * In order: a rising plume, drifting banks, breeze streaks, flow ribbons of
+   * light, hair-thin braided filaments, and those filaments retuned to a few
+   * wide soft wisps. Every one was rejected, and the last of them read as smoke
+   * — which after all that work is the honest verdict on the whole approach.
    *
-   *   `sharp` is the LINE WIDTH. It is the exponent the noise ridge is raised
-   *   to, so it narrows the crest rather than thresholding an area — 34 to 52
-   *   gives strands a pixel or two wide at this scale, and no value of it can
-   *   widen them into patches, because a ridge has no area to begin with.
+   * WHAT THEY ALL SHARED is that they DREW something. Whatever the primitive —
+   * noise, ridges, gaussian strands, swept arcs — each put a new object in front
+   * of the landscape and asked it to look like air. A drawn thing has a form,
+   * and any form in this frame reads as a graphic laid over the picture, because
+   * the eye has a snowfield and a mountain range to compare it against and it
+   * matches neither.
    *
-   *   `warp` is the BRAID. It is how far the sample position is displaced by a
-   *   second, lower-frequency noise before the field is read, which bends
-   *   neighbouring filaments along a shared flow so they converge and separate.
-   *   At zero they are parallel, which is a comb; too high and they knot.
+   * The air that remains is the one that is not drawn at all: the raymarched
+   * ground haze in Terrain.jsx (see `mist` below). It is not an object in front
+   * of the scene — it is a property OF the scene, accumulated along the view ray
+   * through the terrain's own depth, so it has no shape to be wrong.
    *
-   * `stretch` below 1 compresses the vertical sample so features run further
-   * across the frame than up it — filaments lie ALONG the flow.
-   *
-   * PLACEMENT hugs the ground around the igloo: y 24..64 against a crown at 56
-   * and ground near 23, z 140..340 bracketing the structure at 252.
+   * If a visible effect is ever wanted again, the lesson is written above: it
+   * must come out of the terrain's own shading rather than being placed in front
+   * of it.
    */
-  filaments: {
-    /*
-     * A FEW WIDE WISPS WITH LARGE GAPS. Three, not six — the brief is "a few",
-     * and every extra sheet closes the gaps that make the rest read as separate
-     * currents rather than as cover.
-     */
-    count: 3,
-    /*
-     * HUGGING THE SNOW. y 22..44 against ground near 23 and the igloo's crown at
-     * 56, so the wisps lie ON the surface and never rise past the structure or
-     * reach the mountains. Wide and shallow: 560-980 long against 46-78 tall.
-     */
-    band: { x: [-360, 300], y: [22, 44], z: [130, 350] },
-    size: [560, 980],
-    height: [46, 78],
-    color: [1.0, 1.0, 1.0],
-    /*
-     * TRANSLUCENT. 0.16 — at this level a wisp lightens the snow by a few
-     * points and nothing behind it is ever hidden, which is the requirement
-     * that everything stays completely visible.
-     */
-    opacity: 0.16,
-    /*
-     * SOFTER THAN THE THIN-LINE PASS. 70-130 gave crisp hairs; the brief wants
-     * soft, so the ridge is left a little broader and the opacity carries the
-     * subtlety instead. Sharpness makes a line visible, opacity makes it quiet,
-     * and using the first for both gives hard bright threads.
-     */
-    sharp: [40, 72],
-    /*
-     * THE WARP IS WHAT MADE RINGS, AND IT IS DOWN FROM 0.62.
-     *
-     * Domain warping bends a ridge along a flow, which is what makes filaments
-     * braid — but past a certain displacement the bend closes on itself and the
-     * ridge becomes a LOOP. That is exactly the ring artefact: not a separate
-     * effect that appeared, just the braid pushed far enough to bite its own
-     * tail. At 0.15 the strands still curve and converge and can no longer
-     * close.
-     */
-    warp: 0.15,
-    /*
-     * FEWER, WIDER FEATURES so the gaps between wisps are large. Down from 12:
-     * more cycles across a sheet means more strands packed together, which is
-     * cover rather than a few separate currents.
-     */
-    scale: 5.0,
-    /*
-     * HARD HORIZONTAL STRETCH. 0.10 compresses the vertical sample tenfold, so a
-     * feature runs ten times further across the terrain than up it. With the low
-     * warp above this is what makes them lie flat along the landscape and curve
-     * gently rather than wander.
-     */
-    stretch: 0.10,
-    speed: [0.010, 0.022],
-    drift: [0.3, 1.0],
-  },
+
+  /*
+   * WHERE ROCK SHOWS THROUGH THE SNOW.
+   *
+   * Solved against two photographs of Icelandic ranges rather than by eye. What
+   * those have that this scene did not is not MORE rock — it is rock in the
+   * right places: snow lodging in the gullies and on the lee faces, stone
+   * standing out on the ribs and the steep edges, in strong near-vertical
+   * striations that follow the mountain's own structure.
+   *
+   * The shader already builds exactly that. `bare` is a slope term multiplied by
+   * a relief term, which is the correct construction — steep AND convex is where
+   * snow cannot hold. Two gates were simply set too conservatively:
+   *
+   *   `slope` is the window, in the surface normal's Y. At 0.88..0.955 only
+   *   ground steeper than about seventeen degrees qualified, which on these
+   *   landforms is the cliffs and nothing else. 0.80..0.94 opens it to the
+   *   flanks, which is where the reference has most of its stone.
+   *
+   *   `zone` is the distance gate. Rock began fading in at 230 units and only
+   *   reached strength at 430, so the entire mid-ground was unbroken white and
+   *   the striation only ever appeared on the back ranges. 150..320 brings it
+   *   onto the hills behind the igloo, where the eye actually reads texture.
+   *
+   * THE NEAR FIELD IS STILL EXCLUDED, and deliberately. Terrain.jsx carries a
+   * long argument — had and reversed twice — about a rock floor turning the
+   * foreground into a gravel pit. That reasoning is about the drift under the
+   * igloo, which is wind-packed snow and has no stone in it at any distance.
+   * Nothing here reaches inside 150 units.
+   */
+  rock: { slope: [0.80, 0.94], zone: [150, 320] },
 
   /** A floor so crevices are not pure black. The IBL does the real work. */
-  ambient: { color: '#c6d8e6', intensity: 0.07 },
-
-  /*
-   * THE SKY AS THE LIGHT, WHICH UNDER OVERCAST IS LITERALLY WHAT IT IS.
-   *
-   * Weighted by the surface normal's Y, so it lands on ground facing up and
-   * barely touches a face turned away. Up from the daylight 0.40 to 0.78, with
-   * the key coming down to meet it — which is the correct description of cloud
-   * cover: the source has been spread across the whole dome, so more light
-   * arrives from everywhere and less from any one place.
-   *
-   * The sky term stays a real blue even though the sky is nearly white. This is
-   * the one saturated colour in the set and it does all the modelling: the pale
-   * blue in the gullies of the reference is snow lit ONLY by sky, and if this
-   * were neutral the mountain would come out as flat grey shading and the
-   * picture would die.
-   */
-  hemi: { sky: '#a8c8e0', ground: '#e4ebf2', intensity: 0.78 },
-
-  /*
-   * THE SUN, BEHIND CLOUD.
-   *
-   * DIRECTION IS DELIBERATELY UNTOUCHED. The note in Atmosphere.jsx records the
-   * elevation being solved — a 30-degree key gives a p10-to-p90 spread of 48
-   * across the snow where a high one gives 8, because a light landing at a
-   * similar angle everywhere returns a similar value everywhere. Some of that
-   * still matters: even under cloud there is a direction the light is stronger
-   * from, and it is what keeps the drifts from going completely flat.
-   *
-   * Down hard from 11.8, and NEUTRAL rather than warm. There is not one warm
-   * pixel in the reference. The daylight key was #fff6ec with a long note about
-   * keeping warmth as a bias rather than a tint; under cloud even that bias is
-   * wrong, because cloud scatters the short wavelengths back in and what comes
-   * through is if anything cooler than direct sun, not warmer.
-   */
-  key: { position: [101, 111, -272], color: '#f4f8fc', intensity: 4.2 },
+  ambient: { color: '#c4d6e8', intensity: 0.26 },
+  hemi: { sky: '#d6e6f6', ground: '#f0f5fa', intensity: 0.85 },
+  key: { position: [95, 165, -170], color: '#fff6ed', intensity: 4.2 },
 
   /*
    * ALPENGLOW, SWITCHED OFF — same treatment as the aurora and the same reason.
@@ -382,74 +295,13 @@ export const BRIGHT = {
    * layer instead of climbing to the igloo's crown at 56. It should read as the
    * air being slightly thick near the snow, and never as weather.
    */
-  mist: { color: [0.97, 0.98, 1.0], density: 0.0011, height: 52, base: 14, gain: 0.30 },
-
-  /*
-   * THE LANTERN — AND IT IS THE ONE WARM THING IN THE WORLD.
-   *
-   * THIS IS THE SIGNATURE COLOUR, and it is the only saturated hue anywhere in
-   * this file. Everything outside is white, grey and cold blue; everything
-   * escaping the igloo is amber. That single opposition does more emotional work
-   * than any amount of atmosphere, because it is not a colour scheme — it is a
-   * statement about the place: it is freezing out here and someone is home.
-   *
-   * WHY IT WAS COOL BEFORE AND WHY THAT WAS WRONG. Every previous value here was
-   * a pale blue-white, chosen so the mouth read as ICE lit from within. That is
-   * defensible and it is also the mistake the brief names: when the snow, the
-   * shadows, the mist and the interior light are all blue, nothing in the frame
-   * is anything else, and a picture with one hue in it reads as a filter rather
-   * than as a place. The igloo was the only element that could carry a second
-   * colour without being untrue — a fire inside a shelter is warm, and warm is
-   * exactly what cold needs to be measured against.
-   *
-   * IT MUST STAY LOCAL. The long note in Atmosphere.jsx about #fff4e2 turning
-   * every sunward mountain flank to sandstone is a real measurement and it still
-   * binds — but it is about the KEY, a light that reaches the whole landscape.
-   * These are point lights with decay 2 inside a dome: at the entrance they are
-   * unmistakably amber, at the near drift they are a faint warm pool, and thirty
-   * units out they are nothing. That falloff is what makes the colour a
-   * signature rather than a grade.
-   *
-   * The pool on the snow is the point of the porch light, not a side effect. A
-   * warm circle on blue-shadowed snow is the whole contrast in one image.
-   */
+  mist: { color: [0.98, 0.99, 1.0], density: 0.0035, height: 48, base: 14, gain: 0.45 },
   igloo: {
-    glow: '#ffb066',
-    strength: 0.68,
-    lamp: { color: '#ffb877', intensity: 640 },
-    porch: { color: '#ffc48c', intensity: 330 },
+    glow: '#ffaa44',
+    strength: 0.95,
+    lamp: { color: '#ffaa44', intensity: 850 },
+    porch: { color: '#ffa034', intensity: 650 },
   },
-
-  /*
-   * THE GRADE.
-   *
-   * THE BLOOM THRESHOLD GOES BACK UP, HIGHER THAN THE DAYLIGHT VALUE. The note
-   * in Stage.jsx is the record of why: it was raised to 0.92 because the fog
-   * measured luminance 0.749 and the entire horizon was crossing the line, so
-   * every small camera move pushed swathes of pixels back and forth across the
-   * cutoff and the background shimmered. This sky is brighter than that fog was.
-   * At 0.97 nothing in the landscape qualifies and only the igloo's mouth does,
-   * which is all the bloom is for.
-   *
-   * THE VIGNETTE NEARLY GOES AWAY. A dark corner on a white-out is the most
-   * obvious possible tell that a frame has been graded — nothing in this kind of
-   * light falls off like that. What is left is barely a quarter stop at the
-   * extreme corners.
-   */
-  /*
-   * RISING AIR, AND THE PARTICLES IT REPLACES.
-   *
-   * `particles: false` switches off Weather's two wind layers and its snowfall —
-   * eleven thousand instanced grains whose whole job was to be the moving thing
-   * in a still frame. This does that job instead, and does it without drawing
-   * anything: see effects/HeatHaze.jsx for why refraction rather than geometry
-   * is the correct model for the shimmer over something warm.
-   *
-   * `strength` is in UV units and is deliberately tiny — three thousandths of
-   * the frame. Distortion you can identify as distortion has already gone too
-   * far; what should be visible is a distant ridge line quietly refusing to hold
-   * still, not a lens being warped.
-   */
   particles: false,
 
   /*
@@ -479,7 +331,7 @@ export const BRIGHT = {
    *
    * The coffee-smoke construction: a tall subdivided plane twisted about its own
    * axis, blown sideways, with its body scrolled upward through a tiling noise
-   * texture. See environment/Smoke.jsx for the shader and lib/perlin-texture.js
+   * texture. (That file and its noise-texture helper are gone; see the note
    * for why the noise is a texture rather than a GLSL function.
    *
    * SIZED OFF THE IGLOO, NOT PICKED. The dome is radius 22 and 1.5 radii tall,
@@ -538,12 +390,12 @@ export const BRIGHT = {
    * fine grain under the threshold where it reads as a pattern. The landforms
    * are geometry and are not touched by this at all.
    */
-  snow: { normalScale: 0.42 },
+  snow: { normalScale: 0.18 },
 
   grade: {
-    exposure: 1.02,
-    bloom: { intensity: 1.0, threshold: 0.97, smoothing: 0.2 },
-    vignette: { offset: 0.42, darkness: 0.24 },
+    exposure: 0.96,
+    bloom: { intensity: 1.1, threshold: 0.82, smoothing: 0.25 },
+    vignette: { offset: 0.38, darkness: 0.30 },
   },
 };
 
@@ -573,10 +425,10 @@ export const DAY = {
   key: { position: [101, 111, -272], color: '#fff6ec', intensity: 11.8 },
   mist: { color: [0.94, 0.96, 0.99], density: 0.0007, height: 70, base: 14, gain: 0.4 },
   igloo: {
-    glow: '#d4e8ff',
-    strength: 0.58,
-    lamp: { color: '#eaf3ff', intensity: 550 },
-    porch: { color: '#dceeff', intensity: 250 },
+    glow: '#eaf4ff',
+    strength: 0.65,
+    lamp: { color: '#ffdfb2', intensity: 750 },
+    porch: { color: '#ffe6c4', intensity: 380 },
   },
   grade: {
     exposure: 0.82,

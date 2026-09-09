@@ -337,8 +337,10 @@ const iceShader = (shader) => {
        * follow it for one pass, which put grey drifts on top of a white
        * landscape: the caps read as dirt on the dome rather than as snowfall.
        */
-      'diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.800, 0.820, 0.860 ), lying * 0.45 );',
-      'roughnessFactor = mix( roughnessFactor, 0.96, lying * 0.85 );',
+      'diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.940, 0.965, 0.995 ), lying * 0.65 );',
+      'float edgeFrost = smoothstep( 0.80, 0.98, vEdge );',
+      'diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.94, 0.97, 1.00 ), edgeFrost * 0.35 );',
+      'roughnessFactor = mix( roughnessFactor, 0.95, lying * 0.85 );',
       /*
        * THE EDGES CATCH LIGHT AGAIN — AND THIS IS A REVERSAL, SO HERE IS WHY.
        *
@@ -367,8 +369,8 @@ const iceShader = (shader) => {
        * but a wind-packed snow edge really is burnished, and 0.62 is still a
        * matte surface by any normal reading.
        */
-      'float glossEdge = smoothstep( 0.78, 1.00, vEdge );',
-      'roughnessFactor = mix( roughnessFactor, 0.62, glossEdge * 0.55 );',
+      'float glossEdge = smoothstep( 0.86, 1.00, vEdge );',
+      'roughnessFactor = mix( roughnessFactor, 0.72, glossEdge * 0.35 );',
       /*
        * THE BEVEL, AND IT IS WIDER AND HARDER THAN THE FIRST ATTEMPT.
        *
@@ -442,7 +444,7 @@ const iceShader = (shader) => {
        * jump. Ours is already near-white at rest, so the same jump is smaller —
        * and faking the difference is what turned the blocks into panels.
        */
-      'vec3 sunDir = vec3( 0.3251, 0.3572, -0.8755 );',
+      'vec3 sunDir = vec3( 0.3722, 0.6464, -0.6660 );',
       'vec3 wNrm = inverseTransformDirection( normalize( vNormal ), viewMatrix );',
       'float sunDot = dot( wNrm, sunDir );',
       'float sunFace = clamp( sunDot, 0.0, 1.0 );',
@@ -456,32 +458,13 @@ const iceShader = (shader) => {
        * Same curve as the terrain uses, a little weaker so the dome still
        * reads as a built thing against the field behind it.
        */
-      'diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0 ), smoothstep( 0.30, 0.92, sunFace ) * 0.42 );',
+      'diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.98, 0.99, 1.00 ), smoothstep( 0.25, 0.85, sunFace ) * 0.45 );',
 
       /*
        * AND THE OTHER HALF OF IT: THE FACES THE SUN DOES NOT REACH.
-       *
-       * The line above lifts the lit faces and there was nothing doing the
-       * opposite, which is why raising the albedo turned the whole dome pale —
-       * with a bright sky environment and no term of its own, the shadow side
-       * was carried almost to the value of the lit side and the modelling
-       * disappeared.
-       *
-       * READ OFF THE UNCLAMPED DOT, which is the whole reason sunDot was split
-       * out above. sunFace is clamped at zero, so every face pointing away from
-       * the sun — from grazing to fully turned — is the same 0 to it and they
-       * would all get the same treatment. The unclamped value keeps running to
-       * -1, so a face that is merely edge-on to the light and one that is
-       * squarely behind the dome get different amounts, and the terminator
-       * becomes a gradient across the shell instead of a line drawn on it.
-       *
-       * It multiplies rather than mixing toward a colour: what is happening
-       * physically is less light arriving, and less light arriving scales a
-       * surface, it does not tint it. Mixing toward grey would have made the
-       * shadow side a different MATERIAL, which is the mistake this whole note
-       * is about.
+       * Lifted floor to 0.68 so shadows stay luminous pastel ice blue rather than dark navy.
        */
-      'diffuseColor.rgb *= mix( 0.40, 1.0, smoothstep( -0.45, 0.30, sunDot ) );',
+      'diffuseColor.rgb *= mix( 0.68, 1.0, smoothstep( -0.45, 0.30, sunDot ) );',
 
 
       /*
@@ -608,76 +591,14 @@ const iceShader = (shader) => {
         /* Brightest at the joints, where the gap actually is, but never zero —
            the whole inner wall is lit and the joints are the hot part of it. */
         'float atJoint = 0.55 + 0.45 * smoothstep( 0.15, 0.95, vEdge );',
-        'totalEmissiveRadiance += vec3( 0.88, 0.94, 1.00 ) * 1.70 * innerFace * atJoint;',
+        'totalEmissiveRadiance += vec3( 1.00, 0.80, 0.48 ) * 3.60 * innerFace * atJoint;',
         /*
          * THE ARCH, AND IT IS THE ONE PLACE THE REFERENCE GLOWS WHILE STANDING
          * STILL.
-         *
-         * Read the three removal notes above before touching this. They record
-         * a constant emissive rim being put on the blocks' outward faces and
-         * taken off again three times, because across the whole dome it turns
-         * the shell into a grid of lit panels — the block reads as switching on
-         * rather than as light finding it. That judgement is right and this
-         * does not reopen it.
-         *
-         * What it does is narrower, and it is narrower because the reference is
-         * narrower. On igloo.inc the DOME is matte at rest; the tunnel mouth is
-         * not. Its arch carries a hard white-cyan line around the opening with a
-         * halo on the snow in front, and it is there before you scroll — it is
-         * the thing that tells you the igloo is worth going into, and it is the
-         * first thing the brief asked for.
-         *
-         * vEntrance restricts it to the six Entrance_* blocks, so five sixths of
-         * the structure is untouched and the graded resting frame only changes
-         * where the reference changes.
-         *
-         * NOT gated on vFacing. The arch is a doorway: the lit edge you see is
-         * the one turned toward you, which is exactly the surface the inner-wall
-         * term above is built to exclude. Gating this the same way would put the
-         * light on the two faces nobody can see.
-         *
-         * The high vEdge threshold is what keeps it a LINE. Opened up, it
-         * washes across the porch faces and the arch becomes a glowing slab
-         * instead of a lit rim.
          */
-        /*
-         * THE THRESHOLD IS THE WHOLE EFFECT, and 0.62 was far too low.
-         *
-         * vEdge is the SECOND largest normalised axis inside a block's box, and
-         * the porch blocks are long and thin — so on them that value is high
-         * across most of the surface, not just near a corner. At 0.62 the term
-         * covered whole faces and the entrance rendered as a solid white blob
-         * with no arch visible in it at all.
-         *
-         * 0.88 is inside the fillet rather than across the face, which is what
-         * makes it read as a line drawn around the opening. If this is ever
-         * loosened, check it on the PORCH blocks specifically: the dome blocks
-         * are much squarer and hide the problem.
-         */
-        /*
-         * IT LIGHTS WHEN THE BLOCKS MOVE, NOT ALWAYS.
-         *
-         * This used to burn constantly, which made it a decoration painted on
-         * the doorway. Tying it to vExcite makes it a CONSEQUENCE: the arch is
-         * lit from inside, so light escapes when the masonry opens up, and the
-         * more a block is lifted out of the wall the wider the gap it leaves
-         * and the more comes through. Still, it goes dark again as the blocks
-         * settle back.
-         *
-         * That is fed by the cursor and by the idle sweep alike, because both
-         * write through applyHover into the same channel — so the entrance
-         * breathes on its own between visits from the pointer rather than only
-         * responding to one.
-         */
-        'float archRim = smoothstep( 0.88, 1.00, vEdge ) * vEntrance * vExcite;',
-        /*
-         * Above Bloom's luminanceThreshold of 0.8 on purpose. Under it this is
-         * a crisp bright line and nothing more; over it the bloom pass spreads
-         * it, and the spread is the whole difference between a painted edge and
-         * light escaping. If that threshold moves in Stage.jsx, this has to be
-         * rechecked against it.
-         */
-        'totalEmissiveRadiance += vec3( 0.86, 0.93, 1.00 ) * 1.45 * archRim;',
+        'float archGlow = ( 0.70 + 0.30 * vExcite ) * vEntrance;',
+        'float archRim = smoothstep( 0.84, 1.00, vEdge ) * archGlow;',
+        'totalEmissiveRadiance += vec3( 1.00, 0.84, 0.52 ) * 4.60 * archRim;',
         /*
          * NO OPENING GLOW ON THE IGLOO. Removed, and this is the fifth time
          * light has been put on these outward faces and taken off again.
@@ -763,7 +684,7 @@ function gradeForWorld(material, tint) {
    * to stay dark. A brighter dome under the same fill is a dome with less
    * contrast on it, so the two have to move opposite ways to keep the modelling.
    */
-  material.envMapIntensity = 0.24;
+  material.envMapIntensity = 0.45;
   material.onBeforeCompile = iceShader;
   material.needsUpdate = true;
 }
@@ -864,7 +785,7 @@ export default function IglooBlocks({
    * less sky than open ground does and because the dome must not dissolve into
    * the field behind it. It is the subject; it keeps a silhouette.
    */
-  tint = '#b4bfcc',
+  tint = '#c2d6ea',
   /** Extra clearance above the seated height, in world units. Positive lifts
    *  the dome further out of the snow; negative settles it back in. */
   lift = 0,

@@ -1,27 +1,114 @@
 /**
- * The wind, synthesised.
+ * UNIFIED SHARED WIND FIELD
  *
- * NO AUDIO FILE, FOR THE SAME REASONS THE TEXTURES AND THE SKY ARE GENERATED.
- * A wind loop good enough for this is a megabyte or two of someone else's
- * recording, it needs a licence, and — the part that actually decides it — a
- * loop repeats. Wind that comes round again every twelve seconds is worse than
- * no wind at all, because the ear locks onto the period and then cannot let go
- * of it. Noise shaped by filters never repeats, costs nothing to ship, and
- * every value in it is ours to tune.
- *
- * The construction is the standard one for moving air:
- *
- *   pink noise -> a bandpass that sweeps -> a lowpass -> gain
- *
- * PINK RATHER THAN WHITE. White noise is flat per hertz, so it is dominated by
- * the top of the spectrum and reads as hiss or static. Pink falls at 3 dB per
- * octave, which is roughly how broadband natural sound is distributed, and it
- * is the difference between a radio between stations and air.
- *
- * THE SWEEP IS THE GUST. A fixed bandpass gives a constant shhh; moving its
- * centre frequency slowly is what makes the wind rise and fall. Two LFOs at
- * incommensurable rates, so the pattern does not resolve into a cycle — the
- * same reason the terrain warps its noise rather than tiling it.
+ * Single source of truth for all atmospheric movement in the Arctic scene.
+ * Mist layers, surface snow drift, loose snow particles, and igloo deflection
+ * all evaluate from this shared mathematical model.
+ */
+
+import { Vector2, Vector3, Plane, Raycaster } from 'three';
+import { MOUND_AT } from './terrain.js';
+
+export const WIND_DIR = [-0.96, -0.28]; // Normalized horizontal direction crossing right-to-left with slight camera lean
+export const WIND_SPEED = 24.0;       // World units per second base speed
+export const IGLOO_EDDY_AT = [MOUND_AT[0], MOUND_AT[1]]; // [-30, 252]
+export const IGLOO_EDDY_RADIUS = 110.0;
+export const IGLOO_EDDY_STRENGTH = 28.0;
+
+const groundPlane = new Plane(new Vector3(0, 1, 0), -16);
+const hitPoint = new Vector3();
+const raycaster = new Raycaster();
+const prevCursor = new Vector2(-30, 252);
+let lastUpdateTime = -1;
+
+export const windState = {
+  time: 0,
+  cursorPos: new Vector2(-30, 252),
+  cursorForce: 0,
+};
+
+/**
+ * Updates the shared wind interaction state once per frame.
+ * Measures cursor speed across the snow plane to produce smooth impulse and decay.
+ */
+export function updateWindState(state, delta) {
+  if (state.clock.elapsedTime === lastUpdateTime) return windState;
+  lastUpdateTime = state.clock.elapsedTime;
+
+  const dt = Math.max(0.001, Math.min(delta, 1 / 20));
+  windState.time = state.clock.elapsedTime;
+
+  raycaster.setFromCamera(state.pointer, state.camera);
+  const hit = raycaster.ray.intersectPlane(groundPlane, hitPoint);
+  if (hit) {
+    const distMoved = prevCursor.distanceTo(hitPoint);
+    const speed = distMoved / dt;
+    /* Base wind is barely visible when still; normal move is clearly visible (~0.4-0.6); capped at 1.2 so never a storm */
+    const targetForce = Math.min(speed * 0.016, 1.2);
+    windState.cursorForce += (targetForce - windState.cursorForce) * (1 - Math.exp(-4.2 * dt));
+    windState.cursorPos.set(hitPoint.x, hitPoint.z);
+    prevCursor.set(hitPoint.x, hitPoint.z);
+  } else {
+    windState.cursorForce += (0 - windState.cursorForce) * (1 - Math.exp(-4.2 * dt));
+  }
+
+  return windState;
+}
+
+/**
+ * Shared GLSL definitions and evaluation function for wind flow.
+ * Injected into Terrain.jsx (mist + surface drift) and Weather.jsx (particles).
+ */
+export const SHARED_WIND_GLSL = /* glsl */ `
+  #define SHARED_WIND_DIR vec2(-0.96, -0.28)
+  #define SHARED_WIND_SPEED 24.0
+  #define SHARED_EDDY_AT vec2(${IGLOO_EDDY_AT[0].toFixed(1)}, ${IGLOO_EDDY_AT[1].toFixed(1)})
+  #define SHARED_EDDY_RADIUS ${IGLOO_EDDY_RADIUS.toFixed(1)}
+  #define SHARED_EDDY_STRENGTH ${IGLOO_EDDY_STRENGTH.toFixed(1)}
+
+  /*
+   * Evaluates the shared wind displacement warp at world position p.
+   * Returns coordinate displacement including:
+   * 1. Multi-harmonic crosswind turbulence & height shear
+   * 2. Obstacle deflection around the igloo mound
+   * 3. Interactive cursor disturbance (swirl vortex + acceleration kick)
+   */
+  vec2 evaluateWindWarp(vec3 p, float t, float speedFactor, vec2 cursorPos, float cursorForce) {
+    vec2 warp = vec2(0.0);
+
+    /* 1. Multi-harmonic crosswind turbulence (moving opposite way) */
+    float longWave = sin(p.z * 0.007 - t * 0.42 * speedFactor) * 16.0;
+    float shortWave = sin(p.z * 0.022 + t * 0.85 * speedFactor + 2.1) * 7.5;
+    float heightShear = sin(p.y * 0.035 - t * 0.55 * speedFactor) * 5.5;
+    float crossWaver = sin(p.x * 0.011 - t * 0.48 * speedFactor) * 5.0;
+
+    warp.x += (longWave + shortWave + heightShear);
+    warp.y += crossWaver;
+
+    /* 2. Obstacle deflection around the igloo mound (slipstream mirrored for reversed wind) */
+    vec2 relIgloo = p.xz - SHARED_EDDY_AT;
+    float distIgloo = length(relIgloo);
+    float iglooCurl = exp(-distIgloo / SHARED_EDDY_RADIUS) * SHARED_EDDY_STRENGTH
+      * (0.70 + 0.30 * sin(t * 0.35 - distIgloo * 0.025));
+    warp += vec2(relIgloo.y, -relIgloo.x) / max(distIgloo, 1.0) * iglooCurl;
+
+    /* 3. Interactive cursor disturbance */
+    vec2 relCursor = p.xz - cursorPos;
+    float distCursor = length(relCursor);
+    float cursorRadius = 85.0;
+    float cursorInf = exp(-distCursor / cursorRadius) * cursorForce;
+    /* Tangential vortex swirl + forward momentum kick */
+    warp += vec2(-relCursor.y, relCursor.x) / max(distCursor, 1.0) * (cursorInf * 28.0);
+    warp += SHARED_WIND_DIR * (cursorInf * 18.0);
+
+    return warp;
+  }
+`;
+
+/**
+ * =========================================================================
+ * AUDIO SYNTHESIS ENGINE (Synthesized Arctic Wind Audio)
+ * =========================================================================
  */
 
 /** Where the gusting bandpass sits, and how far it wanders. */
@@ -44,10 +131,6 @@ const BUFFER_SECONDS = 8;
 
 /**
  * Pink noise via the Voss-McCartney style filter bank.
- *
- * Cheaper and steadier than summing octaves of random, and it is generated once
- * into a buffer rather than per sample at playback, so it costs nothing while
- * running.
  */
 function fillPink(data) {
   let b0 = 0;
@@ -70,11 +153,6 @@ function fillPink(data) {
     b6 = white * 0.115926;
   }
 
-  /*
-   * Cross-fade the seam. The buffer loops, and a discontinuity between its last
-   * sample and its first is a click once a cycle — the one artefact that would
-   * make the period audible however long the buffer is.
-   */
   const blend = Math.min(2000, Math.floor(data.length / 8));
   for (let i = 0; i < blend; i += 1) {
     const k = i / blend;
@@ -85,11 +163,6 @@ function fillPink(data) {
 
 /**
  * A wind that can be switched on and off.
- *
- * NOTHING IS BUILT UNTIL IT IS FIRST STARTED. An AudioContext created on page
- * load begins life suspended under every browser's autoplay policy and stays
- * that way until a gesture, so building one eagerly buys nothing and leaves a
- * suspended context running for every visitor who never touches the control.
  *
  * @returns {{ start: () => Promise<void>, stop: () => void, dispose: () => void }}
  */
@@ -123,12 +196,6 @@ export function createWind() {
     gain = ctx.createGain();
     gain.gain.value = 0;
 
-    /*
-     * Two gusts at rates with no common factor, so they drift in and out of
-     * phase for minutes rather than lining up on a bar. 0.037 Hz is a swell
-     * roughly every twenty-seven seconds; 0.011 Hz is the slower weather over
-     * the top of it.
-     */
     const gustA = ctx.createOscillator();
     gustA.frequency.value = 0.037;
     const gustAAmount = ctx.createGain();
@@ -153,8 +220,6 @@ export function createWind() {
   return {
     async start() {
       if (!ctx && !build()) return;
-      /* A context created before a gesture starts suspended; resume needs the
-         gesture, which is why start() is only ever called from the control. */
       if (ctx.state === 'suspended') {
         try {
           await ctx.resume();
@@ -176,9 +241,6 @@ export function createWind() {
       gain.gain.cancelScheduledValues(now);
       gain.gain.setValueAtTime(gain.gain.value, now);
       gain.gain.linearRampToValueAtTime(0, now + FADE);
-      /* The graph keeps running at zero rather than being torn down: rebuilding
-         it on every toggle would re-generate the buffer and re-fade from
-         silence, and the context is a few hundred kilobytes at most. */
     },
 
     dispose() {
@@ -189,3 +251,4 @@ export function createWind() {
     },
   };
 }
+
