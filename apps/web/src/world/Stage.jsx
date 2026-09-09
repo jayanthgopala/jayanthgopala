@@ -3,6 +3,9 @@ import { Canvas } from '@react-three/fiber';
 import { AdaptiveEvents, Preload } from '@react-three/drei';
 import Atmosphere from './environment/Atmosphere.jsx';
 import Sky from './environment/Sky.jsx';
+import Clouds from './environment/Clouds.jsx';
+import AirFilaments from './environment/AirFilaments.jsx';
+import WindField from './environment/WindField.jsx';
 import Terrain from './environment/Terrain.jsx';
 import Scree from './environment/Scree.jsx';
 import Weather from './environment/Weather.jsx';
@@ -10,11 +13,13 @@ import Lattice from './environment/Lattice.jsx';
 import IglooBlocks from './structures/IglooBlocks.jsx';
 import CameraRig from './camera/CameraRig.jsx';
 import Diagnostics from './Diagnostics.jsx';
-import { EffectComposer, Bloom, Vignette, ChromaticAberration, TiltShift2 } from '@react-three/postprocessing';
+import { EffectComposer, Bloom, Vignette, ChromaticAberration, TiltShift2, ToneMapping } from '@react-three/postprocessing';
+import { ToneMappingMode } from 'postprocessing';
 import { useFrame } from '@react-three/fiber';
 import { useRef } from 'react';
 import { Vector2 } from 'three';
 import { useWorldScroll } from './scroll/ScrollProvider.jsx';
+import { LOOK } from './lib/lighting.js';
 
 /**
  * The lens fringing, as its own component so it can have a frame loop.
@@ -120,6 +125,37 @@ function TravelSmear() {
 const scratch = new Vector2();
 
 /**
+ * The global exposure trim, applied to the renderer in onCreated.
+ *
+ * 0.79 AGAINST A MEASURED REFERENCE. With the key raised to 27 degrees the
+ * frame came out uniformly hot — p50 150, p75 198, p90 247 against the
+ * reference's 141 / 181 / 212, with the near snow clipping — while the contrast
+ * was already right. A uniform error with correct ratios is exactly what an
+ * exposure trim is for: it moves the sky, the snow and the rock together and
+ * leaves the relationships between them alone, where re-tinting four surfaces
+ * would have to be done four times and would damage the spread.
+ *
+ * The renderer's default is 1.0, which is what this scene had been running at.
+ *
+ * DOWN AGAIN TO 0.82 AFTER THE MOUNTAINS WERE REBUILT. Rounding the massifs
+ * turned a great deal of steep shaded face into gently sloping sunlit snow, and
+ * lowering the mid-ground floor did the same to the middle of the frame — so
+ * the same lighting rig now has far more surface returning light to the lens.
+ * Measured, the frame went to p25 132 / p50 180 / p75 212 against the
+ * reference's 111 / 141 / 181, with the near ground clipping, while the
+ * p10-to-p90 spread stayed at 119 against 120. Contrast correct, level 35
+ * points high, uniformly: the exposure case exactly.
+ */
+/*
+ * NIGHT/MORNING: LOOK.grade.exposure. The long argument above is about what
+ * exposure IS for — moving the sky, the snow and the rock together once their
+ * ratios are already right — and that is unchanged by the hour. See
+ * lib/lighting.js for the value and MORNING's note on why it goes UP rather
+ * than down when the lighting comes down.
+ */
+const EXPOSURE = LOOK.grade.exposure;
+
+/**
  * The persistent world.
  *
  * There is exactly one <Canvas> for the entire site and it never unmounts. Every
@@ -195,7 +231,45 @@ export default function Stage({ onIglooReady, begin = false }) {
            * ratios are already set by the albedo and the key. It is being moved
            * the other way for the same reason it was moved down.
            */
-          toneMappingExposure: 0.86,
+          /*
+           * 0.94, FROM 0.86, AND IT IS THE LAST STEP OF THE GRADE AGAIN.
+           *
+           * The note above is the record of this being the right lever when the
+           * error is UNIFORM and the ratios are already set, and that is the
+           * case here for the third time. With the ranges rebuilt, the rock
+           * broken out of them and the fill recut, the frame's contrast landed
+           * on the reference almost exactly — p10-to-p90 spread 123 against 120
+           * — while sitting about twenty points low through the middle. Fixing
+           * that by touching albedos would have to be done across the snow, the
+           * rock and the haze separately and would damage the spread that took
+           * the whole pass to get.
+           */
+          /*
+           * AND BACK DOWN TO 0.79 ONCE THE KEY WAS RAISED.
+           *
+           * The note above is right that this is the lever for a uniform error,
+           * and raising the sun to 27 degrees put a large one the other way:
+           * every near-horizontal surface in the frame — which is most of the
+           * foreground — gained half as much light again, and the measured
+           * frame went to p75 199 / p90 248 against the reference's 181 / 212,
+           * with the near snow clipping. Same argument, opposite direction.
+           */
+          /*
+           * NOT SET HERE ANY MORE — SEE onCreated BELOW, AND SEE EXPOSURE.
+           *
+           * It was written here for a long time and it never once took effect.
+           * The `gl` prop is a WebGLRenderer PARAMETER object: R3F forwards it
+           * to the constructor, and toneMappingExposure is not a constructor
+           * parameter, it is a property of the renderer you assign afterwards.
+           * So every value in the notes above — 0.92, 0.86, 0.94, 0.90 — was
+           * being written into a config object, read by nobody, and the scene
+           * rendered at the default 1.0 throughout.
+           *
+           * It is worth being blunt about that, because the notes read as a
+           * long careful argument about a control that was disconnected. The
+           * reasoning in them is sound and the measurements were real; they
+           * simply were not measuring this.
+           */
           powerPreference: 'high-performance',
           /* No alpha: the scene is fully opaque, so compositing the canvas
              against the page every frame is wasted bandwidth. */
@@ -214,12 +288,38 @@ export default function Stage({ onIglooReady, begin = false }) {
          * clearance above the terrain), so this costs nothing.
          */
         camera={{ fov: 42, near: 4, far: 2600, position: [0, 62, 330] }}
+        /*
+         * WHERE THE EXPOSURE ACTUALLY GETS SET. Assigned to the renderer once,
+         * after R3F has built it, which is the only place a property that is
+         * not a constructor parameter can be applied.
+         */
+        onCreated={({ gl }) => {
+          gl.toneMappingExposure = EXPOSURE;
+          /* Dev only: the grade is tuned by measuring rendered frames, and
+             every lever that reaches the picture after the materials — tone
+             mapping, exposure, colour space — lives on this object. Reaching it
+             from the console is the difference between reading a number and
+             checking one, which is exactly what the note above records going
+             wrong. Same channel as Diagnostics, same reason. */
+          if (import.meta.env.DEV) window.__worldGl = gl;
+        }}
       >
         {/* Nothing here suspends today, but the character GLB will, and a
             fallback of null means the world simply keeps rendering without him
             rather than the whole canvas blanking while he loads. */}
         <Suspense fallback={null}>
           <Sky />
+          {/* The moving deck, over the gradient Sky paints. See Clouds.jsx for
+              why the cloud in the sky texture is switched off and this draws it
+              instead. */}
+          {/* Advances the one wind field and projects the pointer into it.
+              Renders nothing; everything else only reads. See lib/wind-field.js. */}
+          <WindField />
+          <Clouds />
+          {/* Hair-thin blown-snow strands. See AirFilaments.jsx for why the
+              ridge-of-warped-noise primitive is the only one of the five tried
+              that can produce a line rather than a patch. */}
+          <AirFilaments />
           {/* begin drives the opening slab: the ground starts as a block and
               uncovers the land and hills as the camera comes down. */}
           <Terrain begin={begin} />
@@ -312,7 +412,7 @@ export default function Stage({ onIglooReady, begin = false }) {
             it reads as a colour cast rather than as a lens.
           */}
           <Bloom
-            intensity={1.15}
+            intensity={LOOK.grade.bloom.intensity}
             /*
              * THIS NUMBER HAS TO SIT ABOVE THE SKY, and at 0.72 it did not.
              *
@@ -341,8 +441,20 @@ export default function Stage({ onIglooReady, begin = false }) {
              * 0.80 clears the brightest snow with margin and catches the
              * joints, which is the whole intended job.
              */
-            luminanceThreshold={0.8}
-            luminanceSmoothing={0.28}
+            /*
+             * FROM THE PALETTE NOW, AND THE HOUR IS WHY IT CAN COME DOWN.
+             *
+             * Every note below is an argument about keeping bloom OFF a bright
+             * daylight sky — the fog measured at luminance 0.749, the whole
+             * horizon over the line, swathes of pixels crossing the cutoff on
+             * every camera move and the background shimmering. All true, and all
+             * about a sky that no longer exists: at this hour the sky sits well
+             * under that, so the threshold can drop to where the aurora, the
+             * first sun on the peaks and the igloo's mouth are the only things
+             * crossing it. Which is what the bloom was always for.
+             */
+            luminanceThreshold={LOOK.grade.bloom.threshold}
+            luminanceSmoothing={LOOK.grade.bloom.smoothing}
             mipmapBlur
           />
           {/*
@@ -366,7 +478,52 @@ export default function Stage({ onIglooReady, begin = false }) {
             itself as an effect; this one should only be noticeable as the frame
             feeling like it was photographed.
           */}
-          <Vignette offset={0.26} darkness={0.52} eskil={false} />
+          {/*
+            THE TONE MAPPING, AND ITS ABSENCE IS WHY THE EXPOSURE NOTES ABOVE
+            READ AS A LONG ARGUMENT ABOUT NOTHING.
+
+            @react-three/postprocessing sets renderer.toneMapping to
+            NoToneMapping when an EffectComposer mounts, because with a
+            composer the mapping belongs at the END of the chain rather than in
+            each material: every pass before it needs to work on scene-referred
+            values, and a material that has already crushed its own highlights
+            has nothing left for the bloom to find. That is correct, and the
+            consequence is that a composer without this effect renders with no
+            tone mapping at all — the frame was being clipped straight to the
+            display, and toneMappingExposure, which only exists inside the
+            mapping, did nothing whatever it was set to.
+
+            ACES RATHER THAN AGX, AND AGX WAS TRIED FIRST.
+
+            The argument for AgX is real: it desaturates toward white as it
+            approaches the ceiling instead of pushing hue the way ACES does, so
+            a blown snowfield goes white and stays white rather than swinging
+            warm. On paper that is exactly right for this subject.
+
+            Measured, it was wrong for this PICTURE. AgX is a base transform
+            meant to be finished with a look — a contrast and saturation grade
+            applied after it — and without one it lands very flat: at the
+            exposure that put the median on the reference it gave a p10-to-p90
+            spread of 85 against the reference's 120, with the darks lifted from
+            74 to 101. A snow scene with no dark end is the exact failure this
+            file's oldest notes are about.
+
+            ACES carries its contrast in the transform itself, which is why it
+            lands close to a photographic reference with nothing after it. The
+            hue-push it is criticised for needs a strongly tinted highlight to
+            show, and the key here is #fff6ec — warm as a bias, not as a tint.
+
+            Either way the brief's requirement is met: a modern filmic response
+            with a real shoulder, rather than a clip straight to the display,
+            which is what this composer had before.
+
+            AFTER BLOOM, BEFORE THE VIGNETTE. Bloom is a physical property of a
+            lens gathering light and belongs in scene-referred values; the
+            vignette is a falloff across the finished picture and belongs in
+            display-referred ones.
+          */}
+          <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+          <Vignette offset={LOOK.grade.vignette.offset} darkness={LOOK.grade.vignette.darkness} eskil={false} />
           <TravelSmear />
           <TravelFringe />
         </EffectComposer>

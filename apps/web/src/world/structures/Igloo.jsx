@@ -7,6 +7,7 @@ import { buildShellSegment, buildVaultSegment, buildBrick } from '../lib/shell.j
 import { COURSE_BLOCKS, CROWN_BLOCKS, makeProfile, entrancePlan } from '../lib/igloo-plan.js';
 import { iceMapsFor } from '../lib/baked.js';
 import { openingHalfAngle, clipSpan } from '../lib/arch.js';
+import { LOOK } from '../lib/lighting.js';
 
 const IDLE_SPEED = 0.55;
 const IDLE_WAVELENGTH = 0.12;
@@ -34,9 +35,9 @@ const damp = (current, target, lambda, dt) => {
   return current + (target - current) * (1 - Math.exp(-lambda * dt));
 };
 
-const GLOW_COLOUR = '#d4e8ff';
+const GLOW_COLOUR = LOOK.igloo.glow;
 const BLOCK_DOMING = 0.16;
-const GLOW_STRENGTH = 0.58;
+const GLOW_STRENGTH = LOOK.igloo.strength;
 
 const snowOnBlocks = (shader) => {
   shader.fragmentShader = shader.fragmentShader.replace(

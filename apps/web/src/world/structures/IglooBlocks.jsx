@@ -6,6 +6,7 @@ import { heightAt } from '../lib/terrain.js';
 import { loadIgloo } from '../../igloo/Igloo.js';
 import { BlockPhysics } from '../../igloo/BlockPhysics.js';
 import { IglooInteraction } from '../../igloo/IglooInteraction.js';
+import { LOOK } from '../lib/lighting.js';
 
 /**
  * The baked igloo, standing in the world.
@@ -441,7 +442,7 @@ const iceShader = (shader) => {
        * jump. Ours is already near-white at rest, so the same jump is smaller —
        * and faking the difference is what turned the blocks into panels.
        */
-      'vec3 sunDir = vec3( 0.3324, 0.3090, -0.8910 );',
+      'vec3 sunDir = vec3( 0.3251, 0.3572, -0.8755 );',
       'vec3 wNrm = inverseTransformDirection( normalize( vNormal ), viewMatrix );',
       'float sunDot = dot( wNrm, sunDir );',
       'float sunFace = clamp( sunDot, 0.0, 1.0 );',
@@ -1251,10 +1252,10 @@ export default function IglooBlocks({
       */}
       <pointLight
         position={[0, 12.5, -3.5]}
-        intensity={550}
+        intensity={LOOK.igloo.lamp.intensity}
         distance={70}
         decay={2}
-        color="#eaf3ff"
+        color={LOOK.igloo.lamp.color}
         castShadow
         shadow-mapSize={[1024, 1024]}
         shadow-camera-near={0.4}
@@ -1284,10 +1285,10 @@ export default function IglooBlocks({
       */}
       <pointLight
         position={[0, 4.6, 25.4]}
-        intensity={250}
+        intensity={LOOK.igloo.porch.intensity}
         distance={46}
         decay={2}
-        color="#dceeff"
+        color={LOOK.igloo.porch.color}
       />
 
       <line ref={lineRef} geometry={lineGeometry} frustumCulled={false} visible={false}>

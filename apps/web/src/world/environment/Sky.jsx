@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo } from 'react';
 import { useThree } from '@react-three/fiber';
+import { LOOK } from '../lib/lighting.js';
 import {
   CanvasTexture,
   SRGBColorSpace,
@@ -59,11 +60,53 @@ import {
  * direction right matters more than the exact hue — a sky that is uniformly
  * blue reads as a painted ceiling.
  */
-const ZENITH = [0x3d, 0x6d, 0xac];
+/*
+ * DEEPENED AND SATURATED, from 3d6dac / 7ca4cf, AND IT IS MEASURED.
+ *
+ * Sampled in matching regions, the reference's top strip of sky sits at
+ * luminance 110 with a blue-minus-red of 69. Ours came back at 143 and 43 —
+ * thirty points bright and carrying barely more than half the blue. That is not
+ * a subtle grade difference: at 143/43 the sky reads as a bright overcast with
+ * a tint, and at 110/69 it reads as the deep clear cold sky the reference has.
+ *
+ * IT ALSO SETS UP THE DISTANCE. The reference's far peaks measure 193 against a
+ * sky of 110 — they are EIGHTY POINTS BRIGHTER than the air above them, because
+ * they are hazed snow lit from behind. Ours were 168 against 143, a gap of 25,
+ * so they sat against the sky instead of glowing out of it. Nothing about the
+ * peaks had to change to fix that; the sky had to get out of their way.
+ *
+ * The exponent below already decides how much of this the frame actually sees —
+ * only the top fifteen degrees are in shot — so these two stops are what that
+ * strip resolves to, not a theoretical zenith nobody looks at.
+ *
+ * TRIMMED BACK ONCE, from 2052aa / 4276c0. The first pass overshot in the blue
+ * rather than in the level: it measured 103/85 against the target 110/69, so
+ * the brightness was near enough and the saturation was a sixth too far. Red
+ * and green come up, blue stays, which desaturates without lifting the value —
+ * a sky that is too blue reads as a filter over the frame rather than as air.
+ */
+/*
+ * THE RAMP, DEEPENED AT BOTH ENDS.
+ *
+ * The brief asks for a sky that is "deeper blue toward the top, lighter toward
+ * the horizon" and specifically NOT a grey horizon — a narrower target than it
+ * sounds, because the obvious way to keep the horizon light is to run it to
+ * near-white, and near-white at the horizon is what made the old frame's top
+ * edge read as overcast. The fix is at both ends: a deeper zenith so the
+ * gradient has somewhere to come FROM, and a horizon that is a pale BLUE rather
+ * than a pale nothing.
+ *
+ * The horizon value has a second job. It is what the mountains fade into, so it
+ * and FOG_COLOR in Atmosphere have to be close or the far ranges sit on the sky
+ * as a band of the wrong colour. FOG_COLOR is #a6c0dc; this is a few points
+ * lighter, which is correct — the sky at the horizon is always a shade brighter
+ * than the haze standing in front of it.
+ */
+const ZENITH = LOOK.sky.zenith;
 /** Mid-sky, so the ramp has a shoulder instead of running straight through. */
-const AZURE = [0x7c, 0xa4, 0xcf];
-/** At the horizon: the pale blue-white the far snowfield fades into. */
-const HAZE = [0xd6, 0xe2, 0xef];
+const AZURE = LOOK.sky.azure;
+/** At the horizon: the pale blue the far snowfield fades into. */
+const HAZE = LOOK.sky.haze;
 
 /**
  * WHERE THE SUN IS, in fractions of the frame.
@@ -96,7 +139,13 @@ const HAZE = [0xd6, 0xe2, 0xef];
  * so the arithmetic above gives u = 0.3068 and an elevation of 18 degrees,
  * v = 0.80. Move the light and both of these move with it.
  */
-const SUN = [0.3068, 0.80];
+/* Elevation 21 degrees now (see the key light's own note), so v = 1 - 21/90. */
+/*
+ * RETIRED WITH THE SUN. Kept as DAY.sun in lib/lighting.js, along with the
+ * frame-fraction reasoning above, which is the record of where it was solved
+ * to sit. Nothing reads it now.
+ */
+// const SUN = [0.3068, 0.767];
 
 /* ===========================================================================
    CLOUDS
@@ -265,30 +314,50 @@ const remap = (v, lo, hi, nlo, nhi) =>
  * that. The parts that run on below are occluded, which costs nothing — the
  * field is 320x160 and the whole thing is built once.
  */
+/*
+ * THE BANDS MOVED DOWN THE SKY, AND IT IS A FRAMING FIX RATHER THAN A TASTE ONE.
+ *
+ * `v` runs 0 at the zenith to 1 at the horizon, so these two layers used to live
+ * between the zenith and 40 per cent of the way down — 54 degrees of elevation
+ * and upward. The lens is pitched 5.6 degrees DOWN with a 42 degree vertical
+ * field, so nothing above 15.4 degrees of elevation is in the picture at all:
+ * every cloud was being painted into sky the camera never sees, and the shot
+ * had a cloud generator in it and no clouds.
+ *
+ * The bands now run from mid-sky down to the horizon, which puts cloud across
+ * the visible strip and stays correct in the environment map, where the whole
+ * hemisphere is sampled.
+ *
+ * They are also thinner and far more stretched than before. A deck seen at a
+ * shallow angle is seen nearly edge-on, so it foreshortens into long horizontal
+ * streaks rather than the billowed heads you get looking up at it — which is
+ * both the "very subtle thin clouds" the brief asks for and what the reference
+ * actually has along its skyline.
+ */
 const LAYERS = [
   /* Cirrus: high, long, thin, barely there. */
   {
     scale: 6.5,
-    stretch: 5.2,
-    coverage: 0.58,
-    erosion: 0.42,
-    billow: 0.12,
-    opacity: 0.72,
-    top: 0.0,
-    fade: 0.04,
-    bottom: 0.34,
+    stretch: 7.4,
+    coverage: 0.54,
+    erosion: 0.44,
+    billow: 0.1,
+    opacity: 0.6,
+    top: 0.46,
+    fade: 0.18,
+    bottom: 1.06,
   },
   /* The low band: smaller, rounder, more structure, sitting nearer the haze. */
   {
     scale: 15.0,
-    stretch: 2.1,
-    coverage: 0.48,
-    erosion: 0.6,
-    billow: 0.5,
-    opacity: 0.6,
-    top: 0.03,
-    fade: 0.06,
-    bottom: 0.44,
+    stretch: 3.4,
+    coverage: 0.42,
+    erosion: 0.62,
+    billow: 0.42,
+    opacity: 0.44,
+    top: 0.58,
+    fade: 0.14,
+    bottom: 1.02,
   },
 ];
 
@@ -447,7 +516,105 @@ const skyRamp = (t) => {
 };
 
 /** Cloud is lit, not emissive: its brightest is an off-white, not paper. */
-const CLOUD_WHITE = [252, 253, 255];
+const CLOUD_WHITE = LOOK.paintedCloud.color;
+
+
+/*
+ * THE AURORA.
+ *
+ * ONE FUNCTION, TWO CONSUMERS, AND THAT IS THE ENTIRE REASON IT IS WRITTEN THIS
+ * WAY. It is evaluated both by the background texture below and by
+ * makeWinterSkyEnv's environment map at the bottom of this file, so the cyan
+ * cast the snow picks up is a reflection of the SAME shafts the camera can see
+ * behind the ranges. Painted into the background alone it would hang there like
+ * a poster with an unlit landscape in front of it — which is the single most
+ * common way a night render gives itself away.
+ *
+ * `vs` runs 0 at the zenith to 1 at the horizon, matching skyRamp's parameter,
+ * so both call sites can hand it the value they already computed.
+ *
+ * SHAFTS ARE BUILT FROM SINES, NOT NOISE, and the reason is the seam. This is
+ * an equirectangular map: u = 0 and u = 1 are the same bearing, so anything
+ * sampled here has to be exactly periodic or there is a visible vertical join
+ * in the sky at that bearing. Value noise is not periodic and would need to be
+ * tiled and blended; integer-frequency sines are periodic by construction.
+ * Three of them at 7, 13 and 23 cycles beat against each other over the whole
+ * circle, so the curtain never repeats within a turn of the camera.
+ *
+ * Clamping at zero before the power is what makes them SHAFTS. The raw sum is a
+ * smooth wave that spends half its time negative; keeping only the crests
+ * leaves isolated bands separated by empty sky, and raising those to a power
+ * narrows them into columns with soft edges — which is the shape an aurora
+ * actually has, because it traces field lines rather than filling the sky.
+ */
+const AUR = LOOK.aurora;
+
+const auroraShafts = (u) => {
+  const a = Math.sin(2 * Math.PI * (u * 7 + 0.13));
+  const b = Math.sin(2 * Math.PI * (u * 13 + 0.71));
+  const c = Math.sin(2 * Math.PI * (u * 23 + 0.37));
+  const s = 0.55 * a + 0.3 * b + 0.15 * c;
+  if (s <= 0) return 0;
+  return Math.pow(s, 2.2);
+};
+
+/** Aurora intensity at a bearing and a height. Zero where there is none. */
+const auroraAt = (u, vs) => {
+  /* Switched off for the current look — see LOOK.aurora.enabled and the note
+     beside it. The generator is kept whole rather than deleted; this is the one
+     branch that costs, and it runs once at texture build time. */
+  if (!AUR.enabled) return 0;
+
+  /* Height above the horizon: 0 on the skyline, 1 at the zenith. */
+  const h = 1 - vs;
+  if (h <= AUR.base || h >= AUR.top) return 0;
+
+  /*
+   * THE VERTICAL ENVELOPE, AND IT IS ASYMMETRIC ON PURPOSE.
+   *
+   * A shaft is brightest low down, where it is dense and where the eye looks
+   * through the most of it, and it does not end — it dissipates over a long
+   * fade toward the top. A symmetric curve gives a floating band with air under
+   * it; the exponent inside the sine skews the peak down toward the ranges so
+   * the columns look like they are RISING from behind them.
+   */
+  const t = (h - AUR.base) / (AUR.top - AUR.base);
+  const vert = Math.pow(Math.sin(Math.PI * Math.pow(t, 0.55)), 1.4);
+
+  /*
+   * A BROAD WASH UNDER THE SHAFTS. Same argument as the sun glow this replaces:
+   * one curve cannot be both the structure and the air around it. The wash is
+   * what stops the columns reading as stripes painted on black.
+   */
+  /* Divisor tracks the envelope above: a wash spread over half the sky under
+     shafts confined to its bottom third is a wash the frame never sees the
+     bright end of. */
+  const wash = Math.pow(Math.max(0, 1 - h / 0.26), 2.0) * 0.55;
+
+  /* Slow variation in strength around the compass, so one side is livelier. */
+  const bias = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(2 * Math.PI * (u * 3 + 0.2)));
+
+  return Math.min(1, (auroraShafts(u) * 0.85 + wash) * vert * bias * AUR.strength);
+};
+
+/*
+ * THERE ARE NO STARS, AND THAT IS PHYSICS RATHER THAN TASTE.
+ *
+ * A star field was written here and then removed. This is a MORNING: the sky
+ * has already come up far enough to extinguish everything except a planet, and
+ * a dawn sky with stars in it is a night sky that has been brightened — which
+ * is exactly the tell this scene is trying not to have. The aurora survives the
+ * same test because it is orders of magnitude brighter than a star and really
+ * is still visible at this hour.
+ *
+ * IT WAS ALSO A BUG, WHICH IS WORTH RECORDING BECAUSE THE SHAPE OF IT RECURS.
+ * The density was expressed as a per-pixel probability, 0.00042, and then used
+ * as `density * 1000` — 0.42, so forty-two per cent of the sky came out as a
+ * star. Averaged down by the texture filter that is not a starry sky, it is a
+ * uniform pale grey, and it read as the renderer having failed rather than as
+ * too many stars. A unit carried in a comment and not in the name is a unit
+ * that will be multiplied by the wrong thing eventually.
+ */
 
 export default function Sky() {
   const { scene } = useThree();
@@ -540,28 +707,32 @@ export default function Sky() {
          * deliberate: atmosphere spreads a low sun sideways, so the glow really
          * is wider than it is tall — just by a third, not by a factor of four.
          */
-        let du = u - SUN[0];
-        /* Shortest way round the sphere: at a bearing near the seam the naive
-           difference is nearly 1, which would put the sun 360 degrees away. */
-        du -= Math.round(du);
-        const dh = (du * 360) / 1.35;
-        const dv = (v - SUN[1]) * 90;
-        const d = Math.sqrt(dh * dh + dv * dv);
+        /*
+         * THE AURORA REPLACES THE SUN'S GLOW, and the block it replaces is
+         * worth remembering: a broad wash plus a tight core, in degrees, built
+         * to render a blowout the frame could not quite contain. There is no
+         * sun in this sky. What there is sits at the same point in the pipeline
+         * — a bright thing composited over the ramp — so it goes where that did
+         * rather than anywhere new.
+         */
+        const aur = auroraAt(u, v);
 
         /*
-         * A BROAD WASH PLUS A TIGHT CORE, in degrees. The reference's sun is a
-         * blowout: a centre gone completely to paper inside a glare that
-         * carries a good forty degrees. One curve cannot be both — tuned to
-         * reach that far it leaves the middle grey, tuned for the middle it is
-         * a bright dot with nothing around it — so it is two, which is also
-         * physically what is there: forward scatter through a lot of air, and
-         * the disc.
+         * THE PAINTED FIELD IS OFF, AND Clouds.jsx IS WHY.
+         *
+         * This texture is generated once on the CPU and uploaded. That is
+         * exactly right for a gradient and exactly wrong for weather: animating
+         * it would mean re-running a 1024x512 noise field and a texture upload
+         * every frame, on the main thread, to move something a few pixels. The
+         * moving version is a fragment shader on a dome — same kind of field,
+         * evaluated per pixel against a clock, on hardware built for it.
+         *
+         * Left in place rather than removed. The sky texture still needs a cloud
+         * term if the dome is ever taken out, and it also feeds the environment
+         * map, where a static approximation of the cover is the right thing:
+         * the IBL is a broad irradiance and cannot see a cloud move anyway.
          */
-        const wash = Math.pow(Math.max(0, 1 - d / 46), 2.1) * 0.66;
-        const core = Math.pow(Math.max(0, 1 - d / 13), 2.4);
-        const glow = Math.min(1, wash + core);
-
-        const cloud = sampleField(clouds, u, v);
+        const cloud = LOOK.paintedCloud.enabled ? sampleField(clouds, u, v) : 0;
 
         /*
          * CLOUD IS NOT PURE WHITE, and this is what stops it looking like paper
@@ -583,8 +754,27 @@ export default function Sky() {
          * brightest thing in the sky; cloud composited last would be the same
          * white everywhere and would read as cut-outs.
          */
-        for (let k = 0; k < 3; k += 1) {
-          c[k] += (255 - c[k]) * glow * 0.92;
+        /*
+         * ADDITIVE, WHERE THE SUN'S GLOW WAS A WASH TOWARD WHITE.
+         *
+         * That difference is the difference between the two objects. A sun
+         * saturates whatever is in front of it — everything heads for paper, so
+         * mixing toward 255 is exactly right. An aurora is a thin emissive gas:
+         * it ADDS its own colour to what is behind it and never bleaches it,
+         * which is why a star can be seen through one. Mixing toward white
+         * would have turned the sky grey wherever the curtain was strong, and
+         * grey is the one thing a night sky must not be.
+         *
+         * The colour runs from `deep` to `core` with intensity, because the
+         * dense middle of a shaft is genuinely a different colour from its
+         * edges rather than just more of the same.
+         */
+        if (aur > 0) {
+          const mixK = Math.min(1, aur * 1.5);
+          for (let k = 0; k < 3; k += 1) {
+            const tint = AUR.deep[k] + (AUR.core[k] - AUR.deep[k]) * mixK;
+            c[k] += tint * aur;
+          }
         }
 
         const jitter = (((y + x) & 1) - 0.5) * 1.2;
@@ -677,24 +867,30 @@ export function makeWinterSkyEnv() {
   const ctx = canvas.getContext('2d');
   const img = ctx.createImageData(W, H);
 
-  /* Bounce off the snow: bright, faintly cool, and flat, because a field
-     scatters without a direction. Raised with the snow's own albedo — this is
-     the light that snow returns, so if the ground goes white this has to. */
-  const GROUND = [0xd2, 0xd8, 0xe2];
-  /* Where the sun sits on the sphere. */
+  /* Bounce off the snow: flat, because a field scatters without a direction.
+     Raised with the snow's own albedo — this is the light that snow returns,
+     so if the ground goes white this has to.
+
+     AND AT NIGHT IT DOES NOT. The albedo is unchanged; what lands on it is four
+     stops down, so what comes back off it is too. See NIGHT.env.ground — the
+     daylight value was [0xd2, 0xd8, 0xe2], near white, which under a night sky
+     would have been a snowfield quietly emitting more light than the aurora. */
+  const GROUND = LOOK.env.ground;
   /*
-   * SAME SUN AS THE BACKGROUND'S, IN THIS FUNCTION'S OWN PARAMETERISATION.
+   * THERE IS NO SUN HERE ANY MORE, AND THE NOTE THAT STOOD IN THIS PLACE IS
+   * WORTH KEEPING IN SUMMARY BECAUSE ITS POINT NOW APPLIES TO THE AURORA.
    *
-   * Here v runs 0 at the zenith to 1 at the NADIR over the full sphere, so the
-   * sky occupies 0..0.5 and an elevation of e degrees is v = ( 1 - e/90 ) / 2.
-   * At 18 degrees that is 0.40. u is the same bearing the background uses.
+   * It recorded the sun in this map and the sun in the background texture
+   * having drifted to two different bearings and two different elevations — so
+   * the glint on the ice was a reflection of something the sky did not contain.
+   * That is the failure this whole function exists to avoid, and it is exactly
+   * as available to an aurora as it was to a sun.
    *
-   * They were [0.17, 0.3] against the background's [0.9, 0.09] — two different
-   * bearings and two different elevations, so the glint on the ice came from
-   * somewhere the sky had nothing in it.
+   * It is avoided the only way that actually works: there is no second copy to
+   * drift. auroraAt() is defined once, above, and called from here and from the
+   * background loop with each caller's own vertical parameter converted to the
+   * same one. Move a shaft and both move.
    */
-  const SUN_U = 0.3068;
-  const SUN_V = 0.40;
 
   for (let y = 0; y < H; y += 1) {
     /* v: 0 at the zenith, 1 at the nadir. */
@@ -707,17 +903,27 @@ export function makeWinterSkyEnv() {
         /* Sky: the same three-stop ramp the background uses. */
         c = skyRamp(v / 0.5);
 
-        /* The sun's broad glow, in angular distance on the sphere. */
-        /* In degrees, for the reason given on the background's glow: here v
-           runs over the whole 180-degree sphere, so one unit of v is 180 and
-           one unit of u is 360. Same 1.35 sideways stretch. */
-        let du = u - SUN_U;
-        du -= Math.round(du);
-        const dh = (du * 360) / 1.35;
-        const dv = (v - SUN_V) * 180;
-        const d = Math.sqrt(dh * dh + dv * dv);
-        const glow = Math.max(0, 1 - d / 42) ** 2;
-        c = c.map((n) => n + glow * 95);
+        /*
+         * THE AURORA, AND THIS IS THE LINE THAT LIGHTS THE SNOW.
+         *
+         * v runs 0 at the zenith to 1 at the nadir over the whole sphere here,
+         * so the sky is 0..0.5 and v / 0.5 is the same 0-at-zenith-to-1-at-the-
+         * horizon parameter the background hands auroraAt. Converting it rather
+         * than re-deriving the shafts is the entire point — see the note where
+         * the sun's coordinates used to be.
+         *
+         * envGain is above 1. The background is a picture and wants the curtain
+         * at the brightness it looks right at; this is a LIGHT SOURCE and gets
+         * convolved into a very broad irradiance, which throws away most of the
+         * peak of anything narrow. Feeding it the picture's value gives a ground
+         * that reads as though the aurora were not there.
+         */
+        const aur = auroraAt(u, v / 0.5);
+        if (aur > 0) {
+          const mixK = Math.min(1, aur * 1.5);
+          const g = aur * AUR.envGain;
+          c = c.map((n, k) => n + (AUR.deep[k] + (AUR.core[k] - AUR.deep[k]) * mixK) * g);
+        }
       } else {
         /* Ground bounce, fading a little toward the nadir. */
         const t = (v - 0.5) / 0.5;

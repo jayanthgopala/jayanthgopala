@@ -100,6 +100,42 @@ const smoothstep = (a, b, x) => {
 };
 
 /**
+ * Sample an fbm in a ROTATED, STRETCHED frame.
+ *
+ * THE ONE THING THE WHOLE LANDSCAPE WAS MISSING, and it is a property of the
+ * sampling rather than of the noise.
+ *
+ * fbm is ISOTROPIC: its features have no preferred direction, so they come out
+ * round. Every hill in this scene was built by sampling it on the plain world
+ * axes, which is why the middle distance read as a field of similar circular
+ * bumps — knobbly rather than drifted. No amount of amplitude, warping or
+ * octave tuning fixes that, because roundness is not an artefact of the noise,
+ * it is what the noise IS when you sample it evenly.
+ *
+ * Wind-formed snow is the opposite. It is the most directional landform there
+ * is: the wind runs one way and everything it builds lies ACROSS that way, in
+ * long parallel ridges with a shallow windward flank and a defined crest. The
+ * reference is full of them — the whole foreground and middle distance is
+ * transverse dunes receding in rows, and that directionality is most of why it
+ * reads as an Arctic snowfield rather than as generic terrain.
+ *
+ * Dividing one axis of the sample position by `stretch` lowers the frequency
+ * along it, so features come out that many times longer in that direction than
+ * across it. The rotation is what keeps the ridges off the world axes — aligned
+ * exactly with X they would read as a manufactured corduroy.
+ *
+ * Everything else about the terms that call this is unchanged; they simply see
+ * a differently-shaped field.
+ */
+const anisotropic = (fbm, f, ox, oz, rot, stretch, px, pz) => {
+  const cr = Math.cos(rot);
+  const sr = Math.sin(rot);
+  const ax = (px * cr + pz * sr) / stretch;
+  const az = -px * sr + pz * cr;
+  return fbm(ax * f + ox, az * f + oz);
+};
+
+/**
  * Ground height at a world position.
  *
  * Cheap enough to call per frame from the camera rig and per block from the
@@ -122,7 +158,28 @@ function rawHeight(x, z) {
    * these bands are tens of units, and a pattern cannot be larger than its own
    * repeat. That left geometry, and this was the only geometry at that scale.
    */
-  const drifts = drift(x * 0.0055, z * 0.0055) * 13;
+  /*
+   * AND NOW IT IS A DUNE FIELD RATHER THAN A LUMP FIELD — same fbm, same
+   * frequency, sampled in a frame stretched 3.2 to 1.
+   *
+   * This is the term that carries the near ground, inside the radius where the
+   * hummocks are ramped off, so it is the whole of what the foreground is made
+   * of. Round it read as soft blisters; stretched it reads as the long shallow
+   * snow ridges the reference has running across its lower half.
+   *
+   * The amplitude goes up a little with it. A ridge four times longer than it
+   * is wide needs more height than a dome to show the same crest, because the
+   * eye reads a dune by the shadow along its lee side and a shallower one has
+   * a shorter shadow.
+   *
+   * FREQUENCY DOWN AS WELL, 0.0055 -> 0.0042, on a second look at the frame.
+   * The first stretched pass gave the foreground direction and left it busy:
+   * lots of short ridges rather than a few long ones. The reference's near
+   * ground has perhaps three or four crests across the whole width of the
+   * picture, each running most of it. Lengthening the wavelength to about 240
+   * units is what gets that count down to something that reads as calm.
+   */
+  const drifts = anisotropic(drift, 0.0042, 0, 0, 0.28, 4.2, x, z) * 19;
 
   /*
    * SCULPTED DRIFTS — and yes, this is the term the note above deleted.
@@ -150,7 +207,17 @@ function rawHeight(x, z) {
    */
   const dwx = drift(x * 0.0042 + 51.3, z * 0.0042 - 12.7) * 46;
   const dwz = drift(x * 0.0042 - 87.1, z * 0.0042 + 33.9) * 46;
-  const sculpt = drift((x + dwx) * 0.019, (z + dwz) * 0.019) * 3.6;
+  /*
+   * CALMED, 0.019 / 3.6 -> 0.0125 / 2.2.
+   *
+   * At 0.019 its wavelength is about 53 units, which is the crinkle scale — big
+   * enough to catch the raking key and throw a shadow, small enough that a
+   * dozen of them cross a single dune flank. Against the long smooth ridges the
+   * foreground is now built from, that read as wrinkling on an otherwise clean
+   * surface. Lengthened and quietened it goes back to being what its own note
+   * describes: a slow irregularity in the drifts rather than a texture on them.
+   */
+  const sculpt = drift((x + dwx) * 0.0125, (z + dwz) * 0.0125) * 2.2;
 
   /*
    * The swell under the igloo. A gaussian rather than more noise, because its
@@ -218,6 +285,22 @@ function rawHeight(x, z) {
    * each extra octave adds detail at half the wavelength, and it was those top
    * octaves that were putting the crinkle on the slopes.
    */
+  /*
+   * A DUNE BAND — dome() sampled anisotropically.
+   *
+   * Identical in every other respect: same shaping curve, same envelope that
+   * stops every crest reaching the same height. The only difference is the
+   * frame it reads the noise in, and that difference is the whole look.
+   */
+  const dune = (f, ox, oz, rot, stretch, px = x, pz = z) => {
+    const n = anisotropic(mountain, f, ox, oz, rot, stretch, px, pz);
+    const t = Math.min(1, Math.max(0, n * 0.5 + 0.5));
+    const s2 = t * t * (3 - 2 * t);
+    const env =
+      0.45 + 0.55 * Math.abs(anisotropic(drift, f * 0.32, ox, -oz, rot, stretch, px, pz));
+    return s2 * env;
+  };
+
   const dome = (f, ox, oz, px = x, pz = z) => {
     const n = mountain(px * f + ox, pz * f + oz);
     const t = Math.min(1, Math.max(0, n * 0.5 + 0.5));
@@ -354,9 +437,47 @@ function rawHeight(x, z) {
    * does NOT: it is the one that makes face angle rather than height (see its
    * own note), and the ground still needs its slopes.
    */
+  /*
+   * THE MIDDLE GROUND COMES DOWN, 118 / 34 / 20 -> 88 / 15 / 5.
+   *
+   * THIS IS THE CHANGE THAT MAKES THE MOUNTAINS BIG, and it is not a change to
+   * the mountains. Measured off the frame, the background summits were already
+   * reaching thirteen and a half degrees above the horizon — as high as they
+   * have ever been — and the picture still read as rolling hills with a ridge
+   * behind them. The reason is that the middle ground was rising to within a
+   * hundred pixels of those summits, so the RELIEF between them was almost
+   * nothing, and relief is what the eye measures a mountain by. Absolute height
+   * in frame does not signify; the drop from the summit to the valley floor is
+   * the whole of it.
+   *
+   * The brief asks for a scale hierarchy — rolling foreground, igloo and ridge,
+   * then a huge range — and that hierarchy needs a FLOOR under the range for
+   * the range to stand out of. So the two small octaves come down hard: they
+   * were putting mound-sized lumps across the whole middle distance, which both
+   * filled the valley and gave the eye a repeating unit to read the scale by.
+   *
+   * The large octave keeps most of its amplitude, because that is the broad
+   * swell the igloo's own ridge belongs to and it should stay.
+   */
   const hummocks =
-    (dome(0.0016, 7.3, -21.5, wx, wz) * 118 +
-      dome(0.0045, 61.7, 13.1, wx, wz) * 34 +
+    /*
+     * TWO CROSSING DUNE BANDS, replacing two isotropic dome octaves.
+     *
+     * They are at different rotations on purpose — 0.24 and -0.38 radians, so
+     * roughly 35 degrees apart. A single band, however well stretched, is a
+     * corduroy: parallel ridges of one size marching across the frame. Two at
+     * an angle interfere, and the interference is what produces the real thing
+     * — ridges that run for a while, merge, fork, and die out into a flat, with
+     * hollows of different sizes between them.
+     *
+     * The second band is also nearly twice the amplitude the isotropic octave
+     * it replaces had. That octave was cut to 15 because at 220 units across it
+     * was putting mound-sized lumps everywhere; stretched, the same energy goes
+     * into the LENGTH of a ridge instead of into its diameter, so it builds
+     * form rather than clutter and can carry more.
+     */
+    (dune(0.0016, 7.3, -21.5, 0.24, 4.4, wx, wz) * 88 +
+      dune(0.0052, 61.7, 13.1, -0.38, 3.2, wx, wz) * 20 +
       /*
        * THE OCTAVE THAT ACTUALLY MAKES ANGLE, up from 8.
        *
@@ -387,7 +508,25 @@ function rawHeight(x, z) {
        * enough to change that. Asking for visible rock on a rounded snow dome is
        * asking for rock where there is no face to hold it.
        */
-      dome(0.012, 5.2, 44.8) * 42) *
+      /*
+       * DOWN TO 20, from 42.
+       *
+       * Its note is right that this is the octave that converts amplitude into
+       * face angle rather than into skyline, and that is why it was raised. The
+       * cost, which that note did not have to pay when the terracing was also
+       * carrying edges, is that at 83 units across it puts a lump roughly the
+       * size of the igloo's mound on every part of every hill — and a hillside
+       * covered in mound-sized lumps is the "dumped" reading. The reference has
+       * nothing at this scale in its mid ground at all: it goes straight from
+       * the big dune forms to the fine wind texture on them.
+       *
+       * The angle it was supplying is now supplied by the placed peak's steeper
+       * profile and its stronger spurs, which make it where a mountain actually
+       * has it instead of everywhere.
+       */
+      /* The one term left isotropic, and deliberately: it is surface grain
+         rather than landform, and grain has no direction. */
+      dome(0.012, 5.2, 44.8) * 4) *
     hillEnv *
     hummockRamp;
 
@@ -420,70 +559,187 @@ function rawHeight(x, z) {
   };
 
   /*
-   * A PEAK, AS OPPOSED TO A HILL — and the difference is not height.
+   * placedPeak USED TO LIVE HERE, AND massif() BELOW IS WHAT REPLACED IT.
    *
-   * placedHill above is a cos-squared dome: a single smooth surface with one
-   * continuous outline. That is a hill, and no amount of noise laid over it
-   * turns it into a mountain, which is what the last attempt proved. Piling
-   * more ridged noise onto a dome gives a dome with a rough coat; the eye still
-   * reads the underlying shape, because noise is isotropic and mountains are
-   * not.
+   * It was a cos-to-a-power profile modulated by polar harmonics about its own
+   * centre — the idea being that what makes a mountain legible at a distance is
+   * its SPURS, the ridges running down from the summit and the gullies between
+   * them, and that noise cannot produce them because noise has no idea where
+   * the summit is. That reasoning is correct and it is carried forward intact:
+   * massif() computes exactly the same angular term.
    *
-   * WHAT MAKES A MOUNTAIN LEGIBLE IS ITS SPURS. Ridges run DOWN from the summit
-   * — they converge at the top and fan out toward the foot, with gullies
-   * between them doing the same. That radial organisation is the thing the eye
-   * uses to find the summit and read the scale, and it is a property of the
-   * landform's structure, not of its surface: water and ice carved it from the
-   * top down, so everything on the mountain points at the peak.
-   *
-   * Noise cannot produce that, because noise has no idea where the summit is.
-   * So the ridges are modulated in POLAR angle about the peak's own centre,
-   * which puts the convergence in by construction.
-   *
-   *   height = profile(r) * ( 1 + spur(theta) * flank(r) )
-   *
-   * THE THREE ANGULAR TERMS are harmonics: five main spurs, nine secondary, and
-   * fourteen fine. Incommensurate counts, so the sum never repeats around the
-   * circle and no two flanks are the same — one flank comes out broad and
-   * simple, the next is split by a gully, which is what stops it reading as a
-   * fluted cone.
-   *
-   * flank(r) IS WHAT KEEPS IT A MOUNTAIN AND NOT A STARFISH. The angular term
-   * has to vanish at both ends of the radius: at the summit because that is
-   * what "converge" means — spurs that still have amplitude at r=0 tear the
-   * peak into separate points — and at the foot because a ridge that reaches
-   * the base makes the outline a cog rather than a mountain meeting a plain.
-   * A sine of r does both, and it puts the spurs' strongest expression halfway
-   * down the flank, which is where a real one is most defined.
-   *
-   * The radial profile is still built on cos-squared, for the reason recorded on
-   * placedHill: it lands at the foot with zero gradient, so there is no ring
-   * seam where the form meets the ground. Taking it to a power steepens the
-   * flanks without touching that property — the same mass, standing at a
-   * mountain's angle rather than a drift's.
+   * What it could not do was be anything other than sharp. Its exponent and
+   * spur amplitude were fixed at values chosen to make one dramatic peak, so
+   * every caller got that peak, and a landscape built from one shape is the
+   * sawtooth problem no matter how the shapes are arranged. massif() takes the
+   * same construction and puts a roundness on it, which is what lets a range be
+   * mostly broad masses with a few sharp ones in it.
    */
-  const placedPeak = (cx, cz, radius, height, seed) => {
-    const px = x - cx;
-    const pz = z - cz;
-    const r = Math.sqrt(px * px + pz * pz);
+
+  /*
+   * A MASSIF — placedPeak's structure at RANGE scale, plus the three things
+   * that separate a mountain from a big cone.
+   *
+   * WHY NOT JUST TURN UP THE RIDGED NOISE. That is what the background used to
+   * be (see the crest() note below, which is kept because it was right about
+   * the version it describes) and it produced the one failure the brief names
+   * explicitly: repeated cones. Ridged fbm has no idea where a summit is, so
+   * every local maximum of the field becomes an identical spike and the skyline
+   * comes out as a row of them. Large forms have to be AUTHORED; noise is only
+   * good for the irregularity laid on top of them.
+   *
+   * So the order here is the one the brief asks for: build the mass, then break
+   * it up.
+   *
+   *   1. MASS      an elliptical, rotated footprint with a broad foot. Rotation
+   *                and aspect are what stop nine of these reading as nine of
+   *                the same object seen from different distances.
+   *   2. LEAN      the summit is displaced off the centre of the footprint, so
+   *                one flank is long and shallow and the other is short and
+   *                steep. Real peaks are never in the middle of their own base,
+   *                and a symmetric one announces itself instantly.
+   *   3. SPURS     the same polar harmonics placedPeak uses, for the ridges
+   *                that converge on the summit. This is the term that makes a
+   *                distant silhouette readable as a mountain.
+   *   4. CREST     a raised line along the massif's long axis, so the top is an
+   *                ARETE rather than a point — the difference between an alpine
+   *                ridge and a volcano.
+   *   5. CARVE     ridged noise evaluated in the massif's OWN frame, at a
+   *                wavelength derived from its radius. Because the frequency
+   *                scales with the object, a 900-unit massif gets nine-hundred-
+   *                unit valleys rather than the same grain as a 400-unit one,
+   *                which is most of what sells the size difference between the
+   *                layers.
+   *
+   * Terms 3 to 5 are all multiplied by flank(), which is zero at the summit and
+   * zero at the foot. At the summit because spurs that still have amplitude at
+   * r=0 tear the peak into separate points; at the foot because a ridge that
+   * reaches the base leaves a scalloped outline where the mountain meets the
+   * ground instead of a clean skirt.
+   */
+  const massif = (cx, cz, radius, height, seed, opts) => {
+    const aspect = (opts && opts.aspect) || 1.0;
+    const rot = (opts && opts.rot) || 0;
+    const lean = (opts && opts.lean) || 0;
+    const carveAmt = opts && opts.carve !== undefined ? opts.carve : 0.34;
+    const spurAmt = opts && opts.spur !== undefined ? opts.spur : 0.30;
+    /*
+     * ROUNDNESS: 0 is a sharp alpine peak, 1 is a broad snow dome.
+     *
+     * THE ONE CONTROL THE FIRST VERSION OF THIS FILE WAS MISSING, and its
+     * absence is what produced the skyline the brief rejects. Every massif was
+     * built from one recipe — the same profile exponent, the same spur
+     * amplitude, the same carving — so eleven of them in a row came out as
+     * eleven versions of the same sharp object, and a row of sharp objects at
+     * similar heights is a sawtooth however carefully each one is placed.
+     *
+     * Realistic ranges are not made of one landform. They are mostly enormous
+     * rounded masses, with a minority of ridged ones and only the occasional
+     * genuine spire, and the brief puts numbers on that: roughly 70 / 20 / 10.
+     * That mix is impossible to express as placement alone; it has to be a
+     * property of the generator, which is what this is.
+     *
+     * It drives four things at once, because "rounded" is not one parameter:
+     *
+     *   profile   a LOWER exponent. cos^p reaches the foot with zero gradient
+     *             at any p, so the exponent is not about the seam — it is about
+     *             where the mass sits. A high p pulls mass under the summit and
+     *             straightens the flank into a cone; a low one spreads it out
+     *             into a shoulder, which is what makes a mountain read as
+     *             enormous rather than as tall.
+     *   spurs     damped, so the radial ridges become broad buttresses rather
+     *             than fins.
+     *   crest     damped hardest. An arete is the one feature that is purely
+     *             sharp; a rounded summit should barely have one.
+     *   carve     damped, so the ridged noise scallops the flank instead of
+     *             cutting notches through the outline.
+     */
+    const round = opts && opts.round !== undefined ? opts.round : 0.0;
+
+    const gx = x - cx;
+    const gz = z - cz;
+
+    /* Into the massif's own frame. */
+    const cr = Math.cos(rot);
+    const sr = Math.sin(rot);
+    const lx = (gx * cr + gz * sr) - lean * radius;
+    const lz = (-gx * sr + gz * cr) * aspect;
+
+    const r = Math.sqrt(lx * lx + lz * lz);
     if (r >= radius) return 0;
 
     const u = r / radius;
-    const theta = Math.atan2(pz, px);
+    const theta = Math.atan2(lz, lx);
 
-    const spur =
-      Math.cos(theta * 5 + seed) +
-      0.55 * Math.cos(theta * 9 - seed * 1.7) +
-      0.30 * Math.cos(theta * 14 + seed * 0.6);
-
+    /*
+     * Broad-based, cos-to-a-power like placedPeak — but a LOWER power than its
+     * 2.7. That value concentrates mass under the summit to make a sharp peak,
+     * and a range does not want that: what reads as a big mountain is a wide
+     * shoulder carrying a long flank, not a spike. It still lands at the foot
+     * with zero gradient, so there is no ring seam.
+     */
     const c = Math.cos((Math.PI / 2) * u);
-    /* 1.45: steeper flanks than a dome, same seamless foot. */
-    const profile = Math.pow(c, 1.45);
+    const profile = Math.pow(c, 2.4 - 1.25 * round);
 
-    /* Zero at the summit, zero at the foot, strongest halfway down. */
     const flank = Math.sin(Math.PI * u);
 
-    return height * profile * (1 + spur * 0.19 * flank);
+    /*
+     * THE CROWN GUARD, AND IT IS WHAT ACTUALLY ROUNDS A SUMMIT.
+     *
+     * flank() is zero at the summit, which sounds as though it already protects
+     * the crown — but it is a sine, so it is up to 0.45 by a seventh of the way
+     * down, and at that radius on a 900-unit massif that is still a hundred and
+     * thirty units of summit region getting the full spur and carve treatment.
+     * That is exactly where the serration in the old skyline was coming from:
+     * not the flanks, which looked fine, but the top of every mountain being
+     * chewed into three or four competing points.
+     *
+     * This holds every modulator off the top of the form entirely and fades
+     * them in below the shoulder. The result is a summit that is pure profile —
+     * a smooth dome or a clean point depending on the exponent — with the
+     * structure appearing where a real mountain has it, on the flanks.
+     */
+    const crown = smoothstep(0.09, 0.40 + 0.18 * round, u);
+    const mod = flank * crown;
+
+    /* Incommensurate harmonics, so the sum never repeats around the circle. */
+    const spur =
+      Math.cos(theta * 4 + seed) +
+      0.58 * Math.cos(theta * 7 - seed * 1.7) +
+      0.31 * Math.cos(theta * 11 + seed * 0.6);
+
+    /* The arete: highest along the long axis, falling away to either side. */
+    const crestLine = Math.pow(Math.abs(Math.cos(theta)), 2.2);
+
+    /*
+     * Ridged fbm in local coordinates. Frequency is 2.4 wavelengths across the
+     * radius at the coarse octave, so the biggest carved valley is about a
+     * third of the mountain — the scale a real cirque sits at.
+     */
+    let sum = 0;
+    let amp = 1;
+    let norm = 0;
+    let f = 2.4 / radius;
+    for (let i = 0; i < 3; i += 1) {
+      const n = 1 - Math.abs(mountain(lx * f + seed * 17.3 * (i + 1), lz * f - seed * 9.1 * (i + 1)));
+      sum += n * n * amp;
+      norm += amp;
+      amp *= 0.44;
+      f *= 2.19;
+    }
+    /* Centred on zero so it both raises ridges and CUTS valleys. A carve that
+       only adds turns the massif into a lumpier massif; one that subtracts is
+       what puts cols and hanging valleys into the silhouette. */
+    const carve = (sum / norm - 0.52) * 1.9;
+
+    const shape =
+      profile *
+      (1 +
+        spur * spurAmt * (1 - 0.62 * round) * mod +
+        crestLine * 0.20 * (1 - 0.78 * round) * mod +
+        carve * carveAmt * (1 - 0.55 * round) * mod);
+
+    return shape > 0 ? height * shape : 0;
   };
 
   /*
@@ -541,7 +797,71 @@ function rawHeight(x, z) {
      * the peak concentrates it toward the summit, so converting one to the
      * other loses apparent scale unless the height goes up to compensate.
      */
-    placedPeak(-256, -210, 366, 132, 1.7) +
+    /*
+     * THE PRIMARY MOUNTAIN, AND IT IS A BROAD MASS NOW RATHER THAN A PEAK.
+     *
+     * This slot has always been the dominant form in the frame — the note above
+     * records its centre and radius being solved off the composition, and both
+     * are kept within a few units. What changed is its CHARACTER. It was a
+     * placedPeak: profile exponent 2.7, spurs at 0.34, mass concentrated under
+     * the summit. That is the recipe for a spire, and at this size it read as a
+     * dramatic fantasy peak rather than as an Arctic mountain.
+     *
+     * The reference's dominant mass is the opposite kind of object: a huge
+     * rounded snow-covered dome with one long shallow flank and one short steep
+     * one, larger than everything around it and conspicuously SOFTER. That is
+     * what makes it read as a landform of enormous size — a sharp summit gives
+     * the eye a scale reference and a rounded one does not, so the rounded one
+     * always reads bigger at the same height.
+     *
+     * So: massif at round 0.92, which is nearly the top of the range, with the
+     * spurs and carving pulled right down under it. Radius up from 366 to 430
+     * and height from 132 to 168, because a broad form needs both to keep the
+     * presence the sharp one had.
+     *
+     * THE RADIUS IS BOUNDED BY THE IGLOO, not by taste. The structure stands at
+     * (-30, 252), which is 541 units from this centre; anything past that and
+     * the mountain starts lifting the ground the igloo is seated on.
+     */
+    /*
+     * PUSHED BACK AND WIDENED rather than made taller: z -235 -> -320, radius
+     * 430 -> 470, height 168 -> 134.
+     *
+     * At its first placement this filled the top of the frame on its own and
+     * left the authored ranges with nowhere to be seen, so the picture had one
+     * mountain in it and no distance. A near object subtends a large angle for
+     * very little height, and that is the wrong way to buy scale — it makes the
+     * mountain big IN FRAME while making the world look small, because there is
+     * nothing behind it to be far away.
+     *
+     * Moving it back eighty-five units and spreading it wider keeps the same
+     * mass and the same broad rounded read, drops the angle it subtends, and
+     * opens the sky it was covering for layers B and C. Still bounded by the
+     * igloo at (-30, 252): the centre is now 619 units away against a radius of
+     * 470.
+     */
+    /*
+     * DEMOTED TO A SHOULDER, and the primary mountain moves back to layer A.
+     *
+     * This slot is 740 units from the lens, which is near enough that whatever
+     * stands in it fills the middle of the frame regardless of its height — and
+     * with the mid-ground floor lowered it did exactly that: one white dome
+     * across the centre of the picture, with the actual ranges pushed out to
+     * the two edges and a valley that went nowhere.
+     *
+     * A dominant mountain has to be far enough away to have things in front of
+     * it and beside it. This one cannot be, so it stops trying: 104 units and
+     * pushed left, where it reads as the near shoulder the eye crosses on the
+     * way back to the range. The primary mass is now A1, at twice the distance.
+     */
+    massif(-380, -300, 430, 104, 1.7, {
+      aspect: 1.14,
+      rot: 0.42,
+      lean: 0.20,
+      round: 0.92,
+      spur: 0.26,
+      carve: 0.2,
+    }) +
     /*
      * RIGHT, further back — rises behind the valley and overlaps it.
      *
@@ -556,7 +876,23 @@ function rawHeight(x, z) {
      * same height turns both into ridges. Dropping this by a quarter is what
      * makes the one behind the igloo read as THE summit.
      */
-    placedHill(320, -150, 310, 94) +
+    /*
+     * A MASSIF NOW, NOT A DOME — and the composition it was solved for is kept.
+     *
+     * The note above is the record of this being lowered to give the sky back,
+     * and that is still what its height is doing. What changed is that it is
+     * the whole right-hand third of the frame, and a cos-squared dome at that
+     * size is a single unbroken white surface with one outline: it read as a
+     * drift the size of a mountain, and it blocked every plane of the new
+     * background behind it with nothing of its own to look at.
+     *
+     * Run through massif() it gets spurs, a lean and carved valleys, so it has
+     * slopes steep enough for the alpine rule in the shader to break rock out
+     * of — which is what the reference has on that side of frame. Same centre
+     * within a few units, same order of height, so the skyline it sets across
+     * the right of the picture is where it was.
+     */
+    massif(400, -172, 336, 108, 3.3, { aspect: 1.22, rot: -0.55, lean: 0.24, round: 0.86, spur: 0.2, carve: 0.16 }) +
 
     /*
      * HALF-SIZE HILLS FILLING THE MIDDLE.
@@ -574,9 +910,38 @@ function rawHeight(x, z) {
      * their job — filling the gap so it does not read as a hole — at three
      * quarters of the height.
      */
-    placedHill(30, -330, 150, 42) +
-    placedHill(-105, -430, 165, 46) +
-    placedHill(175, -390, 140, 36) +
+    placedHill(30, -330, 150, 24) +
+    placedHill(-105, -430, 165, 27) +
+    placedHill(175, -390, 140, 20) +
+
+    /*
+     * THE RIGHT-HAND BAND, WHICH WAS THE LAST BARE PIECE OF THE PICTURE.
+     *
+     * Between the igloo's rise and the foot of the right massif there was a
+     * run of ground sitting at about fifteen units and nothing on it — the
+     * drifts alone, which at that distance grade into a single smooth sheet.
+     * It read as a gap in the middle distance on that side, the same failure
+     * the three fillers above were added to fix in the centre of frame.
+     *
+     * SOLVED FROM THE FRAME, like the rest. The lens is at (12.8, 60, 422)
+     * aimed at (-24.4, 42.8, 250), which puts its axis 12.2 degrees left of
+     * -Z; the middle of the bare band is 22.8 degrees right of that axis, and
+     * at a depth of z = -90 that lands the centre at x = 109. Its summit comes
+     * out 42% down the frame — BELOW the skyline the three fillers set at 36%,
+     * which is the point: it has to read as a nearer plane crossing in front
+     * of them, not as another candidate for the horizon.
+     *
+     * Sized to the fillers it stands among rather than to make a statement:
+     * 150 and 26 against their 150/24, 165/27 and 140/20. It overlaps the foot
+     * of the massif at (400, -172) and of the near hill at (288, 35), so it
+     * arrives behind something and in front of something else instead of
+     * showing its whole outline against flat snow.
+     *
+     * IT DOES NOT REACH THE IGLOO. The structure stands at (-30, 252), which
+     * is 369 units from this centre against a radius of 150 — measured, not
+     * assumed, because anything that lifts the pad moves the hero object.
+     */
+    placedHill(109, -90, 150, 26) +
 
     /*
      * AND SMALLER ONES IN FRONT OF THE BIG PAIR, so each large hill has
@@ -684,9 +1049,250 @@ function rawHeight(x, z) {
    * simply stand THROUGH the near one wherever it is higher, which is what
    * being behind something looks like.
    */
+  /*
+   * THREE AUTHORED RANGES, AND THE NOISE IS DEMOTED TO A COAT ON THEM.
+   *
+   * What used to be here was two bands of crest() — pure ridged fbm ramped up
+   * with distance — and it produced exactly the failure mode the brief names:
+   * a row of thin, repeated cones with no mass behind them. The reason is
+   * structural rather than a matter of tuning. Ridged noise has no notion of
+   * where a summit is, so every local maximum of the field is the same event
+   * at the same scale, and a skyline made of them reads as a comb however the
+   * amplitude and the contrast ramp are set.
+   *
+   * Large forms are AUTHORED. Each entry below is a massif() — a placed mass
+   * with its own footprint, orientation, lean, spurs and carving — and the
+   * noise now only rides on top of them (see `weathering`), which is the order
+   * the brief asks for: build the big shapes first, then add the irregularity.
+   *
+   * THE LAYERS, AND WHY THEIR HEIGHTS GO UP WITH DISTANCE.
+   *
+   * Apparent height is height over distance, so a range twice as far away needs
+   * to be twice as tall to subtend the same angle. Making each layer a little
+   * MORE than that keeps the far one standing clear above the near one instead
+   * of being hidden by it — which is the only way four planes of mountain are
+   * legible as four planes rather than as one crust along the horizon.
+   *
+   *   A   z -430..-570    h 205..255    the range the valley runs into
+   *   B   z -880..-1030   h 300..360    the main wall behind it
+   *   C   z -1290..-1470  h 430..510    the far summits, above everything
+   *
+   * The camera sits at z 422 with a 42-degree vertical lens pitched 5.6 degrees
+   * down, so the top of frame is 15.4 degrees above the horizon. C3 at h 500
+   * and 1850 units out subtends 13.4 degrees — the tallest thing in the picture
+   * and still inside the frame with sky over it.
+   *
+   * X SPREAD IS SOLVED FROM THE LENS, not chosen. The horizontal half-angle is
+   * 42.7 degrees, so the visible half-width at distance D is 0.92 D: about 800
+   * units at layer A, 1200 at B and 1600 at C. Each layer's outermost massifs
+   * sit AT or slightly beyond that, so the ranges run off both sides of the
+   * frame rather than ending inside it — a mountain whose whole footprint is
+   * visible is a mountain you have measured, and one that leaves the picture is
+   * one that could be any size.
+   *
+   * Every massif carries a different rotation, aspect and lean. Nine copies of
+   * one shape at nine sizes is the other half of the repeated-cone problem, and
+   * it is the asymmetry rather than the height that stops it.
+   */
   let peaks = 0;
-  if (mid > 0) peaks = crest(0.0019, 0, 0) * MID_HEIGHT * mid;
-  if (far > 0) peaks = Math.max(peaks, crest(0.00095, 41, -93) * FAR_HEIGHT * far);
+  const range = (h) => {
+    if (h > peaks) peaks = h;
+  };
+
+  /*
+   * THE COL IS AUTHORED AS A GAP IN THE LIST, not carved out afterwards.
+   *
+   * The reference's depth comes from one thing more than any other: a V-shaped
+   * opening right of centre where the skyline drops most of the way to the
+   * valley floor and you see three ranges receding through it. A skyline that
+   * is uniformly high across the frame has no such window, and without it the
+   * mountains are a wall — which is what the first pass of this list produced.
+   *
+   * So layers A and B are deliberately SHORT of a massif around world x 0..250,
+   * which is the +3 to +11 degree slice of the lens, about two thirds of the
+   * way across frame. The nearest massifs either side reach that slice near
+   * their feet, so the ground there is a saddle rather than a hole, and layer
+   * C's tallest summit stands square in the window behind it.
+   */
+
+  /*
+   * EVERY HEIGHT BELOW COMES DOWN BY ROUGHLY AN EIGHTH, AND THE SKY IS WHY.
+   *
+   * Sampled in an eight-by-six grid, the reference's top row runs 118 to 214 —
+   * it is mostly SKY, with the mountains occupying the second and third bands
+   * of the frame. Ours ran 78 to 167: mountain edge to edge, with a strip of
+   * blue above it. The brief asks for substantial sky and for the environment
+   * to feel enormous, and those are not in tension — a range reads as huge
+   * because of what is beside and behind it, not because it reaches the top of
+   * the picture. A skyline pressed against the frame edge actually reads
+   * SMALLER, because there is nothing left for it to be measured against.
+   *
+   * The ratios between the three layers are untouched, so the receding planes
+   * the list was built for are exactly as they were. This is a scale, not a
+   * redesign.
+   */
+
+  /* ---- LAYER A: the near range the valley runs into -------------------- */
+  /*
+   * ROUNDNESS IS ASSIGNED HERE, NOT LEFT TO THE DEFAULT, and the split across
+   * the eleven entries below is the brief's 70 / 20 / 10.
+   *
+   *   round >= 0.75   seven of them   broad rounded snow masses
+   *   round ~ 0.4     three           medium, visibly ridged
+   *   round <= 0.2    one             a genuinely sharp peak, and only one
+   *
+   * THE HEIGHTS ARE ALSO DELIBERATELY UNEVEN NOW. Layer B used to run
+   * 252 / 205 / 258 / 212 — four masses within a quarter of each other, which
+   * is a row rather than a range whatever their shapes are. Real skylines have
+   * large-scale rhythm: a dominant mass, a long low saddle, a secondary summit,
+   * a valley. Spreading each layer's heights over better than a two-to-one
+   * ratio is what puts that rhythm in.
+   *
+   * AND THEY ALL WENT UP AGAIN AFTER THE FIRST ROUNDED PASS, by about a third.
+   * Roundness costs apparent height and it is worth being explicit about why:
+   * the profile exponent drops from 2.4 to about 1.3, which spreads the same
+   * summit height over a much wider shoulder, and the crown guard removes the
+   * spur and carve contributions that used to pile up just below the top. The
+   * number in this call is still the height of the summit — what changed is
+   * that far less of the massif now approaches it, so a range set to the old
+   * figures reads as a line of low domes. Rounder mountains have to be taller
+   * to be the same mountain.
+   */
+
+  /* ---- LAYER A: the near range the valley runs into -------------------- */
+  /*
+   * THE PRIMARY MOUNTAIN. Bigger than anything else in the frame by a clear
+   * margin, broad, rounded, left of centre — which is where the reference puts
+   * its dominant mass, and it is not an arbitrary choice: the igloo sits just
+   * right of centre, so putting the mountain on the same side would stack the
+   * two strongest things in the picture on one axis.
+   *
+   * 1157 units out and 286 tall, which subtends eleven degrees against a frame
+   * top of fifteen. That leaves sky above it — a summit pressed into the top
+   * edge reads as a wall rather than as a mountain — and it stands a clear four
+   * degrees over the layer-B masses behind it.
+   *
+   * THE X AND THE RADIUS ARE SET BY WHAT MUST BE SEEN PAST IT. At (-600, r 620)
+   * its right flank reached world x +20, which at this depth is 12.6 degrees
+   * right of the lens axis — better than half way across the frame — so the
+   * dominant mountain was also the thing hiding every range behind it, and the
+   * picture had two masses in it and no distance at all. Moved to -780 with the
+   * radius pulled in to 560 it stops at the frame's centre line, and the col to
+   * its right opens onto B2, C2 and C3 stacked one behind another.
+   */
+  /*
+   * SPURS BACK UP TO 0.30 ON THE BROAD MASSES, AND THE CROWN GUARD IS WHY THIS
+   * IS SAFE NOW.
+   *
+   * They were cut to 0.17 in the same pass that added roundness, because spurs
+   * were what had been serrating the skyline. That was over-correction: with
+   * the guard in place the angular term cannot reach the top of the form at
+   * all, so what it produces is ridges running down the FLANKS — which is
+   * exactly the "large form + medium ridges + subtle surface detail" the brief
+   * asks for, and without them the mountains came back as smooth featureless
+   * domes with nothing to read their size by.
+   *
+   * The two things the old skyline got wrong were sharp summits and uniform
+   * shapes. Neither is a property of flank ridges.
+   */
+  range(massif(-780, -560, 560, 286, 1.7, { aspect: 1.26, rot: 0.38, lean: 0.22, round: 0.9, spur: 0.30, carve: 0.22 }));
+  range(massif(-170, -600, 400, 106, 4.1, { aspect: 1.12, rot: -0.52, lean: -0.22, round: 0.82, spur: 0.28, carve: 0.22 }));
+  /*
+   * SHIFTED RIGHT AND LOWERED, from (640, h 222), to give the sun its corner.
+   *
+   * The key sits 33 degrees right of the lens axis and above the top of frame,
+   * so what the picture gets of it is the glow spilling down into the upper
+   * right. This mass and B3 behind it were standing in front of that: measured
+   * in an eight-by-six grid the reference's top-right two cells read 214 and
+   * 108 where ours read 108 and 79 — its brightest corner against our darkest.
+   *
+   * The reference does have a large dark mountain on that side and it is kept;
+   * it simply starts about four fifths of the way across rather than two
+   * thirds. This is the 20 per cent medium-ridged entry in the mix, so it holds
+   * its round 0.5 — the sun corner is bought with placement, not with shape.
+   */
+  range(massif(880, -520, 470, 196, 2.9, { aspect: 1.24, rot: 0.86, lean: 0.14, round: 0.5, spur: 0.26, carve: 0.24 }));
+
+  /* ---- LAYER B: the main wall ----------------------------------------- */
+  range(massif(-1010, -905, 660, 330, 5.3, { aspect: 1.18, rot: -0.24, lean: 0.26, round: 0.88, spur: 0.29, carve: 0.22 }));
+  range(massif(-400, -1010, 570, 288, 0.9, { aspect: 1.34, rot: 0.62, lean: -0.16, round: 0.44, spur: 0.21, carve: 0.30 }));
+  range(massif(800, -950, 650, 372, 3.6, { aspect: 1.08, rot: -0.78, lean: 0.21, round: 0.42, spur: 0.27, carve: 0.26 }));
+  /*
+   * PUSHED OUT TO THE EDGE, from x 1160 and 1520.
+   *
+   * THE SUN IS BEHIND THIS PAIR AND THAT IS WHERE THE MEASUREMENT SENT THEM.
+   * The key sits 33 degrees right of the lens axis and 18 above the horizon,
+   * which is above the top of frame — so what the picture gets of it is the
+   * glow spilling down into the upper right corner. These two were standing in
+   * front of it: sampled in an eight-by-six grid the reference reads 186 and
+   * 214 across the top right where ours read 129 and 83, and the whole of that
+   * difference is a dark mountain where the reference has lit sky.
+   *
+   * The reference does have a big dark massif on that side — it is the closest
+   * thing in its frame — but it starts about 83 per cent of the way across and
+   * ours started at 64. Moving them right keeps the mass and gives the sun its
+   * corner back.
+   */
+  range(massif(1420, -985, 630, 282, 6.2, { aspect: 1.26, rot: 0.41, lean: -0.24, round: 0.84, spur: 0.29, carve: 0.22 }));
+
+  /* ---- LAYER C: the far summits, seen through the col ------------------ */
+  range(massif(-1340, -1360, 860, 470, 2.2, { aspect: 1.15, rot: 0.29, lean: -0.20, round: 0.8, spur: 0.28, carve: 0.22 }));
+  /* THE ONE SHARP PEAK. Every range has one, and one is the whole point — it
+     is what the rounded masses are read against. Set at the back and off to the
+     left, where it is a note in the skyline rather than the subject. */
+  range(massif(-520, -1465, 780, 336, 5.9, { aspect: 1.28, rot: -0.66, lean: 0.24, round: 0.12, spur: 0.3, carve: 0.3 }));
+  /*
+   * SHIFTED LEFT INTO THE COL, from x 690, as well as lowered.
+   *
+   * This is the summit the window in the skyline was cut for, and it was
+   * sitting to the RIGHT of that window — so instead of being framed by the col
+   * it joined the mass filling the right of the picture, and the col looked
+   * through at nothing. At x 330 it stands square in the gap, which is what
+   * makes the opening read as depth rather than as a notch.
+   */
+  range(massif(330, -1390, 900, 440, 1.1, { aspect: 1.10, rot: 0.71, lean: -0.15, round: 0.78, spur: 0.28, carve: 0.22 }));
+  range(massif(1900, -1430, 880, 452, 4.7, { aspect: 1.22, rot: -0.35, lean: 0.18, round: 0.46, spur: 0.24, carve: 0.22 }));
+
+  /*
+   * WEATHERING — the old crest() field, kept but reduced to what it is good at.
+   *
+   * It is a poor generator of mountains and a good generator of the small,
+   * self-similar broken-ness that sits ON one: cols, gendarmes, the ragged
+   * quarter-scale detail along a ridge that stops an authored silhouette
+   * looking drawn. So it is now MULTIPLICATIVE on the massifs rather than a
+   * peak in its own right, which means it can only ever modulate a shape that
+   * already exists — it can no longer invent a spike in an empty valley, which
+   * is precisely what it was doing before.
+   *
+   * Gated on `mid` so it stays off the near field entirely, and kept modest:
+   * at 0.16 it moves a 300-unit summit by up to fifty units, which is a
+   * visible break in a ridge and nowhere near a second mountain.
+   */
+  if (peaks > 0 && mid > 0) {
+    /*
+       HALVED AND COARSENED, from 0.0026 / 0.11.
+       This is ridged fbm applied on top of the authored masses, and ridged fbm
+       is by nature a field of points — every local maximum is a little spike.
+       At 11 per cent on a 300-unit summit it was moving the outline by thirty
+       units at a wavelength of a couple of hundred, which is precisely the
+       scale that shows up as serration on a skyline. Dropping the frequency
+       makes what is left a broad undulation of the ridge rather than a set of
+       teeth on it, and halving the amplitude keeps it under the silhouette.
+    */
+    const weathering = crest(0.0014, 17, -44) - 0.5;
+    peaks *= 1 + weathering * 0.055 * mid;
+  }
+
+  /*
+   * A FLOOR UNDER THE RANGES, so they stand on ground rather than on the plain.
+   *
+   * Without it the last of layer A meets the near field at zero and the join
+   * reads as a moat. This raises the whole back half of the plate by a modest
+   * amount with the same smoothstep the ranges use, which puts a valley FLOOR
+   * between the igloo's hills and the mountains — the thing the brief calls the
+   * midground, and the surface the aerial perspective is measured across.
+   */
+  if (mid > 0) peaks = Math.max(peaks, (26 + 44 * far) * mid);
 
   /*
    * THE DISTANT RANGES ARE BACK, and the note that removed them is kept
@@ -762,7 +1368,32 @@ function rawHeight(x, z) {
    * looks like rock country; two thirds keeps the landform reading as
    * weathered while giving the escarpments enough definition to strip.
    */
-  const cut = hummocks + (terraced(hummocks) - hummocks) * 0.68;
+  /*
+   * THE TERRACING DROPS TO 0.18, from 0.68, AND IT IS THE SINGLE BIGGEST CAUSE
+   * OF THE HEAPED LOOK.
+   *
+   * Its own note argues for escarpments — shelf, riser, shelf — as the thing
+   * that gives a rounded hill an edge, and that is a real landform where hard
+   * rock has resisted. At two thirds strength applied to every noise hill in
+   * the frame it stops being an escarpment and becomes a texture: a field of
+   * short benches at one spacing, all over the middle distance, which is
+   * exactly what a tipped pile of material looks like and is nothing like the
+   * reference. Its mid ground is SMOOTH — long wind-packed snow dunes with an
+   * unbroken silhouette — and its hard edges are all in the rock at the back.
+   *
+   * At 0.18 the benches survive as a faint break in the slope where the
+   * landform already wanted one, and the dunes read as dunes.
+   */
+  /*
+   * TERRACING DOWN TO 0.07, from 0.18.
+   *
+   * It quantises height to eleven-unit steps with a sharp riser, which reads as
+   * bedding on a rock face and as a stair on a snow field. The mid-ground is
+   * meant to be snow, and the brief asks for soft accumulated forms there; a
+   * riser is the sharpest edge in the whole terrain function. What is left is
+   * enough to keep the hills from being pure smooth blobs.
+   */
+  const cut = hummocks + (terraced(hummocks) - hummocks) * 0.07;
 
   /*
    * CRAG: the rock, and it is deliberately the one term that is NOT rounded.
@@ -848,8 +1479,24 @@ function rawHeight(x, z) {
    * So this stays what it always was: surface break-up on ground that is shaped
    * by something else.
    */
+  /*
+   * THE TWO COARSE OCTAVES COME DOWN, from 22 and 16.
+   *
+   * Everything in this file that makes a rounded form at a few hundred units —
+   * the hummocks, the placed hills, the terracing and this — was tuned
+   * separately and against a frame where the mid ground was much smaller. Added
+   * together they produce several overlapping masses per hillside at similar
+   * sizes, and overlapping masses at ONE size is what the eye reads as spoil
+   * rather than as landform. Thinning the ones that are not placed is the way
+   * to fix that, because the placed forms are the ones that know where their
+   * summit is.
+   *
+   * THE FINE OCTAVE IS UNTOUCHED at 4.5. It is surface roughness on a rock
+   * face, it is the only thing supplying that, and it is far too small to make
+   * a mass.
+   */
   const crag =
-    (ramp(ridged(0.0034, 91.3, -17.7)) * 22 +
+    (ramp(ridged(0.0034, 91.3, -17.7)) * 8 +
       /*
        * UP FROM 9, FOR FACE ANGLE RATHER THAN FOR HEIGHT.
        *
@@ -859,8 +1506,24 @@ function rawHeight(x, z) {
        * amplitude turns into slope instead of into skyline, which is the same
        * argument the hummocks' fine octave makes.
        */
-      ramp(ridged(0.0082, 13.9, 44.1)) * 16 +
-      ridged(0.0195, -63.1, 8.5) * 4.5) *
+      /*
+       * AND BACK DOWN: 13 / 11 / 4.5 -> 8 / 5.5 / 1.8.
+       *
+       * The note above is the argument for the middle octave, and it is right
+       * that amplitude at 120-unit wavelength becomes face angle rather than
+       * skyline. What it does not account for is that face angle is exactly
+       * what the shader's alpine rule reads: every extra degree of slope here
+       * turns into another patch of exposed rock, so this term was writing the
+       * mid-ground's rock coverage as much as its shape — and the result was a
+       * middle distance that looked crushed and stony rather than snow-covered.
+       *
+       * The FINE octave comes down hardest, 4.5 to 1.8. At 50-unit wavelength
+       * it is below the scale anything in this shot is read at; all it
+       * contributed was the high-frequency chop the brief asks to be taken out,
+       * plus a normal that flickers when the camera moves.
+       */
+      ramp(ridged(0.0082, 13.9, 44.1)) * 5.5 +
+      ridged(0.0195, -63.1, 8.5) * 1.8) *
     cragRamp *
     hillEnv;
 

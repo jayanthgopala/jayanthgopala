@@ -2,6 +2,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { buildTerrainGeometry, MOUND_AT, TERRAIN_SIZE } from '../lib/terrain.js';
 import { iceMapsFor } from '../lib/baked.js';
+import { LOOK } from '../lib/lighting.js';
 
 /**
  * The ground.
@@ -230,7 +231,7 @@ const GROUND_FOG_GLSL = `
  *
  * Tied to the terrain, so if the pad height moves this has to move with it.
  */
-const FOG_BASE = 14.0;
+const FOG_BASE = LOOK.mist.base;
 /**
  * HOW FAST THE AIR THINS WITH ALTITUDE, in world units.
  *
@@ -260,7 +261,7 @@ const FOG_BASE = 14.0;
  * Replaces FOG_THICKNESS, FOG_NEAR_THICKNESS and FOG_STRENGTH, which described
  * a layer painted onto the terrain and have no meaning for a medium.
  */
-const FOG_SCALE_HEIGHT = 175.0;
+const FOG_SCALE_HEIGHT = 150.0;
 
 /**
  * Trim on the scene's fog density for the height integral.
@@ -295,7 +296,12 @@ const FOG_SCALE_HEIGHT = 175.0;
  * deliberately do NOT scale off this any more: they have their own density in
  * FOG_WISP_DENSITY, because clearing the haze was taking the wind with it.
  */
-const FOG_GAIN = 0.55;
+/*
+  * FROM THE PALETTE. This is the master on the whole ground-mist layer, so
+  * LOOK.mist.gain at zero switches it off wherever it is consumed rather than
+  * needing the raymarch itself edited. See lib/lighting.js.
+  */
+const FOG_GAIN = LOOK.mist.gain;
 
 /**
  * Samples along each view ray.
@@ -330,7 +336,7 @@ const FOG_STEPS = 6;
  * in Weather.jsx both have to agree with this — air blowing one way and snow
  * blowing the other is the single most obvious way to break the illusion.
  */
-const FOG_WIND_STRETCH = 0.26;
+const FOG_WIND_STRETCH = 0.15;
 
 /**
  * Size of one weather bank, as an inverse world scale.
@@ -458,7 +464,7 @@ const FOG_WISP_DRIFT = [34.0, 4.0];
  * FOG_WISP_DENSITY) — but it now actually reaches the ground the veils are
  * supposed to be seen against.
  */
-const FOG_WISP_HEIGHT = 90.0;
+const FOG_WISP_HEIGHT = LOOK.mist.height;
 
 /**
  * How much extinction a saturated wisp adds, as an ABSOLUTE density.
@@ -494,7 +500,7 @@ const FOG_WISP_HEIGHT = 90.0;
  * Very slightly cool rather than pure white: it is lit by the sky along with
  * everything else.
  */
-const FOG_WISP_COLOR = [0.94, 0.96, 0.99];
+const FOG_WISP_COLOR = LOOK.mist.color;
 
 /*
  * RAISED FROM 0.0022, ONCE THE HAZE WAS ACTUALLY GONE.
@@ -562,7 +568,7 @@ const FOG_WISP_COLOR = [0.94, 0.96, 0.99];
  * themselves half-dissolved in aerial perspective and a far more forgiving
  * backdrop than the near hills it was last measured on.
  */
-const FOG_WISP_DENSITY = 0.006;
+const FOG_WISP_DENSITY = LOOK.mist.density;
 
 /**
  * Where the wisps stop, in world units from the lens.
@@ -619,7 +625,7 @@ const FOG_WISP_FADE = 420.0;
  * of each crest, so strands get wider and more of them clear the threshold,
  * which is the shape a gust actually has.
  */
-const FOG_WISP_LOW = 0.40;
+const FOG_WISP_LOW = 0.46;
 const FOG_WISP_HIGH = 0.86;
 
 /* -------------------------------------------------------------------------
@@ -2332,7 +2338,13 @@ export default function Terrain({ begin = false }) {
          * scale, and under-driving it is what left the near field looking
          * printed.
          */
-        normalScale={[1.35, 1.35]}
+        /*
+         * FROM THE PALETTE. See LOOK.snow.normalScale — the value the notes
+         * above solved (1.35) was solved under a directional key, and this look
+         * is flat overcast, where the same map reads as frost on the lens rather
+         * than as relief on the ground.
+         */
+        normalScale={[LOOK.snow.normalScale, LOOK.snow.normalScale]}
         onBeforeCompile={onCompile}
       />
     </mesh>

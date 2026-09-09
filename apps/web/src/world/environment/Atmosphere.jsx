@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Environment, Sparkles } from '@react-three/drei';
 import { makeWinterSkyEnv } from './Sky.jsx';
+import { LOOK } from '../lib/lighting.js';
 
 /**
  * Light, air and dust.
@@ -51,7 +52,26 @@ import { makeWinterSkyEnv } from './Sky.jsx';
  * the bluest thing in a winter landscape, so it read as the shading being
  * dirty rather than cold.
  */
-export const HORIZON = '#b6c4d8';
+/*
+ * COOLED AND DARKENED, from #b6c4d8.
+ *
+ * This is the colour of the sky at the horizon as the lighting rig sees it, and
+ * the brief's palette hangs off it: the target's shadows are cool blue, not
+ * neutral grey, and the only way a shadow gets a colour is from what is filling
+ * it. A near-white horizon fills shadows with near-white, which is why every
+ * unlit slope in the old frame came out a warm putty grey — the sun's own tint
+ * with nothing cold to argue against it.
+ */
+/*
+ * NIGHT: taken from lib/lighting.js rather than written here.
+ *
+ * The note above is about a DAYLIGHT horizon and its argument is unchanged —
+ * whatever fills the shadows has to be colder than the key or every unlit slope
+ * comes back the key's own colour. At night the key is a moon and the thing
+ * arguing against it is an aurora, so the value moves and the reasoning does
+ * not. The daylight value it replaces (#8fa9c8) is kept in DAY.ambient.color.
+ */
+export const HORIZON = LOOK.ambient.color;
 /*
  * Sampled out of the backdrop plate, not chosen.
  *
@@ -110,7 +130,24 @@ export const HORIZON = '#b6c4d8';
  * FOG_WISP_COLOR in Terrain.jsx. Snow-white mist and distance haze are two
  * different materials and were never really one value.
  */
-export const FOG_COLOR = '#c8d6e6';
+/*
+ * THE AERIAL PERSPECTIVE COLOUR, cooled from #c8d6e6 and taken off white.
+ *
+ * Distance haze is scattered SKYLIGHT, so it should be the colour of the sky —
+ * and the sky in the target is a real blue rather than a bright overcast. At
+ * #c8d6e6 the far ranges dissolved into something two points off white, which
+ * is the "everything goes white" failure the brief calls out. This keeps the
+ * distance reading as air with a colour in it.
+ */
+/*
+ * NIGHT: LOOK.fog.color, and the pairing this note describes still binds.
+ *
+ * Distance haze is scattered SKYLIGHT, so it is the colour of the sky — which
+ * is why this and Sky's horizon stop have to be within a few points of each
+ * other in any hour, or the far ranges sit on the sky as a band of the wrong
+ * colour. Both moved together. See lib/lighting.js.
+ */
+export const FOG_COLOR = LOOK.fog.color;
 
 export default function Atmosphere() {
   /* Built once. It is a 256x128 canvas, but rebuilding it per render would
@@ -183,11 +220,101 @@ export default function Atmosphere() {
         but the wisps there no longer scale off it. Clearing the air was making
         the moving air vanish with it, and the two are separate things now.
       */}
-      <fogExp2 attach="fog" args={[FOG_COLOR, 0.0009]} />
+      {/*
+        HALVED, 0.0009 -> 0.00042, AND THE RANGES ARE THE REASON.
+
+        exp2 fog goes as the SQUARE of density times distance, so a number that
+        is invisible on the near ground is overwhelming at the back: at 0.0009
+        a summit 1850 units out came through 94 per cent haze — a silhouette
+        two points off the sky, with no rock, no ridge and no contrast left in
+        it. That was acceptable while the background was a distant crust; it is
+        not now that there are three authored ranges back there whose whole job
+        is to be read as landscape.
+
+        At 0.00042 the same summit takes 45 per cent, the middle wall takes 13
+        and the near range 6. That is a proper aerial gradient — each plane
+        lighter, bluer and flatter than the one in front of it — rather than a
+        veil over the lot, which is exactly the distinction the brief draws
+        between atmospheric depth and thick fog.
+      */}
+      {/*
+        BACK UP TO 0.0006 ONCE THE RANGES HAD ROCK ON THEM.
+
+        0.00042 was solved against mountains that were still white. With the
+        alpine rule breaking dark stone out of them the same air left the middle
+        distance reading as a wall of near-black — measured, the frame's p25
+        fell to 89 against the reference's 111 and its median to 113 against
+        141, while the SPREAD was already correct at 123 against 120. Contrast
+        right and level wrong, in the darks specifically, is a haze problem: the
+        reference's distant peaks come back 117/135/169, which is a mountain
+        seen through a lot of air, not a dark object rendered accurately.
+
+        Still less than half the 0.0009 this started at, and the point of the
+        change stands — the far range takes 73 per cent haze where it used to
+        take 94, so it is a blue mountain rather than a stain on the sky.
+      */}
+      <fogExp2 attach="fog" args={[FOG_COLOR, LOOK.fog.density]} />
 
       {/* A low ambient floor only. The environment map does the real lighting;
           this just stops crevices reading as pure black. */}
-      <ambientLight intensity={0.04} color={HORIZON} />
+      <ambientLight intensity={LOOK.ambient.intensity} color={HORIZON} />
+
+      {/*
+        THE SKY AS A FILL, AND IT IS WHAT MAKES THE SHADOWS BLUE.
+
+        The brief's palette is four things in a relationship: bright white snow,
+        cool blue shadow, dark rock, warm sunlight. Three of those were already
+        here; the blue shadow was not, and it could not be, because nothing in
+        the rig was blue. The key is warm by design, the ambient is a floor at
+        0.04, and the environment map's lower half is snow-bounce — so an unlit
+        slope was being filled with a dim version of the same warm light that
+        was hitting the lit one, and came out putty.
+
+        A hemisphere light is the right instrument rather than more ambient,
+        and the difference is the whole point. Ambient is a constant added to
+        every pixel: it lifts the lit snow exactly as much as the shadow, so it
+        kills contrast to buy colour. This is weighted by the surface normal's
+        Y, so it lands on ground facing UP — which is where the sky actually is
+        — and barely touches a face turned away from it. On a sunlit slope it
+        is a rounding error next to a key at 8.6; in a shadow it is most of the
+        light there is. That asymmetry is what puts colour into the dark end
+        without flattening the frame, and it is also simply what happens
+        outdoors: snow in shadow is blue because the only thing lighting it is
+        the sky.
+
+        The ground term is the snow bounce coming back up — very slightly warm
+        against the sky's blue, so undercuts and the north sides of drifts do
+        not go the same colour as everything else.
+      */}
+      {/*
+        0.42, AND THE FIRST PASS AT 1.15 IS WHY THE NUMBER IS WORTH A NOTE.
+
+        Measured against the reference in luminance percentiles, that pass came
+        out p10 106 / p50 136 / p90 190 against the reference's 92 / 141 / 212 —
+        the darks lifted, the highlights unreached, a 84-point spread against a
+        120-point one. Which is what a fill does when it is set by eye: the
+        shadows went blue as intended and the whole frame went flat with them,
+        because a fill has no way to add contrast, only to take it away.
+
+        Colour and quantity are separate settings here and only one of them was
+        wrong. The blue stays; there is a quarter as much of it, and the key
+        below goes up to open the top end back out.
+      */}
+      {/*
+        AND AT NIGHT IT STOPS BEING A FILL AND BECOMES THE LIGHT.
+
+        Everything above is an argument about a fill: how much blue the shadows
+        can take before the frame goes flat, why a hemisphere is the right
+        instrument for it and ambient is not. All of that holds. What inverts is
+        the RATIO it was solved against — 0.40 of this against a key of 11.8.
+
+        There is no such key at night. The sky is the brightest thing in the
+        picture and it is still dark, so the modelling can no longer come from
+        where a source is; it has to come from the sky's own colour differing
+        between what faces up and what faces away, which is precisely what a
+        hemisphere light is. It goes UP as the key comes down. See NIGHT.hemi.
+      */}
+      <hemisphereLight args={[LOOK.hemi.sky, LOOK.hemi.ground, LOOK.hemi.intensity]} />
 
       {/*
         One shadow-casting key, LOW BUT NOT RAZOR-LOW — about 30 degrees.
@@ -288,7 +415,61 @@ export default function Atmosphere() {
          * and the sunFace terms in Terrain.jsx and IglooBlocks.jsx, which are
          * now vec3( 0.3324, 0.3090, -0.8910 ). All must move if this does.
          */
-        position={[101, 94, -272]}
+        /*
+         * RAISED TO 27 DEGREES, from 18 — same bearing, same distance, only Y.
+         *
+         * WHY THE MOUNTAINS WERE DARK, AND IT WAS NOT THE ALBEDO. This key is a
+         * BACKLIGHT: normalised it is (0.33, 0.31, -0.89), so it points away
+         * from the camera and any slope turned toward the lens has a negative
+         * N.L and receives nothing but fill. That is most of what a mountain
+         * shows us. Measured in an eight-by-six grid the reference's second row
+         * of the frame ran 119 to 185 and ours ran 91 to 99 — its ranges are
+         * lit and ours were silhouettes.
+         *
+         * Moving the light sideways would fix the flanks and cost the shot its
+         * sun: the frame's horizontal half-angle is 42.7 degrees, and any
+         * bearing that lights a camera-facing slope puts the sun ninety degrees
+         * off axis and out of the picture. The bearing is not the free variable.
+         *
+         * ELEVATION IS. What the reference's mountains are actually showing is
+         * not lit flanks but lit SNOWFIELDS — the gentle upper slopes, which are
+         * near horizontal and therefore lit by height rather than by direction.
+         * A horizontal surface returns sin(elevation): at 18 degrees that is
+         * 0.31 and at 27 it is 0.45, half as much again, and it lands on every
+         * shoulder, saddle and valley floor in the frame while leaving the
+         * steep faces as dark as they were. The contrast the low key was chosen
+         * for is between slope and slope, and that survives; what changes is
+         * the level of the surfaces the picture is mostly made of.
+         *
+         * THREE OTHER PLACES HOLD THIS DIRECTION and all three moved with it:
+         * SUN in Sky.jsx, SUN_V in makeWinterSkyEnv, and the sunFace constant
+         * in Terrain.jsx and IglooBlocks.jsx, now vec3( 0.310, 0.454, -0.835 ).
+         */
+        /*
+         * AND BACK DOWN TO 21 DEGREES, from 27.
+         *
+         * It was raised to 27 because the ranges were dark, and the diagnosis
+         * was right at the time: they were sharp-flanked silhouettes that only
+         * a higher key could light. That is no longer what they are. Rounding
+         * them turned most of their surface into gently sloping snow, and the
+         * outcrop rule gave them material to be read by, so they no longer need
+         * the elevation to be visible.
+         *
+         * What the elevation cost is the FOREGROUND. A horizontal surface
+         * returns sin(elevation) and a gently rolling one returns very nearly
+         * the same thing at every point, so at 27 degrees the near snow came
+         * back almost uniformly lit: measured, the bottom three rows of the
+         * frame ran 165 to 225 where the reference runs 97 to 189. The
+         * reference's foreground is mostly SHADOW with lit crests through it,
+         * and that modelling comes from a low sun on a smooth surface — it is
+         * the whole reason this key was set low to begin with.
+         *
+         * 21 degrees is the compromise the scene can now afford. Every constant
+         * that mirrors this direction moved with it: SUN in Sky.jsx, SUN_V in
+         * makeWinterSkyEnv, and the sunFace vector in this file's shader and in
+         * IglooBlocks, now vec3( 0.325, 0.357, -0.876 ).
+         */
+        position={LOOK.key.position}
         // Raised with the environment cut, so the total light on the scene
         // holds roughly steady while far more of it arrives from one direction.
         // That trade is the whole of "modelling": same exposure, more form.
@@ -325,7 +506,54 @@ export default function Atmosphere() {
          * which is exactly what gives the reference its hard bright faces and
          * deep blue shadows — the thing an overcast cannot have.
          */
-        intensity={5.4}
+        /*
+         * UP TO 8.6, from 5.4, AND IT IS THE ONLY TERM THAT REACHES WHAT WAS
+         * WRONG.
+         *
+         * Measured in matching bands against the reference, after the rock and
+         * the fill had done their work: whole-frame p10 90 against its 92 —
+         * the dark end is now exactly right — and p90 163 against its 212. So
+         * the frame's floor is correct and its ceiling is fifty points short,
+         * which is a statement about LIT SURFACES ONLY and nothing else.
+         *
+         * Every other candidate moves both ends together and would undo the
+         * dark end to fix the bright one. Exposure scales the whole picture,
+         * and the sky measures 107 against the reference's 110 — matched, and
+         * it is a background rather than a lit surface, so it would move for
+         * nothing. Albedo scales the lit and the shadowed equally. The fill was
+         * just cut, deliberately, to open that floor.
+         *
+         * A directional key is the one lever that lands almost entirely on
+         * surfaces turned toward it: it raises the ceiling, leaves the shade to
+         * the ambient and the environment, and therefore widens the spread
+         * rather than shifting it. Which is exactly the shape of the error.
+         *
+         * DIRECTION AND ELEVATION ARE UNTOUCHED. The measurement in the note
+         * above — that a 30-degree key buys a p10-to-p90 spread of 48 where a
+         * high one gives 8 — is about the ANGLE, and none of it is at risk from
+         * making the same light stronger.
+         */
+        /*
+         * 11.8, FROM 8.6 — AND IT IS THE OTHER HALF OF THE FILL CUT ABOVE.
+         *
+         * The reference's frame reaches p90 212 and p98 244: its sunlit snow is
+         * genuinely near white, which is what snow in direct sun IS. Ours
+         * stopped at 190 and 224 with everything else already matching, and a
+         * top end that is short while the median is right is a KEY problem, not
+         * an exposure one — exposure would have carried the median and the
+         * shadows up with it and lost the darks that were already correct.
+         *
+         * Raising the key instead only moves surfaces the sun can actually see,
+         * which is exactly the set of pixels that measured short.
+         */
+        /*
+         * NIGHT: LOOK.key.intensity, and the elevation above is why the
+         * POSITION is untouched. Every note in this block solving 11.8 is a
+         * statement about a sun; the angle they were all careful to preserve is
+         * a statement about the ground, and the drifts still have to model
+         * themselves under a moon.
+         */
+        intensity={LOOK.key.intensity}
         /* Down from #f4f8fb, which was near enough white to be one. A key that
            bright leaves no room between a lit face and the sky behind it; this
            is the same light with the top taken off it and a little blue left
@@ -339,7 +567,13 @@ export default function Atmosphere() {
          * value. Both light and shadow being blue is what made the earlier
          * scene read as monochrome however far the contrast was pushed.
          */
-        color="#fff4e2"
+        /* COOLED, from #fff4e2. The brief asks for sunlight that is "slightly warm
+           white"; #fff4e2 is amber enough that snow lit through it and shaded
+           by nothing came out khaki on every mountain flank — most visible on
+           the big peak behind the igloo, whose sunward face was reading as
+           sandstone. This keeps the warmth as a bias rather than a tint, which
+           is what lets the new blue fill read as cold by contrast. */
+        color={LOOK.key.color}
         shadow-mapSize={[2048, 2048]}
         /*
          * NORMAL BIAS, not just depth bias — and this is what fixes the banding
