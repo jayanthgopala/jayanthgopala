@@ -6,6 +6,7 @@ import WorkPage from './WorkPage.jsx';
 import WorldLoader from './WorldLoader.jsx';
 import { loadBakedWorld } from './lib/baked.js';
 import { ACTS, actAt } from './chapters.js';
+import { copy } from '../lib/api.js';
 import '../styles/world.css';
 
 /**
@@ -109,14 +110,22 @@ function SoundToggle() {
   );
 }
 
-function Hud({ profile = {} }) {
+function Hud({ profile = {}, content = {} }) {
   const act = useActiveAct();
 
   return (
     <div className="w-hud">
       <header className="w-hud-top">
-        <p className="w-mark">{profile.name || 'Portfolio'}</p>
-        <p className="w-role">{profile.role || ''}</p>
+        <div className="w-hud-brand">
+          <p className="w-mark">{profile.name || 'Portfolio'}</p>
+          <p className="w-role">{profile.role || ''}</p>
+        </div>
+        {/* Back to the minimal site. A full navigation, for the same reason
+            the way in is one: the route is read once at load. */}
+        <a className="w-glass" href="/" aria-label="Back to the minimal site">
+          <span aria-hidden="true">←</span>
+          {copy(content, 'world.minimal', 'Minimal')}
+        </a>
       </header>
 
       <footer className="w-hud-bottom">
@@ -336,7 +345,7 @@ export default function WorldSite({ site = {} }) {
         />
       )}
       <WorkPage projects={site.projects} />
-      <Hud profile={site.profile} />
+      <Hud profile={site.profile} content={site.content} />
       <WorldLoader ready={ready} steps={loadSteps} name={site.profile?.name} />
     </ScrollProvider>
   );

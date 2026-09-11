@@ -304,7 +304,57 @@
 .w-hud a,
 .w-hud button { pointer-events: auto; }
 
-.w-hud-top { display: flex; flex-direction: column; gap: 4px; }
+.w-hud-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.w-hud-brand { display: flex; flex-direction: column; gap: 4px; }
+
+/*
+ * The way back to the minimal site: a pane of ice over the scene.
+ *
+ * Frosted rather than filled — the world shows through it, blurred, so it
+ * reads as part of the picture instead of a sticker on top of it. The white
+ * gradient is the pane's body, the bright inset top edge is light catching its
+ * rim, and the soft cool shadow lifts it off the snow. Over the pale ice page
+ * the same recipe still separates it, because the shadow and the rim do the
+ * work the blur cannot do against a flat ground.
+ */
+.w-glass {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 999px;
+  color: var(--w-ink);
+  text-decoration: none;
+  white-space: nowrap;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.14));
+  box-shadow: 0 8px 26px rgba(40, 60, 90, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  transition: background 260ms ease, transform 260ms var(--w-ease), box-shadow 260ms ease;
+}
+
+.w-glass:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.24));
+  box-shadow: 0 10px 30px rgba(40, 60, 90, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transform: translateY(-1px);
+}
+
+.w-glass:focus-visible {
+  outline: 1px solid var(--w-ink);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .w-glass { transition: none; }
+  .w-glass:hover { transform: none; }
+}
 
 .w-mark {
   margin: 0;

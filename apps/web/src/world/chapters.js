@@ -51,8 +51,8 @@ import { Vector3, CatmullRomCurve3 } from 'three';
  * the work act begins exactly where the cut does.
  */
 export const ACTS = [
-  { id: 'horizon', index: 1, start: 0.0, end: 0.34, label: 'Horizon' },
-  { id: 'work', index: 2, start: 0.34, end: 1.0, label: 'Selected Work' },
+  { id: 'horizon', index: 1, start: 0.0, end: 0.17, label: 'Horizon' },
+  { id: 'work', index: 2, start: 0.17, end: 1.0, label: 'Selected Work' },
 ];
 
 export function actAt(progress) {
@@ -68,17 +68,18 @@ export function actProgress(progress, act) {
 /*
  * THE SCROLL, IN THREE STRETCHES, measured in screens.
  *
- *   world  the Horizon, and nothing after it. 0.3 of a screen, so the cut
- *          starts about two wheel notches in — a small scroll, not a stretch
- *          of scrolling before anything happens. The rig's damping keeps the
- *          pull-back a glide rather than a jump.
- *   cut    the wipe to the work page. A full screen, scrubbed by the wheel, so
- *          the blur has room to be seen and held. Let go short of half-way and
- *          ScrollProvider eases back to the igloo; past half-way, on to the
- *          page.
+ *   world  the first half of the Horizon's pull-back. A quarter of a screen,
+ *          about two wheel notches: the cut starts WHILE the camera is still
+ *          pulling back, half-way between the opening frame and the wide one,
+ *          rather than after a stretch of travel with nothing happening.
+ *   cut    the wipe to the work page. 1.2 screens, scrubbed by the wheel, and
+ *          never played faster than ScrollProvider's CUT_MIN_SECONDS however
+ *          hard the wheel is thrown, so the blur is always seen. Let go short
+ *          of half-way and it eases back to the igloo; past half-way, on to
+ *          the page.
  *   page   whatever the work page measures (ScrollProvider adds it).
  */
-export const SEGMENTS = { world: 0.3, cut: 1.0 };
+export const SEGMENTS = { world: 0.25, cut: 1.2 };
 
 /*
  * Where on the camera curve the world stretch ends, and how much further the
@@ -86,7 +87,10 @@ export const SEGMENTS = { world: 0.3, cut: 1.0 };
  * reference; the curve's last waypoint is simply never reached, and the curve
  * itself is untouched.
  */
-export const JOURNEY = { atCut: 0.34, end: 0.42 };
+/* The cut begins at 0.17 — half-way through the Horizon's pull-back, which
+   ends at 0.34 — and the lens carries on to 0.4 underneath it, so the whole
+   second half of the pull-back plays inside the blur. */
+export const JOURNEY = { atCut: 0.17, end: 0.4 };
 
 /** How far each picture travels vertically across the cut, as a share of the frame. From the reference. */
 export const CUT_PARALLAX = 0.4;

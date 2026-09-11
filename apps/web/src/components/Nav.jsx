@@ -45,6 +45,13 @@ export default function Nav({
           ))}
         </nav>
 
+        {/* The way into the immersive igloo version. A plain link, not a client
+            route: the app reads the path once at load, so a full navigation is
+            what switches it over. */}
+        <a className="btn btn-secondary nav-cta" href="/world">
+          {copy(content, 'nav.immersive', 'Immersive')}
+        </a>
+
         {/* Résumé only renders when a URL is actually set — an empty button
             that goes nowhere is worse than no button. */}
         {profile.resumeUrl && (

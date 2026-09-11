@@ -169,6 +169,15 @@ export default function ScrollProvider({ children, locked = false }) {
      */
     const IDLE_MS = 1200;
     const COMMIT = 0.5;
+    /*
+     * THE CUT'S SPEED LIMIT. The cut follows the scroll, but never faster than
+     * this many seconds end to end. A mouse wheel thrown hard, or a trackpad
+     * flick, crosses the whole cut's worth of scroll in a fraction of a second
+     * — and the blur went by in a blink. Capped, it always plays out over at
+     * least this long, in either direction, while a slow scroll still scrubs
+     * it frame by frame.
+     */
+    const CUT_MIN_SECONDS = 1.8;
     const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
     let settling = false;
     let lastInput = performance.now();
@@ -191,7 +200,10 @@ export default function ScrollProvider({ children, locked = false }) {
        */
       scrollState(instance.scroll, vhRef.current, state);
       progress.current = state.journey;
-      cut.current = state.cut;
+      /* Chases the scroll's cut at no more than CUT_MIN_SECONDS end to end.
+         `last` is still the previous frame's time here; it is advanced below. */
+      const cutStep = Math.min(0.05, (time - last) / 1000) / CUT_MIN_SECONDS;
+      cut.current += Math.max(-cutStep, Math.min(cutStep, state.cut - cut.current));
       page.current = state.page;
       total.current =
         instance.limit > 0 ? Math.min(1, Math.max(0, instance.scroll / instance.limit)) : 0;
