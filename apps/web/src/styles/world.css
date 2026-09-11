@@ -426,11 +426,23 @@
 }
 
 .w-loader-note {
+  display: flex;
+  gap: 0.9em;
   margin: 0;
   font-size: 0.62rem;
   letter-spacing: 0.28em;
   text-transform: uppercase;
   color: rgba(63, 72, 85, 0.55);
+}
+
+/* Written every frame by the component. Tabular figures and a fixed width so
+   the label beside it does not shuffle as the number grows. */
+.w-loader-pct {
+  display: inline-block;
+  min-width: 3.4em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #3f4855;
 }
 
 @media (prefers-reduced-motion: reduce) {

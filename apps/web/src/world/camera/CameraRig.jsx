@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Vector3 } from 'three';
-import { CAMERA_CURVE, TARGET_CURVE } from '../chapters.js';
+import { CAMERA_CURVE, INTRO, TARGET_CURVE } from '../chapters.js';
 import { useWorldScroll } from '../scroll/ScrollProvider.jsx';
 import { heightAt } from '../lib/terrain.js';
 
@@ -78,7 +78,6 @@ const SETTLED = 0.0005;
  * dome growing in frame all the way down instead of looming and then receding.
  */
 const INTRO_OFFSET = [-14, 176, -68];
-const INTRO_SECONDS = 3.6;
 
 /* Smootherstep. Zero velocity AND zero acceleration at both ends, which is
    what stops the landing reading as a stop — an ease-out cubic still arrives
@@ -92,11 +91,11 @@ const damp = (current, target, lambda, dt) => {
 
 export default function CameraRig({ begin = true }) {
   const { camera } = useThree();
-  const { progress } = useWorldScroll();
+  const { progress, intro: introClock } = useWorldScroll();
 
   const pointer = useRef({ x: 0, y: 0 });
   /* Not state: it is read and written every frame and nothing renders off it. */
-  const intro = useRef({ startedAt: 0, done: false });
+  const intro = useRef({ last: 0, rushed: false, done: false });
 
   /* The rig's OWN progress, chasing the scroll value rather than equalling it.
      Sampling the spline at the raw value makes the camera stop dead the instant
@@ -146,31 +145,40 @@ export default function CameraRig({ begin = true }) {
      * one thing that must not happen is the descent playing behind the loader
      * and the visitor being handed a static frame at the end of it.
      */
+    /*
+     * THE INTRO CLOCK, run here and read by Terrain and Lattice too.
+     *
+     * WALL CLOCK, NOT CLAMPED dt — AND THAT IS A CORRECTNESS FIX. dt above is
+     * clamped to 1/20 s so one long frame cannot detonate a spring, which is
+     * right for physics and wrong for a TIMELINE: summing clamped deltas made a
+     * 3.6 s descent take 36 real seconds at 2 fps. So the clock advances by the
+     * real time between frames, and the move takes its length on any machine.
+     *
+     * AND IT HURRIES WHEN THE VISITOR SCROLLS. The descent used to run its full
+     * 3.6 s whatever happened, and a scroll made during it did move the rig —
+     * but 176 units of offset on top of the path swamped it, so the page looked
+     * deaf until the camera landed. Now the first scroll speeds the whole
+     * opening up (INTRO.rush), it wraps up in well under a second, and the
+     * scroll has the camera.
+     *
+     * It keeps running past the camera's own landing to INTRO.tail, because the
+     * land's reveal is timed a shade longer than the fall.
+     */
+    if (begin && introClock.current < INTRO.tail) {
+      const now = performance.now();
+      const t = intro.current;
+      if (!t.last) t.last = now;
+      if (progress.current > 0.0005) t.rushed = true;
+      const speed = t.rushed ? INTRO.rush : 1;
+      introClock.current = Math.min(INTRO.tail, introClock.current + ((now - t.last) / 1000) * speed);
+      t.last = now;
+    }
+
     let arrived = 1;
     if (!intro.current.done) {
-      if (begin) {
-        /*
-         * WALL CLOCK, NOT ACCUMULATED dt — AND THAT IS A CORRECTNESS FIX.
-         *
-         * dt above is deliberately clamped to 1/20 s so that one long frame
-         * cannot detonate a stiff spring, and that clamp is right for the
-         * physics. It is wrong for a TIMELINE. Summing clamped deltas means a
-         * scene running at 2 fps advances this move by 0.05 s per frame, so a
-         * 3.6 s descent takes 36 real seconds — which is exactly what it did,
-         * and it is the same trap that made the old block assemble appear to
-         * hang for twenty seconds.
-         *
-         * A timeline should answer "how long since it started", and only a
-         * clock can answer that. The move now takes 3.6 seconds on any machine
-         * and simply plays at whatever frame rate is going.
-         */
-        if (!intro.current.startedAt) intro.current.startedAt = performance.now();
-        const k = Math.min(1, (performance.now() - intro.current.startedAt) / (INTRO_SECONDS * 1000));
-        arrived = smootherstep(k);
-        if (k >= 1) intro.current.done = true;
-      } else {
-        arrived = 0;
-      }
+      const k = begin ? Math.min(1, introClock.current / INTRO.seconds) : 0;
+      arrived = smootherstep(k);
+      if (k >= 1) intro.current.done = true;
       const remaining = 1 - arrived;
       position.current.x += INTRO_OFFSET[0] * remaining;
       position.current.y += INTRO_OFFSET[1] * remaining;

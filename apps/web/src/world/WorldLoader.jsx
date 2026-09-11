@@ -3,56 +3,69 @@ import { useEffect, useRef, useState } from 'react';
 /**
  * The loading screen for the world.
  *
- * WHY IT IS NOT DRIVEN BY drei's useProgress. That hook reads three's loading
- * manager, which counts network fetches — and this scene fetches nothing. Every
- * texture is generated on the CPU and the terrain is displaced vertex by vertex,
- * so the manager reports 100% instantly while the browser is still frozen doing
- * the actual work. A progress bar wired to it would sit at full before anything
- * existed and then the page would hang.
+ * IT STAYS UP UNTIL THE WORLD IS ACTUALLY READY, and "ready" is a list of real
+ * events rather than a timer. WorldSite hands in the steps it can observe —
+ * the baked terrain fetched, the scene built and painted, the igloo in, the
+ * shaders compiled and the frames running smoothly — and the screen lifts only
+ * when every one has happened. Lifting earlier is what made the opening
+ * descent stutter: it played while all of that was still going on underneath.
  *
- * The real cost here is SYNCHRONOUS, which is also why it cannot be measured
- * from inside. A blocking loop does not yield, so nothing can sample it. What
- * can be done is to guarantee the loader is PAINTED before that loop starts —
- * hence the two-frame handshake in WorldSite: the loader renders, the browser
- * paints it, and only then does the Stage mount and begin its work. Without
- * that the loader would be queued behind the very thing it exists to cover and
- * the user would see a white page instead.
+ * WHY NOT drei's useProgress. That hook reads three's loading manager, which
+ * counts network fetches through three's loaders — and almost nothing here goes
+ * through them. The terrain and textures are baked files fetched by hand, and
+ * the most expensive work of all (building the scene, compiling its shaders) is
+ * not a download. A bar wired to it sat at 100% while the browser was frozen.
  *
- * The bar is therefore an honest indeterminate: it advances on a curve that
- * eases toward the end but never reaches it, and only completes when the world
- * signals it is ready. Faking exact percentages would be a lie about something
- * genuinely unmeasurable.
+ * THE BAR IS HONEST ABOUT WHAT IT KNOWS. Each finished step moves it to that
+ * step's mark. Within a step it creeps toward the next mark but never reaches
+ * it, because nothing inside a step can be measured — a blocking build does not
+ * yield to report its progress. So it can slow, but it cannot lie: it will not
+ * show a step as done before it is.
+ *
+ * Nothing that changes per frame goes through React state; the bar and the
+ * percentage are written straight to their nodes.
  */
-export default function WorldLoader({ ready }) {
+export default function WorldLoader({ ready, steps = [], name = '' }) {
   const [opening, setOpening] = useState(false);
   const [gone, setGone] = useState(false);
   const barRef = useRef(null);
-  const startedAt = useRef(0);
+  const pctRef = useRef(null);
+  /* The furthest the bar has been, so it never moves backwards. */
+  const shown = useRef(0);
 
-  /* Approach-but-never-arrive, written straight to the node — the same reason
-     the HUD's progress bar is: it changes every frame and must not re-render. */
+  const total = Math.max(1, steps.length);
+  const doneCount = steps.filter((s) => s.done).length;
+  const current = steps.find((s) => !s.done);
+
+  const write = (value) => {
+    if (barRef.current) barRef.current.style.transform = `scaleX(${value.toFixed(4)})`;
+    if (pctRef.current) pctRef.current.textContent = `${Math.round(value * 100)}%`;
+  };
+
+  /* Restarted on every finished step, so the creep measures time spent in THIS
+     step and starts again from the new mark. */
   useEffect(() => {
     if (ready) return undefined;
-    startedAt.current = performance.now();
-
+    const since = performance.now();
     let frame = 0;
+
     const tick = () => {
-      const seconds = (performance.now() - startedAt.current) / 1000;
-      /* Asymptotic: fast at first, then slower, capped short of full. */
-      const value = 1 - Math.exp(-seconds * 0.75);
-      if (barRef.current) {
-        barRef.current.style.transform = `scaleX(${(value * 0.92).toFixed(4)})`;
-      }
+      const seconds = (performance.now() - since) / 1000;
+      const creep = (1 - Math.exp(-seconds * 0.9)) * 0.85;
+      shown.current = Math.max(shown.current, (doneCount + creep) / total);
+      write(shown.current);
       frame = requestAnimationFrame(tick);
     };
+
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [ready]);
+  }, [ready, doneCount, total]);
 
-  /* Fill, then open with curved iris transition, then unmount */
+  /* Fill, then open with the iris, then unmount. */
   useEffect(() => {
     if (!ready) return undefined;
-    if (barRef.current) barRef.current.style.transform = 'scaleX(1)';
+    shown.current = 1;
+    write(1);
     const openTimer = setTimeout(() => setOpening(true), 240);
     const unmountTimer = setTimeout(() => setGone(true), 1700);
     return () => {
@@ -72,11 +85,16 @@ export default function WorldLoader({ ready }) {
     >
       <div className="w-loader-curtain" />
       <div className="w-loader-inner">
-        <p className="w-loader-mark">Portfolio</p>
+        <p className="w-loader-mark">{name || 'Portfolio'}</p>
         <span className="w-loader-bar" aria-hidden="true">
           <i ref={barRef} />
         </span>
-        <p className="w-loader-note">Building the world</p>
+        <p className="w-loader-note">
+          <span ref={pctRef} className="w-loader-pct" aria-hidden="true">
+            0%
+          </span>
+          <span>{ready ? 'Ready' : current?.label || 'Loading'}</span>
+        </p>
       </div>
     </div>
   );

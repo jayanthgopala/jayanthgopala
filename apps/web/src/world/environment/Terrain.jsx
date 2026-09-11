@@ -5,6 +5,8 @@ import { buildTerrainGeometry, MOUND_AT, TERRAIN_SIZE } from '../lib/terrain.js'
 import { iceMapsFor } from '../lib/baked.js';
 import { LOOK } from '../lib/lighting.js';
 import { SHARED_WIND_GLSL, updateWindState } from '../lib/wind.js';
+import { useWorldScroll } from '../scroll/ScrollProvider.jsx';
+import { INTRO } from '../chapters.js';
 
 /**
  * The ground.
@@ -1963,7 +1965,7 @@ export default function Terrain({ begin = false }) {
   const uCursorPos = useRef({ value: new Vector2(-30, 252) });
   const uCursorForce = useRef({ value: 0 });
   const uReveal = useRef({ value: 0 });
-  const revealStart = useRef(0);
+  const { intro } = useWorldScroll();
 
   useFrame((state, delta) => {
     const ws = updateWindState(state, delta);
@@ -1972,17 +1974,11 @@ export default function Terrain({ begin = false }) {
     uCursorForce.current.value = ws.cursorForce;
 
     if (uReveal.current.value < 1) {
-      if (!begin) {
-        uReveal.current.value = 0;
-      } else {
-        if (!revealStart.current) revealStart.current = performance.now();
-        /* 3.6 s matches CameraRig's descent; a shade longer so the last of the
-           land arrives just after the shot settles rather than before it. */
-        uReveal.current.value = Math.min(
-          1,
-          (performance.now() - revealStart.current) / 4200
-        );
-      }
+      /* On the intro clock CameraRig runs (INTRO in chapters.js), so the land
+         finishes arriving with the camera — including when a scroll hurries
+         the descent. INTRO.tail is a shade longer than the fall, so the last
+         of the land arrives just after the shot settles rather than before. */
+      uReveal.current.value = begin ? Math.min(1, intro.current / INTRO.tail) : 0;
     }
   });
 

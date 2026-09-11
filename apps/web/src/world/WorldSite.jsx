@@ -3,6 +3,7 @@ import ScrollProvider, { useWorldScroll } from './scroll/ScrollProvider.jsx';
 import { createWind } from './lib/wind.js';
 import Stage from './Stage.jsx';
 import WorkPage from './WorkPage.jsx';
+import WorldLoader from './WorldLoader.jsx';
 import { loadBakedWorld } from './lib/baked.js';
 import { ACTS, actAt } from './chapters.js';
 import '../styles/world.css';
@@ -233,6 +234,8 @@ export default function WorldSite({ site = {} }) {
   const [mountStage, setMountStage] = useState(false);
   const [framesReady, setFramesReady] = useState(false);
   const [iglooReady, setIglooReady] = useState(false);
+  /* The scene compiled and running smoothly — see Warmup in Stage.jsx. */
+  const [warmed, setWarmed] = useState(false);
 
   /*
    * THE LOADER COMES DOWN WHEN THE IGLOO IS THERE, NOT WHEN THE STAGE IS.
@@ -246,9 +249,12 @@ export default function WorldSite({ site = {} }) {
    *
    * Both conditions, and the fetch is the one that actually gates it.
    */
-  const ready = framesReady && iglooReady;
+  /* Three conditions now: warmed is the scene compiled and running smoothly,
+     which is what keeps the stalls out of the opening descent. */
+  const ready = framesReady && iglooReady && warmed;
 
   const handleIglooReady = useCallback(() => setIglooReady(true), []);
+  const handleWarm = useCallback(() => setWarmed(true), []);
 
   /*
    * THE BAKED ASSETS ARE FETCHED BEFORE THE STAGE EXISTS, not by it.
@@ -309,11 +315,29 @@ export default function WorldSite({ site = {} }) {
     return () => clearTimeout(id);
   }, [mountStage, iglooReady]);
 
+  /* What the loading screen waits on, in the order they normally finish. */
+  const loadSteps = [
+    { label: 'Fetching the terrain', done: mountStage },
+    { label: 'Building the world', done: framesReady },
+    { label: 'Bringing in the igloo', done: iglooReady },
+    { label: 'Compiling shaders', done: warmed },
+  ];
+
   return (
-    <ScrollProvider>
-      {mountStage && <Stage onIglooReady={handleIglooReady} begin={ready} />}
+    /* Locked until ready: a scroll made under the loader would move the
+       camera behind it, and the world would open somewhere it never showed. */
+    <ScrollProvider locked={!ready}>
+      {mountStage && (
+        <Stage
+          onIglooReady={handleIglooReady}
+          begin={ready}
+          warm={framesReady && iglooReady}
+          onWarm={handleWarm}
+        />
+      )}
       <WorkPage projects={site.projects} />
       <Hud profile={site.profile} />
+      <WorldLoader ready={ready} steps={loadSteps} name={site.profile?.name} />
     </ScrollProvider>
   );
 }

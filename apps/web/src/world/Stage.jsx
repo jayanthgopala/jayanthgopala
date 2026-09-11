@@ -15,9 +15,9 @@ import IceCut, { CutFrameGate } from './effects/IceCut.jsx';
 import Diagnostics from './Diagnostics.jsx';
 import { EffectComposer, Bloom, Vignette, ChromaticAberration, TiltShift2, ToneMapping } from '@react-three/postprocessing';
 import { ToneMappingMode } from 'postprocessing';
-import { useFrame } from '@react-three/fiber';
-import { useRef } from 'react';
-import { Vector2 } from 'three';
+import { useFrame, useThree } from '@react-three/fiber';
+import { useEffect, useRef } from 'react';
+import { Vector2, WebGLRenderTarget } from 'three';
 import { useWorldScroll } from './scroll/ScrollProvider.jsx';
 import { LOOK } from './lib/lighting.js';
 
@@ -45,10 +45,12 @@ function TravelFringe() {
     const effect = ref.current;
     if (!effect) return;
     /*
-     * Power 1.8 so fringing activates smoothly during scroll, reaching
-     * pronounced rainbow dispersion along edges like the reference.
+     * Power 0.8 — just under linear, so the fringe shows from a small scroll
+     * alongside the blur rather than waiting for a firm one, and still reaches
+     * the same full dispersion at speed. (It was 1.8, which kept a gentle
+     * scroll almost colourless.)
      */
-    const amount = Math.pow(flight.current, 1.8);
+    const amount = Math.pow(flight.current, 0.8);
     /* 14.0 px at the frame edge at full travel to generate the vivid chromatic fringe */
     const px = 14.0 / state.gl.getDrawingBufferSize(scratch).x;
     effect.offset.set(amount * px, amount * px * 0.65);
@@ -101,7 +103,11 @@ function TravelSmear() {
      * subtle touch.
      */
     const t = flight.current;
-    effect.blur = Math.pow(t, 1.35) * 1.45;
+    /* FROM THE FIRST NOTCH. A root curve rises steeply off zero, so a small
+       nudge of the wheel already softens the edges, where the old 1.35 power
+       needed a firm scroll before anything showed. A fling still tops out at
+       the same 1.45. */
+    effect.blur = Math.pow(t, 0.6) * 1.45;
   });
 
   /* A NARROWER sharp band than the first pass used (0.62), so more of the frame
@@ -109,6 +115,85 @@ function TravelSmear() {
      blurred has to be invisible. A hard edge on that band announces itself as a
      horizontal stripe and the shot reads as a photograph of a model. */
   return <TiltShift2 ref={ref} blur={0} focusArea={0.38} feather={0.58} />;
+}
+
+/**
+ * Holds the opening descent until the GPU has caught up.
+ *
+ * WHY THE DESCENT STUTTERED. Shader programs compile the first time something
+ * is drawn with them, and on Windows — where WebGL runs through ANGLE into
+ * Direct3D — a compile can hold the main thread for a large fraction of a
+ * second. The descent started the moment the igloo arrived, which is exactly
+ * when its programs (and its shadow's) were being compiled for the first time,
+ * so those stalls landed in the middle of the move: the camera hitched, and
+ * because a busy main thread cannot take wheel input either, the scroll froze
+ * along with it.
+ *
+ * So once the igloo is in, two things happen before `begin` is allowed to
+ * flip:
+ *
+ *   1. The whole scene is compiled up front with compileAsync, which uses
+ *      KHR_parallel_shader_compile where the browser has it so the driver does
+ *      the work off the main thread. A render target is bound while it runs
+ *      because the composer draws the scene into one: programs compiled for the
+ *      screen would have a different colour space and tone mapping in their
+ *      cache key, and would simply be compiled again on first use.
+ *   2. The frame loop has to run smoothly — a dozen frames in a row under 33ms
+ *      — which catches everything compileAsync cannot see: shadow programs,
+ *      texture uploads, the post chain's own passes.
+ *
+ * Capped at three seconds, so a machine that never manages a smooth dozen still
+ * gets its opening shot. The camera sits at the top of its move meanwhile,
+ * which is where it has always waited.
+ */
+function Warmup({ armed = false, onWarm }) {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  const camera = useThree((s) => s.camera);
+  const phase = useRef({ step: 'idle', armedAt: 0, smooth: 0 });
+
+  useEffect(() => {
+    if (!armed) return undefined;
+    let cancelled = false;
+    const p = phase.current;
+    p.armedAt = performance.now();
+    p.step = 'compiling';
+
+    const target = new WebGLRenderTarget(4, 4);
+    const previous = gl.getRenderTarget();
+    let pending;
+    try {
+      gl.setRenderTarget(target);
+      pending = gl.compileAsync(scene, camera);
+    } catch {
+      pending = null;
+    } finally {
+      gl.setRenderTarget(previous);
+    }
+
+    Promise.resolve(pending)
+      .catch(() => {})
+      .then(() => {
+        if (!cancelled && p.step === 'compiling') p.step = 'settling';
+      });
+
+    return () => {
+      cancelled = true;
+      target.dispose();
+    };
+  }, [armed, gl, scene, camera]);
+
+  useFrame((_, delta) => {
+    const p = phase.current;
+    if (p.step === 'idle' || p.step === 'done') return;
+    if (p.step === 'settling') p.smooth = delta < 1 / 30 ? p.smooth + 1 : 0;
+    if (p.smooth >= 12 || performance.now() - p.armedAt > 3000) {
+      p.step = 'done';
+      onWarm?.();
+    }
+  });
+
+  return null;
 }
 
 /* Module scope: getDrawingBufferSize writes into the vector it is handed, and
@@ -199,7 +284,7 @@ const EXPOSURE = LOOK.grade.exposure;
  * the world is what responds.
  */
 
-export default function Stage({ onIglooReady, begin = false }) {
+export default function Stage({ onIglooReady, begin = false, warm = false, onWarm }) {
   return (
     /*
      * The fixed layer is a wrapper of ours, not the Canvas itself.
@@ -389,6 +474,10 @@ export default function Stage({ onIglooReady, begin = false }) {
         {/* begin gates the opening descent: it waits at the top of the move
             until the loading screen has actually come down. */}
         <CameraRig begin={begin} />
+
+        {/* Compiles and settles the scene before the descent may start. See
+            Warmup above. */}
+        <Warmup armed={warm} onWarm={onWarm} />
 
         {/* The survey web over the opening shot. Same begin signal, so it
             clears in step with the descent it belongs to. Outside Suspense

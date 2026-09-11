@@ -2,6 +2,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { BufferAttribute, BufferGeometry } from 'three';
 import { heightAt } from '../lib/terrain.js';
+import { useWorldScroll } from '../scroll/ScrollProvider.jsx';
 
 /**
  * The opening lattice: a web of white survey lines over the world, which
@@ -156,8 +157,8 @@ function buildLattice(at) {
  */
 export default function Lattice({ at = [-30, 252], begin = false, seconds = 3.6 }) {
   const lines = useRef(null);
-  const started = useRef(0);
   const done = useRef(false);
+  const { intro } = useWorldScroll();
 
   const geometry = useMemo(() => buildLattice(at), [at]);
 
@@ -174,13 +175,13 @@ export default function Lattice({ at = [-30, 252], begin = false, seconds = 3.6 
     }
 
     /*
-     * Wall clock, not accumulated deltas — the same correction the camera
-     * descent and the block physics both needed. A timeline asks how long since
-     * it started, and only a clock can answer that; summing frame deltas ties
-     * the length of the animation to the frame rate.
+     * On the intro clock CameraRig runs rather than one of its own. It is still
+     * wall-clock time — a timeline asks how long since it started, and summing
+     * frame deltas would tie its length to the frame rate — but it is the SAME
+     * clock as the camera's, so when a scroll hurries the descent the web
+     * clears with it instead of hanging on over a camera that has landed.
      */
-    if (!started.current) started.current = performance.now();
-    const k = Math.min(1, (performance.now() - started.current) / (seconds * 1000));
+    const k = Math.min(1, intro.current / seconds);
 
     /*
      * Cleared EARLY, on purpose. Fading it out linearly with the descent leaves

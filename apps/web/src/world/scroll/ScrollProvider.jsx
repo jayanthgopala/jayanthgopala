@@ -37,7 +37,7 @@ export function useWorldScroll() {
   return ctx;
 }
 
-export default function ScrollProvider({ children }) {
+export default function ScrollProvider({ children, locked = false }) {
   /**
    * 0..JOURNEY.end along the camera curve. Read every frame; never triggers a
    * render.
@@ -81,6 +81,13 @@ export default function ScrollProvider({ children }) {
   const page = useRef(0);
   /** 0..1 through the whole document. */
   const total = useRef(0);
+  /**
+   * Seconds into the opening descent, on a clock CameraRig runs — faster once
+   * the visitor scrolls (see INTRO in chapters.js). Terrain and Lattice read it
+   * rather than keeping clocks of their own, so the land's reveal and the
+   * survey web finish WITH the camera at whatever speed it went.
+   */
+  const intro = useRef(0);
   const lenis = useRef(null);
 
   /*
@@ -125,12 +132,14 @@ export default function ScrollProvider({ children }) {
     });
 
     /*
-     * A scroll that barely moves should not light the world up, and a firm one
-     * should saturate it. `velocity` is already divided by 60 and clamped, so a
-     * deliberate wheel push lands around 0.3–0.5; this gain puts that most of
-     * the way to full and leaves a fling pinned at 1.
+     * SENSITIVE FROM THE FIRST NOTCH. `velocity` is already divided by 60 and
+     * clamped, so a single wheel notch lands around 0.1 and a deliberate push
+     * around 0.3–0.5. At the old gain of 2.4 a notch barely registered and the
+     * blur only arrived with a firm scroll; at 5 one notch is already a clear
+     * softening, a push saturates, and a fling is pinned at 1. The resting
+     * frame is untouched either way — the snap to zero below still applies.
      */
-    const FLIGHT_GAIN = 2.4;
+    const FLIGHT_GAIN = 5;
     /* Per-second rates for `1 - exp(-rate * dt)`. Framerate-independent, which
        matters because this scene runs at 60 on a good machine and half that
        while the terrain is still building. */
@@ -223,6 +232,26 @@ export default function ScrollProvider({ children }) {
     };
   }, []);
 
+  /*
+   * NO SCROLLING WHILE LOCKED — the loading screen is up. Lenis is stopped so
+   * the wheel and touch do nothing, and the root stops overflowing so the keys
+   * and the (hidden) scrollbar cannot move it either. Declared after the effect
+   * that creates Lenis, so on the first run the instance already exists.
+   */
+  useEffect(() => {
+    const root = document.documentElement;
+    if (locked) {
+      lenis.current?.stop();
+      root.style.overflow = 'hidden';
+    } else {
+      lenis.current?.start();
+      root.style.overflow = '';
+    }
+    return () => {
+      root.style.overflow = '';
+    };
+  }, [locked]);
+
   /* The spacer changed height; make sure Lenis's limit follows at once rather
      than on its own observer's schedule. */
   useEffect(() => {
@@ -230,7 +259,7 @@ export default function ScrollProvider({ children }) {
   }, [vh, pageHeight]);
 
   const value = useMemo(
-    () => ({ progress, velocity, flight, cut, page, total, lenis, setPageHeight }),
+    () => ({ progress, velocity, flight, cut, page, total, intro, lenis, setPageHeight }),
     []
   );
 

@@ -68,16 +68,16 @@ export function actProgress(progress, act) {
 /*
  * THE SCROLL, IN THREE STRETCHES, measured in screens.
  *
- *   world  the Horizon, and nothing after it. Half a screen — the pace the
- *          Horizon already had — so the cut starts three or four wheel
- *          notches in. The rig's damping keeps the pull-back a glide rather
- *          than a jump.
+ *   world  the Horizon, and nothing after it. 0.3 of a screen, so the cut
+ *          starts about two wheel notches in — a small scroll, not a stretch
+ *          of scrolling before anything happens. The rig's damping keeps the
+ *          pull-back a glide rather than a jump.
  *   cut    the wipe to the work page. 0.9 of a screen — but nobody scrolls
  *          through it by hand: ScrollProvider plays it through the moment it
  *          starts, so this is how far that play travels, not how far you do.
  *   page   whatever the work page measures (ScrollProvider adds it).
  */
-export const SEGMENTS = { world: 0.5, cut: 0.9 };
+export const SEGMENTS = { world: 0.3, cut: 0.9 };
 
 /*
  * Where on the camera curve the world stretch ends, and how much further the
@@ -89,6 +89,19 @@ export const JOURNEY = { atCut: 0.34, end: 0.42 };
 
 /** How far each picture travels vertically across the cut, as a share of the frame. From the reference. */
 export const CUT_PARALLAX = 0.4;
+
+/*
+ * THE OPENING DESCENT'S CLOCK, shared by everything that plays with it.
+ *
+ *   seconds  the camera's fall from the top angle into the opening frame, and
+ *            the survey web's fade.
+ *   tail     the land's reveal, a shade longer so the last of it arrives just
+ *            after the shot settles rather than before.
+ *   rush     how much faster all of it runs once the visitor scrolls. They
+ *            have asked to move; a camera that keeps falling for three more
+ *            seconds regardless reads as the page ignoring them.
+ */
+export const INTRO = { seconds: 3.6, tail: 4.2, rush: 6 };
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
