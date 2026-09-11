@@ -1965,7 +1965,15 @@ export default function Terrain() {
   const uCursorPos = useRef({ value: new Vector2(-30, 252) });
   const uCursorForce = useRef({ value: 0 });
   const uReveal = useRef({ value: 0 });
+  const meshRef = useRef(null);
   const { intro } = useWorldScroll();
+  /* Dev only: the reveal is a uniform inside a shader, invisible from the page,
+     and the mesh is what WorldSite's health report inspects. Same channel and
+     reason as __worldGl in Stage.jsx. */
+  if (import.meta.env.DEV) {
+    window.__terrainReveal = uReveal.current;
+    window.__terrainMesh = meshRef;
+  }
 
   useFrame((state, delta) => {
     const ws = updateWindState(state, delta);
@@ -2012,7 +2020,7 @@ export default function Terrain() {
   );
 
   return (
-    <mesh geometry={geometry} receiveShadow castShadow={false} frustumCulled={false}>
+    <mesh ref={meshRef} geometry={geometry} receiveShadow castShadow={false} frustumCulled={false}>
       {/*
         Slightly warm, quite dark, and very rough. Dark is the counter-intuitive
         part: in heavy fog the ground reads far lighter than its albedo because

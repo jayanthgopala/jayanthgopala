@@ -92,6 +92,8 @@ const damp = (current, target, lambda, dt) => {
 export default function CameraRig({ begin = true }) {
   const { camera } = useThree();
   const { progress, intro: introClock } = useWorldScroll();
+  /* Dev only: the shared intro clock, readable from the console. */
+  if (import.meta.env.DEV) window.__introClock = introClock;
 
   const pointer = useRef({ x: 0, y: 0 });
   /* Not state: it is read and written every frame and nothing renders off it. */
