@@ -5,6 +5,7 @@ import Stage from './Stage.jsx';
 import WorkPage from './WorkPage.jsx';
 import WorldLoader from './WorldLoader.jsx';
 import MinimalLink from './MinimalLink.jsx';
+import WorldDiag from './WorldDiag.jsx';
 import { loadBakedWorld } from './lib/baked.js';
 import { ACTS, actAt } from './chapters.js';
 import { copy } from '../lib/api.js';
@@ -264,57 +265,6 @@ export default function WorldSite({ site = {} }) {
   const handleIglooReady = useCallback(() => setIglooReady(true), []);
   const handleWarm = useCallback(() => setWarmed(true), []);
 
-  /*
-   * Dev only: a one-line health report, six seconds after the world opens.
-   *
-   * The ground has been seen missing on a visitor's normal loads and could not
-   * be reproduced in automation, where the tab runs throttled in the
-   * background. So the page reports on itself instead: the intro clock, the
-   * reveal the terrain wrote AND the reveal its compiled program actually holds
-   * (and whether those are the same object), whether the mesh is in the scene
-   * and visible, whether its program compiled, whether its geometry has NaN in
-   * it, and how fast frames are coming. Each of those points at a different
-   * cause. Look for "[world:diag]" in the console.
-   */
-  useEffect(() => {
-    if (!import.meta.env.DEV || !ready) return undefined;
-    const id = setTimeout(async () => {
-      let frames = 0;
-      const t0 = performance.now();
-      await new Promise((resolve) => {
-        const count = () => {
-          frames += 1;
-          if (performance.now() - t0 < 500) requestAnimationFrame(count);
-          else resolve();
-        };
-        requestAnimationFrame(count);
-      });
-      const gl = window.__worldGl;
-      const mesh = window.__terrainMesh?.current;
-      const props = gl && mesh ? gl.properties.get(mesh.material) : null;
-      const program = props?.currentProgram;
-      const pos = mesh?.geometry?.attributes?.position?.array;
-      let nan = 0;
-      if (pos) for (let i = 0; i < pos.length; i += 997) if (Number.isNaN(pos[i])) nan += 1;
-      console.info(
-        '[world:diag]',
-        JSON.stringify({
-          vis: document.visibilityState,
-          y: Math.round(window.scrollY),
-          intro: window.__introClock?.current,
-          reveal: window.__terrainReveal?.value,
-          programReveal: props?.uniforms?.uReveal?.value,
-          sameUniform: props?.uniforms?.uReveal === window.__terrainReveal,
-          terrainInScene: Boolean(mesh?.parent),
-          terrainVisible: mesh?.visible,
-          program: program ? (program.diagnostics ? program.diagnostics.runnable : 'ok') : 'none',
-          nanSamples: nan,
-          framesIn500ms: frames,
-        })
-      );
-    }, 6000);
-    return () => clearTimeout(id);
-  }, [ready]);
 
   /*
    * THE BAKED ASSETS ARE FETCHED BEFORE THE STAGE EXISTS, not by it.
@@ -398,6 +348,8 @@ export default function WorldSite({ site = {} }) {
       <WorkPage projects={site.projects} />
       <Hud profile={site.profile} content={site.content} />
       <WorldLoader ready={ready} steps={loadSteps} name={site.profile?.name} />
+      {/* Dev only: the live health readout. See WorldDiag. */}
+      {import.meta.env.DEV && <WorldDiag />}
     </ScrollProvider>
   );
 }

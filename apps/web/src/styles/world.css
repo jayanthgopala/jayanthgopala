@@ -154,6 +154,22 @@
    you to travel somewhere you have already arrived. */
 .w-hint.is-away { visibility: hidden; }
 
+/* Dev only (WorldDiag): the live health readout. Above the loader, so it is
+   there for the whole opening. */
+.w-diag {
+  position: fixed;
+  left: 12px;
+  bottom: 44px;
+  z-index: 50;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #102030;
+  font: 11px/1.4 var(--w-mono);
+  white-space: pre;
+  pointer-events: none;
+}
+
 /* --- The canvas ------------------------------------------------------------
    Fixed, full-viewport, and behind everything. It is not in the scroll flow at
    all: the spacer scrolls, the world responds. */

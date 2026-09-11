@@ -309,7 +309,20 @@ export default function Stage({ onIglooReady, begin = false, warm = false, onWar
     <div className="w-stage">
       <Canvas
         className="w-canvas"
-        shadows
+        /*
+         * PCF, NAMED — NOT `shadows` ON ITS OWN. A bare `shadows` makes R3F set
+         * PCFSoftShadowMap, which three r185 has deprecated: its shadow renderer
+         * swaps the type to PCF on its next pass and builds a hardware-compare
+         * depth texture, while any shader compiled BEFORE that pass — and R3F
+         * resets the type to soft every time the Canvas re-renders — takes the
+         * unrecognised type as BASIC and declares its shadow map as a plain
+         * sampler2D. The GPU then refuses every draw of that material ("Mismatch
+         * between texture format and sampler type (shadow)") and skips it: the
+         * terrain and the scree simply vanished on some first loads, with every
+         * other signal healthy. PCF is what three was drawing anyway, so the
+         * picture is unchanged; the type just never flips.
+         */
+        shadows="percentage"
         /*
          * Capped device pixel ratio. Retina and 4K screens report 2 or 3, and
          * rendering a fogged terrain at 3x costs nine times the fragments for a
