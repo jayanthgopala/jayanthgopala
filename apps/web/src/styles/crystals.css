@@ -1,0 +1,325 @@
+/* ==========================================================================
+   THE CRYSTAL PAGE (/work)
+   Every selector is prefixed c- and only this route emits them.
+   ========================================================================== */
+
+:root[data-route='work'] {
+  --c-ink: #ffffff;
+  --c-dim: rgba(255, 255, 255, 0.62);
+  --c-line: rgba(255, 255, 255, 0.85);
+  --c-mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --c-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --c-pad: clamp(16px, 2.4vw, 34px);
+  background: #b6bbc4;
+}
+
+:root[data-route='work'] body {
+  margin: 0;
+  background: #b6bbc4;
+}
+
+.c-stage {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100svh;
+  z-index: 0;
+}
+
+.c-stage canvas {
+  display: block;
+  touch-action: pan-y;
+  outline: none;
+}
+
+/* The scroll extent. Transparent to the pointer or it eats every event meant
+   for the crystals. */
+.c-spacer {
+  pointer-events: none;
+}
+
+/* --- Leader-line labels --------------------------------------------------- */
+
+.c-labels {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  font-family: var(--c-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-ink);
+  text-shadow: 0 0 14px rgba(24, 28, 36, 0.28);
+}
+
+.c-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.c-lines line {
+  stroke: var(--c-line);
+  stroke-width: 1;
+}
+
+.c-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+}
+
+.c-label-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 9.5rem;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--c-line);
+  white-space: nowrap;
+}
+
+/* The title hangs to the left of its attach point; the other two to the right. */
+.c-label--a .c-label-box { transform: translate(-100%, -100%); }
+.c-label--b .c-label-box,
+.c-label--c .c-label-box { transform: translate(0, -100%); }
+
+.c-label--b .c-label-box {
+  min-width: 0;
+  border-bottom: 0;
+  font-size: 0.64rem;
+}
+
+.c-label--c .c-label-box { text-align: right; }
+
+.c-label-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.6rem;
+}
+
+/* --- HUD ------------------------------------------------------------------ */
+
+.c-hud {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--c-pad);
+  pointer-events: none;
+  font-family: var(--c-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-ink);
+  transition: opacity 500ms var(--c-ease);
+}
+
+.c-hud a,
+.c-hud button { pointer-events: auto; }
+
+.c-hud.is-dim { opacity: 0; }
+.c-hud.is-dim a,
+.c-hud.is-dim button { pointer-events: none; }
+
+.c-top,
+.c-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.c-bottom { align-items: center; }
+
+.c-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.c-back {
+  color: var(--c-dim);
+  text-decoration: none;
+}
+
+.c-back:hover,
+.c-back:focus-visible { color: var(--c-ink); }
+
+.c-mark {
+  margin: 0;
+  font-size: clamp(0.8rem, 1.1vw, 1rem);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.c-section { margin: 0; }
+.c-count,
+.c-hint { opacity: 0.7; }
+
+.c-explore {
+  padding: 0.4rem 0.2rem;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.c-explore:hover,
+.c-explore:focus-visible { opacity: 1; }
+
+/* --- Arrival fog ----------------------------------------------------------
+   The crystal comes out of white cloud, the way the reference's first one
+   emerges from the cut. Clears once there is something to show. */
+
+.c-fog {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 55%, #f3f5f8 0%, #dfe3e9 55%, #c9ced6 100%);
+  transition: opacity 1600ms var(--c-ease) 200ms;
+}
+
+.c-fog.is-clear { opacity: 0; }
+
+.c-fog p {
+  margin: 0;
+  font: 500 0.66rem var(--c-mono);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #5b6573;
+}
+
+/* --- Detail: inside the ice ---------------------------------------------- */
+
+.c-detail {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  overflow-y: auto;
+  opacity: 0;
+  visibility: hidden;
+  font-family: var(--c-mono);
+  color: #c9d1dc;
+  transition: opacity 450ms var(--c-ease), visibility 0s linear 450ms;
+}
+
+/* Delayed so the camera push and the dark come first and the text arrives
+   into them, rather than over a room that is still pale. */
+.c-detail.is-open {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 700ms var(--c-ease) 380ms, visibility 0s;
+}
+
+.c-detail-col {
+  width: min(34rem, 100%);
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: clamp(90px, 16vh, 160px) var(--c-pad) 120px;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.c-rule {
+  margin: 2.2em 0 0.9em;
+  font-size: 0.8rem;
+  color: rgba(170, 180, 195, 0.6);
+}
+
+.c-rule:first-child { margin-top: 0; }
+
+.c-detail-title {
+  margin: 0;
+  font: 600 clamp(1.1rem, 2.2vw, 1.5rem) / 1.2 var(--c-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #eef2f7;
+}
+
+.c-detail-body {
+  margin: 0;
+  white-space: pre-line;
+}
+
+.c-tech {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.c-shot {
+  display: block;
+  width: 100%;
+  margin-top: 2.2em;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.c-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.4rem;
+  margin: 0;
+}
+
+.c-links a {
+  color: #eef2f7;
+  text-decoration: none;
+}
+
+.c-links a:hover,
+.c-links a:focus-visible { text-decoration: underline; }
+
+/* Corner brackets, drawn with eight 1px gradients rather than an image. */
+.c-close {
+  position: fixed;
+  top: var(--c-pad);
+  right: var(--c-pad);
+  padding: 0.85rem 1.35rem;
+  border: 0;
+  color: #fff;
+  font: 600 0.72rem var(--c-mono);
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  background:
+    linear-gradient(#fff, #fff) top left / 8px 1px no-repeat,
+    linear-gradient(#fff, #fff) top left / 1px 8px no-repeat,
+    linear-gradient(#fff, #fff) top right / 8px 1px no-repeat,
+    linear-gradient(#fff, #fff) top right / 1px 8px no-repeat,
+    linear-gradient(#fff, #fff) bottom left / 8px 1px no-repeat,
+    linear-gradient(#fff, #fff) bottom left / 1px 8px no-repeat,
+    linear-gradient(#fff, #fff) bottom right / 8px 1px no-repeat,
+    linear-gradient(#fff, #fff) bottom right / 1px 8px no-repeat;
+}
+
+@media (max-width: 700px) {
+  .c-label--b { display: none; }
+  .c-label-box { min-width: 0; font-size: 0.62rem; }
+  .c-hint { display: none; }
+  .c-explore { max-width: 55vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-fog,
+  .c-detail,
+  .c-detail.is-open,
+  .c-hud { transition: none; }
+}

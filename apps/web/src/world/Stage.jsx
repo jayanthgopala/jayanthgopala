@@ -10,6 +10,8 @@ import Weather from './environment/Weather.jsx';
 import Lattice from './environment/Lattice.jsx';
 import IglooBlocks from './structures/IglooBlocks.jsx';
 import CameraRig from './camera/CameraRig.jsx';
+import TravelGlitch from './effects/TravelGlitch.jsx';
+import IceCut, { CutFrameGate } from './effects/IceCut.jsx';
 import Diagnostics from './Diagnostics.jsx';
 import { EffectComposer, Bloom, Vignette, ChromaticAberration, TiltShift2, ToneMapping } from '@react-three/postprocessing';
 import { ToneMappingMode } from 'postprocessing';
@@ -42,26 +44,17 @@ function TravelFringe() {
   useFrame((state) => {
     const effect = ref.current;
     if (!effect) return;
-
     /*
-     * Cubed, and it is a stronger curve than the igloo's edge light uses.
-     *
-     * Fringing is the more conspicuous of the two effects — it acts on the
-     * whole frame rather than on one object — so at a matching ramp it arrives
-     * long before the picture is actually moving fast enough to justify it, and
-     * a gentle scroll comes out looking like a broken display. A cube keeps it
-     * out of the way until the travel is genuinely quick.
+     * Power 1.8 so fringing activates smoothly during scroll, reaching
+     * pronounced rainbow dispersion along edges like the reference.
      */
-    const amount = flight.current * flight.current * flight.current;
-    /* 5.5 px at the frame edge at full travel, measured on a 1536-wide canvas —
-       enough to read as a lens and well short of looking like a fault. */
-    const px = 5.5 / state.gl.getDrawingBufferSize(scratch).x;
-    /* Y is the smaller term. A real lens disperses radially, and the frame is
-       wider than it is tall, so an equal split reads as a vertical smear. */
-    effect.offset.set(amount * px, amount * px * 0.55);
+    const amount = Math.pow(flight.current, 1.8);
+    /* 14.0 px at the frame edge at full travel to generate the vivid chromatic fringe */
+    const px = 14.0 / state.gl.getDrawingBufferSize(scratch).x;
+    effect.offset.set(amount * px, amount * px * 0.65);
   });
 
-  return <ChromaticAberration ref={ref} offset={initial.current} radialModulation modulationOffset={0.3} />;
+  return <ChromaticAberration ref={ref} offset={initial.current} radialModulation modulationOffset={0.22} />;
 }
 
 /**
@@ -121,6 +114,45 @@ function TravelSmear() {
 /* Module scope: getDrawingBufferSize writes into the vector it is handed, and
    allocating one per frame is a garbage-collection pause per frame. */
 const scratch = new Vector2();
+
+/**
+ * THE TRAVEL POST-PROCESSING, AND WHY IT IS ALL OFF.
+ *
+ * These three passes are what produce the "corruption" seen while the shot
+ * moves between chapters. None of it is a framebuffer fault — there is no
+ * stale render target, no read-and-write of the same buffer, no resolution
+ * mismatch. Each artefact is a pass doing exactly what it was written to do,
+ * driven off `flight` (scroll velocity) so it is silent at rest and builds
+ * with the move:
+ *
+ *   smear   TiltShift2, blur to 1.45           — the blur and smearing
+ *   fringe  ChromaticAberration, radial        — the RGB split and the
+ *                                                distortion around the igloo
+ *   glitch  TravelGlitch, convolution          — the horizontal blocks, the
+ *                                                block quantisation and a
+ *                                                second channel split
+ *
+ * ALL THREE WERE SWITCHED OFF ONCE, AND THAT IS WORTH KEEPING A RECORD OF.
+ * The tearing was reported as framebuffer corruption — rectangular blocks,
+ * channel separation, smearing — and the natural reading of those symptoms is
+ * a render-target fault. It was not one. There is no WebGLRenderTarget, no
+ * ShaderPass and no transition shader anywhere in src/; every symptom was one
+ * of the three passes below behaving as written. Turning them all off and
+ * confirming the chapter change rendered clean is what established that, and
+ * it is the first thing to do again if the frame ever looks broken.
+ *
+ * They are back on, with the glitch retuned: the numbers that made it read as
+ * a fault rather than as an effect are recorded in TravelGlitch.jsx.
+ *
+ * The mist in Weather.jsx is deliberately NOT part of this. It is scene
+ * content rather than a post pass, it does not read `flight`, and it is
+ * unaffected by every flag here.
+ */
+const TRAVEL_FX = {
+  smear: true,
+  fringe: true,
+  glitch: false,
+};
 
 /**
  * The global exposure trim, applied to the renderer in onCreated.
@@ -515,8 +547,32 @@ export default function Stage({ onIglooReady, begin = false }) {
           */}
           <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
           <Vignette offset={LOOK.grade.vignette.offset} darkness={LOOK.grade.vignette.darkness} eskil={false} />
-          <TravelSmear />
-          <TravelFringe />
+          {TRAVEL_FX.smear && <TravelSmear />}
+          {TRAVEL_FX.fringe && <TravelFringe />}
+          {/*
+            LAST IN THE CHAIN, AND THAT PLACEMENT IS THE POINT.
+
+            Everything above it is the camera: bloom is light gathering in a
+            lens, the tone map is the sensor's response, the vignette is
+            falloff across the finished picture, and the fringe and smear are
+            that lens moving. TravelGlitch is not the camera — it is the
+            picture failing to arrive intact afterwards. Putting it at the end
+            means it tears the fully graded frame, vignette and all, which is
+            what a transmission artefact does; anywhere earlier and the passes
+            after it would go on to smoothly grade a torn image, which reads as
+            the tear being part of the scene.
+          */}
+          {TRAVEL_FX.glitch && <TravelGlitch />}
+          {/*
+            THE CUT TO THE WORK PAGE, and it goes after even the glitch.
+
+            Everything above is the world being photographed. This exchanges
+            that photograph for a different picture — the ice page — and the
+            page must arrive clean: not bloomed, not tone mapped, not
+            vignetted. It is silent (a straight copy) for the whole journey
+            and only does anything once the scroll reaches the cut.
+          */}
+          <IceCut />
         </EffectComposer>
 
         {/*
@@ -534,6 +590,10 @@ export default function Stage({ onIglooReady, begin = false }) {
           is the better trade for something meant to be looked at.
         */}
         <AdaptiveEvents />
+
+        {/* Parks the render loop while the work page covers the world. See
+            CutFrameGate in effects/IceCut.jsx. */}
+        <CutFrameGate />
 
         {/* Reports draw counts onto <html data-world-stats>. See Diagnostics for
             why that goes through the DOM rather than a global. */}

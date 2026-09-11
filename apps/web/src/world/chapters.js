@@ -38,10 +38,21 @@ import { Vector3, CatmullRomCurve3 } from 'three';
  * it is the shot the landscape was built for: you only find out how big the
  * country is by leaving.
  */
+/*
+ * THE EXPANSE IS GONE, AND THE CUT TAKES ITS PLACE.
+ *
+ * The retreat now ends in a cut to the work page rather than running on until
+ * the igloo is a speck. The reference cuts while its igloo still fills a good
+ * part of the frame, and the lift-out only reads when there is something of
+ * size to lift — a speck leaving the top of the frame is not an event.
+ *
+ * The act boundaries are still in camera-journey units (see JOURNEY below), so
+ * the work act begins exactly where the cut does.
+ */
 export const ACTS = [
   { id: 'horizon', index: 1, start: 0.0, end: 0.34, label: 'Horizon' },
   { id: 'retreat', index: 2, start: 0.34, end: 0.72, label: 'The Retreat' },
-  { id: 'expanse', index: 3, start: 0.72, end: 1.0, label: 'The Expanse' },
+  { id: 'work', index: 3, start: 0.72, end: 1.0, label: 'Selected Work' },
 ];
 
 export function actAt(progress) {
@@ -52,6 +63,50 @@ export function actAt(progress) {
 export function actProgress(progress, act) {
   const span = act.end - act.start;
   return span <= 0 ? 0 : Math.min(1, Math.max(0, (progress - act.start) / span));
+}
+
+/*
+ * THE SCROLL, IN THREE STRETCHES, measured in screens.
+ *
+ *   world  the journey up to the end of the retreat. 2.2 screens is where the
+ *          retreat ended on the old three-screen extent, so the pace of the
+ *          first two acts is exactly what it was.
+ *   cut    the wipe to the work page. 1.2 screens, about what the reference
+ *          spends on its own.
+ *   page   whatever the work page measures (ScrollProvider adds it).
+ */
+export const SEGMENTS = { world: 2.2, cut: 1.2 };
+
+/*
+ * Where on the camera curve the world stretch ends, and how much further the
+ * lens drifts while the cut runs. Still retreating as it lifts out, like the
+ * reference; the curve's last waypoint is simply never reached, and the curve
+ * itself is untouched.
+ */
+export const JOURNEY = { atCut: 0.72, end: 0.8 };
+
+/** How far each picture travels vertically across the cut, as a share of the frame. From the reference. */
+export const CUT_PARALLAX = 0.4;
+
+const clamp01 = (v) => Math.min(1, Math.max(0, v));
+
+/**
+ * Scroll pixels to the three things the world reads: where the camera is on its
+ * journey, how far through the cut, and how far into the page. Writes into
+ * `out` because it runs every frame.
+ */
+export function scrollState(scroll, vh, out = {}) {
+  const worldPx = SEGMENTS.world * vh;
+  const cutPx = SEGMENTS.cut * vh;
+  const cut = clamp01((scroll - worldPx) / cutPx);
+
+  out.journey =
+    scroll < worldPx
+      ? JOURNEY.atCut * clamp01(scroll / worldPx)
+      : JOURNEY.atCut + (JOURNEY.end - JOURNEY.atCut) * cut;
+  out.cut = cut;
+  out.page = Math.max(0, scroll - worldPx - cutPx);
+  return out;
 }
 
 /*

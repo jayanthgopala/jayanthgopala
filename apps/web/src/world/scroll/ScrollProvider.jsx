@@ -1,15 +1,15 @@
-import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import Lenis from 'lenis';
+import { SEGMENTS, scrollState } from '../chapters.js';
 
 /**
  * The scroll spine of the whole experience.
  *
- * One number — progress from 0 to 1 through the entire journey — is published
- * here, and everything in the world is a function of it: where the camera is on
- * its spline, where the character is, how thick the fog is, which chapter's
- * type is legible.
+ * One scroll position is published here, and everything in the world is a
+ * function of it: where the camera is on its spline, how far through the cut
+ * to the work page, how far down that page, which chapter's type is legible.
  *
- * THE NUMBER LIVES IN A REF, NOT IN STATE. This is the single most important
+ * THE NUMBERS LIVE IN REFS, NOT IN STATE. This is the single most important
  * decision in the file. Scroll progress changes every frame; putting it in
  * useState would re-render the React tree sixty times a second, and in an R3F
  * app that means reconciling the scene graph sixty times a second to produce
@@ -37,8 +37,16 @@ export function useWorldScroll() {
   return ctx;
 }
 
-export default function ScrollProvider({ children, pages = 8 }) {
-  /** 0..1 through the journey. Read every frame; never triggers a render. */
+export default function ScrollProvider({ children }) {
+  /**
+   * 0..JOURNEY.end along the camera curve. Read every frame; never triggers a
+   * render.
+   *
+   * STILL CALLED `progress`, and still the camera's number, even though the
+   * document now runs on past the world. Everything that already read it —
+   * the rig, the act marker, the glitch pass — reads the journey, and keeping
+   * the name keeps all of them correct without touching them.
+   */
   const progress = useRef(0);
   /** Signed scroll velocity, normalised. Drives motion blur and gait direction. */
   const velocity = useRef(0);
@@ -67,7 +75,34 @@ export default function ScrollProvider({ children, pages = 8 }) {
    * asymmetry Lenis itself applies to position.
    */
   const flight = useRef(0);
+  /** 0..1 through the cut from the world to the work page. */
+  const cut = useRef(0);
+  /** Pixels scrolled into the work page after the cut has finished. */
+  const page = useRef(0);
+  /** 0..1 through the whole document. The HUD's progress bar. */
+  const total = useRef(0);
   const lenis = useRef(null);
+
+  /*
+   * THE EXTENT IS IN PIXELS NOW, and the viewport height is state because of
+   * it. The old spacer was `${pages * 100}vh` and needed nothing from JS; the
+   * work page's length is a measurement, and the world's stretches have to be
+   * converted with the same viewport height the frame loop uses, or the two
+   * disagree about where the cut is.
+   */
+  const [vh, setVh] = useState(() => (typeof window === 'undefined' ? 800 : window.innerHeight));
+  const [pageHeight, setPageHeight] = useState(0);
+  const vhRef = useRef(vh);
+
+  useEffect(() => {
+    vhRef.current = vh;
+  }, [vh]);
+
+  useEffect(() => {
+    const onResize = () => setVh(window.innerHeight);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -83,8 +118,7 @@ export default function ScrollProvider({ children, pages = 8 }) {
 
     lenis.current = instance;
 
-    instance.on('scroll', ({ scroll, limit, velocity: v }) => {
-      progress.current = limit > 0 ? Math.min(1, Math.max(0, scroll / limit)) : 0;
+    instance.on('scroll', ({ velocity: v }) => {
       // Clamped, because a trackpad fling can spike this to values that make
       // anything reading it visibly overshoot.
       velocity.current = Math.max(-1, Math.min(1, v / 60));
@@ -104,9 +138,24 @@ export default function ScrollProvider({ children, pages = 8 }) {
     const RELEASE = 3.6;
 
     let last = performance.now();
+    /* Reused every frame rather than allocated. */
+    const state = { journey: 0, cut: 0, page: 0 };
 
     let frame = requestAnimationFrame(function raf(time) {
       instance.raf(time);
+
+      /*
+       * Positions are read here, every frame, rather than in the scroll event.
+       * Lenis only emits while it is moving, and a resize changes what a given
+       * scroll position MEANS without moving it — read in the event, the cut
+       * would sit at its old position after a resize until the next wheel.
+       */
+      scrollState(instance.scroll, vhRef.current, state);
+      progress.current = state.journey;
+      cut.current = state.cut;
+      page.current = state.page;
+      total.current =
+        instance.limit > 0 ? Math.min(1, Math.max(0, instance.scroll / instance.limit)) : 0;
 
       /* Clamped, because a backgrounded tab resumes with an enormous dt and an
          un-clamped exponential would snap the value across in one frame. */
@@ -132,7 +181,24 @@ export default function ScrollProvider({ children, pages = 8 }) {
     };
   }, []);
 
-  const value = useMemo(() => ({ progress, velocity, flight, lenis, pages }), [pages]);
+  /* The spacer changed height; make sure Lenis's limit follows at once rather
+     than on its own observer's schedule. */
+  useEffect(() => {
+    lenis.current?.resize();
+  }, [vh, pageHeight]);
+
+  const value = useMemo(
+    () => ({ progress, velocity, flight, cut, page, total, lenis, setPageHeight }),
+    []
+  );
+
+  /*
+   * The page stretch is never shorter than a screen. A document that ended
+   * before the cut could finish would leave the wipe stranded half-way at the
+   * bottom of the scrollbar, and a short page — or one still loading — would
+   * do exactly that.
+   */
+  const extent = (SEGMENTS.world + SEGMENTS.cut) * vh + Math.max(pageHeight, vh);
 
   return (
     <ScrollContext.Provider value={value}>
@@ -141,13 +207,12 @@ export default function ScrollProvider({ children, pages = 8 }) {
         The scroll extent. The canvas is fixed and fills the viewport, so without
         this the document is exactly one screen tall and there is nothing to
         scroll — the world would be frozen at progress 0 with no way to advance.
-        Its height is the entire pacing control for the experience: more pages
-        means the same camera path is spread over more scrolling, and every beat
-        slows down together.
+        Its height is the entire pacing control for the experience: see
+        SEGMENTS in chapters.js.
       */}
       <div
         style={{
-          height: `${pages * 100}vh`,
+          height: `${Math.round(extent)}px`,
           /*
            * Transparent to the pointer, or it eats every event meant for the
            * world. The canvas is position:fixed at z-index 0 and this spacer is

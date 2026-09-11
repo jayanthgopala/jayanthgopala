@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import ScrollProvider, { useWorldScroll } from './scroll/ScrollProvider.jsx';
 import { createWind } from './lib/wind.js';
 import Stage from './Stage.jsx';
+import WorkPage from './WorkPage.jsx';
 import { loadBakedWorld } from './lib/baked.js';
-import WorldLoader from './WorldLoader.jsx';
 import { ACTS, actAt } from './chapters.js';
 import '../styles/world.css';
 
@@ -110,22 +110,24 @@ function SoundToggle() {
 
 function Hud({ profile = {} }) {
   const act = useActiveAct();
-  const { progress } = useWorldScroll();
+  const { total } = useWorldScroll();
   const barRef = useRef(null);
 
   /* The progress bar is written directly to the DOM node rather than rendered,
-     for the same reason the camera is: it changes every frame. */
+     for the same reason the camera is: it changes every frame. It reads the
+     whole document rather than the camera journey, so it keeps filling down
+     the work page and reaches the end with the scrollbar. */
   useEffect(() => {
     let frame = 0;
     const tick = () => {
       if (barRef.current) {
-        barRef.current.style.transform = `scaleX(${progress.current.toFixed(4)})`;
+        barRef.current.style.transform = `scaleX(${total.current.toFixed(4)})`;
       }
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [progress]);
+  }, [total]);
 
   return (
     <div className="w-hud">
@@ -141,7 +143,7 @@ function Hud({ profile = {} }) {
 
       <footer className="w-hud-bottom">
         <SoundToggle />
-        <span className="w-hint">Scroll to travel</span>
+        <span className={`w-hint${act.id === 'work' ? ' is-away' : ''}`}>Scroll to travel</span>
         <span className="w-progress" aria-hidden="true">
           <i ref={barRef} />
         </span>
@@ -230,22 +232,13 @@ export default function WorldSite({ site = {} }) {
   useCrashReporter();
 
   /*
-   * Three pages, not one — and not nine either.
+   * THE EXTENT IS NOT A PAGE COUNT ANY MORE.
    *
-   * This was 1 for as long as the camera was pinned: with no travel, a taller
-   * extent would have been screens of nothing to scroll through. The camera
-   * travels again (see CameraRig and the rebuilt path in chapters.js), so the
-   * extent has to come back.
-   *
-   * THREE, because the journey is now short and it goes INWARD. The old
-   * nine-screen extent paced a seven-act trek across the landscape; this is one
-   * move — swing to the entrance, go through it, arrive inside — and stretching
-   * that over nine screens would make each beat crawl. Three screens puts the
-   * mouth of the tunnel around the middle of the scroll and leaves the last
-   * screen for the interior.
-   *
-   * This is the pacing control for the whole sequence: more pages spreads the
-   * same camera path over more scrolling and slows every beat together.
+   * It was `pages={3}`: three screens for one camera move. The world now hands
+   * over to the work page part-way down, so the scroll is three stretches —
+   * the journey, the cut, the page — set in SEGMENTS in chapters.js, with the
+   * page's length measured rather than chosen. The pacing control lives there
+   * now: more screens in a stretch slows every beat in it together.
    */
 
   /*
@@ -344,10 +337,10 @@ export default function WorldSite({ site = {} }) {
   }, [mountStage, iglooReady]);
 
   return (
-    <ScrollProvider pages={3}>
+    <ScrollProvider>
       {mountStage && <Stage onIglooReady={handleIglooReady} begin={ready} />}
+      <WorkPage projects={site.projects} />
       <Hud profile={site.profile} />
-      <WorldLoader ready={ready} />
     </ScrollProvider>
   );
 }

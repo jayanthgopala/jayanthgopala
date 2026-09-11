@@ -1225,8 +1225,8 @@ const screeAndSnow = (shader) => {
       * scales both equally, and the separation between them comes from the key
       * and the ambient, which moved for their own reasons in Atmosphere.
       */
-        /* Bright white snow with subtle cool undertone */
-        diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.940, 0.960, 0.985 ), lay * 0.45 );
+        /* Clean bright natural snow */
+        diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.930, 0.955, 0.985 ), lay * 0.45 );
 
         /* Gentle sun brightening aligned with soft sunlight */
         vec3 sunLightDir = vec3( 0.3722, 0.6464, -0.6660 );
@@ -1721,20 +1721,6 @@ const screeAndSnow = (shader) => {
       diffuseColor.rgb *= mix( 0.94, 1.04, nearFormations * nearZone );
       diffuseColor.rgb *= mix( 0.97, 1.03, scour * nearZone );
       roughnessFactor = mix( roughnessFactor, 0.84, nearFormations * nearZone * 0.35 );
-
-      /*
-       * SURFACE SNOW: Extremely subtle drifting/sweeping movement along snow ridges.
-       * No visible animated texture sliding across the entire terrain.
-       * Gated to steep ridge crests facing into the dominant wind.
-       */
-      float ridgeSlope = smoothstep( 0.86, 0.965, wGeo.y );
-      float ridgeFacing = smoothstep( 0.10, 0.75, dot( normalize( wGeo.xz + vec2(1e-4) ), SHARED_WIND_DIR ) );
-      float ridgeDriftMask = ridgeSlope * ridgeFacing * scour * nearZone;
-
-      vec2 driftWarp = evaluateWindWarp( vFogWorld, uTime, 1.8, uCursorPos, uCursorForce );
-      vec2 driftCoord = ( vFogWorld.xz + driftWarp + SHARED_WIND_DIR * ( uTime * SHARED_WIND_SPEED * 1.8 ) ) * 0.042;
-      float ridgeDrift = fogNoise( driftCoord );
-      diffuseColor.rgb += vec3( 0.14 ) * ( ridgeDrift - 0.45 ) * ridgeDriftMask;
 
       /* Soft alpine blue-gray shading on steep couloirs rather than dark navy */
       diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.68, 0.74, 0.82 ), bare * 0.35 * bareFade );

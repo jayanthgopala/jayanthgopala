@@ -24,6 +24,7 @@ import { useEffect, useRef, useState } from 'react';
  * genuinely unmeasurable.
  */
 export default function WorldLoader({ ready }) {
+  const [opening, setOpening] = useState(false);
   const [gone, setGone] = useState(false);
   const barRef = useRef(null);
   const startedAt = useRef(0);
@@ -48,24 +49,28 @@ export default function WorldLoader({ ready }) {
     return () => cancelAnimationFrame(frame);
   }, [ready]);
 
-  /* Fill, then fade, then unmount — so the bar is seen to complete rather than
-     vanishing mid-way, which reads as a failure even when it is not. */
+  /* Fill, then open with curved iris transition, then unmount */
   useEffect(() => {
     if (!ready) return undefined;
     if (barRef.current) barRef.current.style.transform = 'scaleX(1)';
-    const id = setTimeout(() => setGone(true), 900);
-    return () => clearTimeout(id);
+    const openTimer = setTimeout(() => setOpening(true), 240);
+    const unmountTimer = setTimeout(() => setGone(true), 1700);
+    return () => {
+      clearTimeout(openTimer);
+      clearTimeout(unmountTimer);
+    };
   }, [ready]);
 
   if (gone) return null;
 
   return (
     <div
-      className={`w-loader${ready ? ' is-ready' : ''}`}
+      className={`w-loader${ready ? ' is-ready' : ''}${opening ? ' is-opening' : ''}`}
       role="status"
       aria-live="polite"
       aria-label="Loading the world"
     >
+      <div className="w-loader-curtain" />
       <div className="w-loader-inner">
         <p className="w-loader-mark">Portfolio</p>
         <span className="w-loader-bar" aria-hidden="true">

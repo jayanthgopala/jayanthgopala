@@ -10,7 +10,7 @@ import { Vector2, Vector3, Plane, Raycaster } from 'three';
 import { MOUND_AT } from './terrain.js';
 
 export const WIND_DIR = [-0.96, -0.28]; // Normalized horizontal direction crossing right-to-left with slight camera lean
-export const WIND_SPEED = 24.0;       // World units per second base speed
+export const WIND_SPEED = 16.0;       // Slow, graceful atmospheric drift speed
 export const IGLOO_EDDY_AT = [MOUND_AT[0], MOUND_AT[1]]; // [-30, 252]
 export const IGLOO_EDDY_RADIUS = 110.0;
 export const IGLOO_EDDY_STRENGTH = 28.0;
@@ -43,8 +43,8 @@ export function updateWindState(state, delta) {
   if (hit) {
     const distMoved = prevCursor.distanceTo(hitPoint);
     const speed = distMoved / dt;
-    /* Base wind is barely visible when still; normal move is clearly visible (~0.4-0.6); capped at 1.2 so never a storm */
-    const targetForce = Math.min(speed * 0.016, 1.2);
+    /* Responsive wind reaction: active movement bends and curls nearby mist and snow */
+    const targetForce = Math.min(speed * 0.022, 1.4);
     windState.cursorForce += (targetForce - windState.cursorForce) * (1 - Math.exp(-4.2 * dt));
     windState.cursorPos.set(hitPoint.x, hitPoint.z);
     prevCursor.set(hitPoint.x, hitPoint.z);
@@ -61,7 +61,7 @@ export function updateWindState(state, delta) {
  */
 export const SHARED_WIND_GLSL = /* glsl */ `
   #define SHARED_WIND_DIR vec2(-0.96, -0.28)
-  #define SHARED_WIND_SPEED 24.0
+  #define SHARED_WIND_SPEED 16.0
   #define SHARED_EDDY_AT vec2(${IGLOO_EDDY_AT[0].toFixed(1)}, ${IGLOO_EDDY_AT[1].toFixed(1)})
   #define SHARED_EDDY_RADIUS ${IGLOO_EDDY_RADIUS.toFixed(1)}
   #define SHARED_EDDY_STRENGTH ${IGLOO_EDDY_STRENGTH.toFixed(1)}
@@ -92,14 +92,14 @@ export const SHARED_WIND_GLSL = /* glsl */ `
       * (0.70 + 0.30 * sin(t * 0.35 - distIgloo * 0.025));
     warp += vec2(relIgloo.y, -relIgloo.x) / max(distIgloo, 1.0) * iglooCurl;
 
-    /* 3. Interactive cursor disturbance */
+    /* 3. Interactive cursor disturbance: widened radius & stronger deflection */
     vec2 relCursor = p.xz - cursorPos;
     float distCursor = length(relCursor);
-    float cursorRadius = 85.0;
+    float cursorRadius = 115.0;
     float cursorInf = exp(-distCursor / cursorRadius) * cursorForce;
     /* Tangential vortex swirl + forward momentum kick */
-    warp += vec2(-relCursor.y, relCursor.x) / max(distCursor, 1.0) * (cursorInf * 28.0);
-    warp += SHARED_WIND_DIR * (cursorInf * 18.0);
+    warp += vec2(-relCursor.y, relCursor.x) / max(distCursor, 1.0) * (cursorInf * 36.0);
+    warp += SHARED_WIND_DIR * (cursorInf * 24.0);
 
     return warp;
   }
