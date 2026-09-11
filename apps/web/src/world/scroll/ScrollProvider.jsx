@@ -151,23 +151,34 @@ export default function ScrollProvider({ children, locked = false }) {
     const state = { journey: 0, cut: 0, page: 0 };
 
     /*
-     * THE CUT PLAYS ITSELF THROUGH ONCE IT STARTS.
+     * THE CUT IS SCRUBBED, AND IT SETTLES WHEN YOU LET GO.
      *
-     * Scrubbed, the cut could be parked anywhere — half a world and half a
-     * page on screen, for as long as the wheel happened to stop there. So the
-     * moment the scroll enters it, Lenis is handed the rest of the way: down
-     * into the cut carries on to the page, fully arrived; up out of the page
-     * carries on back to the world. Still driven through the scroll position,
-     * so every frame of it is the same frame a slow scroll would have shown,
-     * and it still runs backwards on the way back.
+     * The wheel drives it frame by frame, so you can hold in the middle of the
+     * blur and look at it for as long as your hand is on the wheel. When you
+     * let go — no wheel, touch or key for IDLE_MS — it settles to the side you
+     * were nearer: short of half-way it eases all the way back to the igloo's
+     * opening frame, past half-way it carries on to the page. The approach
+     * before the cut counts as short of half-way, so a scroll that only got as
+     * far as the travel blur also comes home.
      *
-     * LOCKED while it plays, or the next wheel notch would fight it and the
-     * cut would stutter. 1.4 seconds is long enough to see the wipe and short
-     * enough that nobody reaches for the wheel again waiting for it.
+     * NOT LOCKED. A settle is only a suggestion: touch the wheel during it and
+     * the scroll is yours again at once.
+     *
+     * (For one version it played itself through, locked, the instant the cut
+     * began. That gave the blur no time on screen at all.)
      */
-    const CUT_SECONDS = 1.4;
+    const IDLE_MS = 1200;
+    const COMMIT = 0.5;
     const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-    let playing = false;
+    let settling = false;
+    let lastInput = performance.now();
+    const onInput = () => {
+      lastInput = performance.now();
+      settling = false;
+    };
+    window.addEventListener('wheel', onInput, { passive: true });
+    window.addEventListener('touchmove', onInput, { passive: true });
+    window.addEventListener('keydown', onInput);
 
     let frame = requestAnimationFrame(function raf(time) {
       instance.raf(time);
@@ -185,27 +196,40 @@ export default function ScrollProvider({ children, locked = false }) {
       total.current =
         instance.limit > 0 ? Math.min(1, Math.max(0, instance.scroll / instance.limit)) : 0;
 
-      /* A hair of margin at both ends: the native scroll position is rounded,
-         and a cut sitting at 0.9999 would otherwise re-trigger forever. */
-      if (!playing && state.cut > 0.005 && state.cut < 0.995) {
+      /* Settle only once the hand is off AND Lenis has finished gliding from
+         the last notch, so the settle never cuts a scroll short. */
+      if (
+        !settling &&
+        time - lastInput > IDLE_MS &&
+        Math.abs(instance.velocity) < 0.2
+      ) {
         const vh = vhRef.current;
-        const down = instance.direction >= 0;
-        const target = down
-          ? (SEGMENTS.world + SEGMENTS.cut) * vh + 2
-          : SEGMENTS.world * vh - 2;
-        playing = true;
-        instance.scrollTo(target, {
-          duration: reduce ? 0 : CUT_SECONDS,
-          immediate: reduce,
-          easing: easeInOut,
-          lock: true,
-          force: true,
-          onComplete: () => {
-            playing = false;
-          },
-        });
-        /* immediate scrolls do not call onComplete in every Lenis version. */
-        if (reduce) playing = false;
+        const worldPx = SEGMENTS.world * vh;
+        const cutPx = SEGMENTS.cut * vh;
+        const commitPx = worldPx + cutPx * COMMIT;
+        const s = instance.scroll;
+
+        /* A pixel or two of margin at both ends: the native scroll position is
+           rounded, and a scroll resting a hair off its target would otherwise
+           settle again forever. */
+        let target = null;
+        if (s > 1 && s < commitPx) target = 0;
+        else if (s >= commitPx && s < worldPx + cutPx - 1) target = worldPx + cutPx + 2;
+
+        if (target !== null) {
+          settling = true;
+          instance.scrollTo(target, {
+            /* Home is the longer, gentler move: it is undoing something. */
+            duration: reduce ? 0 : target === 0 ? 1.6 : 1.1,
+            immediate: reduce,
+            easing: easeInOut,
+            onComplete: () => {
+              settling = false;
+            },
+          });
+          /* immediate scrolls do not call onComplete in every Lenis version. */
+          if (reduce) settling = false;
+        }
       }
 
       /* Clamped, because a backgrounded tab resumes with an enormous dt and an
@@ -227,6 +251,9 @@ export default function ScrollProvider({ children, locked = false }) {
 
     return () => {
       cancelAnimationFrame(frame);
+      window.removeEventListener('wheel', onInput);
+      window.removeEventListener('touchmove', onInput);
+      window.removeEventListener('keydown', onInput);
       instance.destroy();
       lenis.current = null;
     };

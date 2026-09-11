@@ -72,12 +72,13 @@ export function actProgress(progress, act) {
  *          starts about two wheel notches in — a small scroll, not a stretch
  *          of scrolling before anything happens. The rig's damping keeps the
  *          pull-back a glide rather than a jump.
- *   cut    the wipe to the work page. 0.9 of a screen — but nobody scrolls
- *          through it by hand: ScrollProvider plays it through the moment it
- *          starts, so this is how far that play travels, not how far you do.
+ *   cut    the wipe to the work page. A full screen, scrubbed by the wheel, so
+ *          the blur has room to be seen and held. Let go short of half-way and
+ *          ScrollProvider eases back to the igloo; past half-way, on to the
+ *          page.
  *   page   whatever the work page measures (ScrollProvider adds it).
  */
-export const SEGMENTS = { world: 0.3, cut: 0.9 };
+export const SEGMENTS = { world: 0.3, cut: 1.0 };
 
 /*
  * Where on the camera curve the world stretch ends, and how much further the
