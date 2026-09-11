@@ -16,11 +16,18 @@ import { ICE_PAGE } from '../lib/ice-page.js';
  *   - The world slides UP and out of the frame while the page rises in from
  *     below, both on a squared ease over the same 40% of the frame height.
  *   - The seam between them is a DIAGONAL front, lower-left first, broken into
- *     rectangular chunks by a block texture so the wipe arrives as blocks rather
- *     than as a line.
- *   - Along that seam both pictures are pushed a little further, torn sideways
- *     into horizontal bands, and split into a rainbow — the world fringing more
- *     as it leaves, the page less as it arrives, so the page lands sharp.
+ *     fragments by a block texture so the wipe arrives in pieces rather than as
+ *     a line.
+ *   - Along that seam both pictures are SMEARED: dragged into streaks that
+ *     taper out along their length, split into a rainbow as they go, with a
+ *     frost-white haze riding the front. The world smears more as it leaves,
+ *     the page less as it arrives, so the page lands sharp.
+ *
+ * SMEAR, NOT TEAR. The first version displaced whole rows by a constant each,
+ * and every row boundary showed as a dead-straight horizontal line. Nothing
+ * here is constant along a row any more: the streaks come from smooth noise,
+ * so they fade in and out along their length, and each pixel is an average of
+ * twelve samples trailing behind it rather than one sample moved sideways.
  *
  * SCRUBBED, NOT PLAYED. Every term is a pure function of scroll position, so the
  * cut stops where the scroll stops and runs backwards when the scroll does —
@@ -38,15 +45,18 @@ import { ICE_PAGE } from '../lib/ice-page.js';
 
 /** Extra vertical shove along the seam, as a fraction of the frame. From the reference. */
 const DISPLACE = 0.025;
-/** Sideways tear at the seam — the horizontal stretch bands. */
-const STRETCH = 0.05;
+/** How far a streak drags sideways at its strongest, as a fraction of the frame. */
+const STRETCH = 0.075;
+/** How far the wake drags vertically, behind the direction of travel. */
+const SMEAR = 0.05;
 /**
- * Chromatic spread. With the 12x modulator in the middle of the frame, a
- * full-strength fringe splits the channels by about 3.5% of the frame at its
- * outer reach — wide enough to read as a rainbow smear, which is what the
- * reference shows, rather than as a lens defect.
+ * Chromatic spread across the smear. With the 12x modulator in the middle of
+ * the frame a full-strength fringe spans about 3% of the frame — a rainbow
+ * smear, not a lens defect.
  */
-const SPREAD = 0.012;
+const SPREAD = 0.01;
+/** How white the frost on the front gets, at the middle of the wake. */
+const HAZE = 0.14;
 
 const f = (n) => n.toFixed(4);
 
@@ -54,7 +64,10 @@ const FRAGMENT = /* glsl */ `
   #define PARALLAX ${f(CUT_PARALLAX)}
   #define DISPLACE ${f(DISPLACE)}
   #define STRETCH ${f(STRETCH)}
+  #define SMEAR ${f(SMEAR)}
   #define SPREAD ${f(SPREAD)}
+  #define HAZE ${f(HAZE)}
+  #define TAPS 12
 
   uniform sampler2D tCut;
   uniform float uCut;
@@ -75,6 +88,19 @@ const FRAGMENT = /* glsl */ `
     vec3 p3 = fract( vec3( p.xyx ) * 0.1031 );
     p3 += dot( p3, p3.yzx + 33.33 );
     return fract( ( p3.x + p3.y ) * p3.z );
+  }
+
+  /* Smooth value noise. Continuous in both directions, which is the whole
+     point: a streak built from it has no hard edge anywhere. */
+  float vnoise( vec2 p ) {
+    vec2 i = floor( p );
+    vec2 f = fract( p );
+    f = f * f * ( 3.0 - 2.0 * f );
+    float a = hash21( i );
+    float b = hash21( i + vec2( 1.0, 0.0 ) );
+    float c = hash21( i + vec2( 0.0, 1.0 ) );
+    float d = hash21( i + vec2( 1.0, 1.0 ) );
+    return mix( mix( a, b, f.x ), mix( c, d, f.x ), f.y );
   }
 
   /*
@@ -123,29 +149,45 @@ const FRAGMENT = /* glsl */ `
     return toLinear( c );
   }
 
-  /* Five taps across the spectrum, red to blue, along the line from the frame
-     centre. The weights sum to (2.5, 2.0, 2.5), so a zero spread is the plain
-     sample. */
-  vec3 spectralWorld( vec2 uv, float spread ) {
-    vec2 dir = uv - 0.5;
-    vec3 sum = vec3( 0.0 );
-    for ( int i = 0; i < 5; i++ ) {
-      float t = float( i ) * 0.25;
-      vec3 w = vec3( 1.0 - t, 1.0 - abs( t * 2.0 - 1.0 ), t );
-      sum += texture2D( inputBuffer, clamp( uv - dir * spread * ( t - 0.5 ), 0.0, 1.0 ) ).rgb * w;
-    }
-    return sum / vec3( 2.5, 2.0, 2.5 );
+  /* Red at the head of a streak, through green, to blue at its tail. The small
+     floor keeps every channel present along the whole length, so the smear
+     reads as light dispersing rather than as three coloured ghosts. */
+  vec3 spectrum( float t ) {
+    return vec3( 1.0 - t, 1.0 - abs( t * 2.0 - 1.0 ), t ) + 0.1;
   }
 
-  vec3 spectralIce( vec2 uv, float spread ) {
+  /*
+   * One smeared, dispersed sample. TAPS samples trailing along "drag" from
+   * the pixel, each tinted by its place in the spectrum, and each also pushed
+   * out from the frame centre by "spread" for the prismatic split. "jitter"
+   * slides the taps by a fraction of their spacing per pixel, so twelve
+   * discrete samples blend into one continuous streak instead of stepping.
+   */
+  vec3 smearWorld( vec2 uv, vec2 drag, float spread, float jitter ) {
     vec2 dir = uv - 0.5;
     vec3 sum = vec3( 0.0 );
-    for ( int i = 0; i < 5; i++ ) {
-      float t = float( i ) * 0.25;
-      vec3 w = vec3( 1.0 - t, 1.0 - abs( t * 2.0 - 1.0 ), t );
-      sum += iceGround( uv - dir * spread * ( t - 0.5 ) ) * w;
+    vec3 weight = vec3( 0.0 );
+    for ( int i = 0; i < TAPS; i++ ) {
+      float t = ( float( i ) + jitter ) / float( TAPS );
+      vec3 w = spectrum( t );
+      vec2 at = uv + drag * t - dir * spread * ( t - 0.5 );
+      sum += texture2D( inputBuffer, clamp( at, 0.0, 1.0 ) ).rgb * w;
+      weight += w;
     }
-    return sum / vec3( 2.5, 2.0, 2.5 );
+    return sum / weight;
+  }
+
+  vec3 smearIce( vec2 uv, vec2 drag, float spread, float jitter ) {
+    vec2 dir = uv - 0.5;
+    vec3 sum = vec3( 0.0 );
+    vec3 weight = vec3( 0.0 );
+    for ( int i = 0; i < TAPS; i++ ) {
+      float t = ( float( i ) + jitter ) / float( TAPS );
+      vec3 w = spectrum( t );
+      sum += iceGround( uv + drag * t - dir * spread * ( t - 0.5 ) ) * w;
+      weight += w;
+    }
+    return sum / weight;
   }
 
   void mainImage( const in vec4 inputColor, const in vec2 uv, out vec4 outputColor ) {
@@ -163,7 +205,7 @@ const FRAGMENT = /* glsl */ `
       return;
     }
 
-    // Reduced motion: the same two pictures, crossfaded. No travel, no tearing.
+    // Reduced motion: the same two pictures, crossfaded. No travel, no smear.
     if ( uReduced > 0.5 ) {
       outputColor = vec4( mix( inputColor.rgb, iceGround( uv ), p ), 1.0 );
       return;
@@ -175,33 +217,50 @@ const FRAGMENT = /* glsl */ `
 
     /*
      * The diagonal. Height plus a share of the horizontal position, jittered
-     * by the block texture's blue channel so the front is ragged — lower-left
-     * is covered first, upper-right last. Normalised back to 0..1 so the three
-     * sweeps below start and finish exactly with the scroll.
+     * by the texture's blue channel so the front is ragged — lower-left is
+     * covered first, upper-right last. Normalised back to 0..1 so the sweeps
+     * below start and finish exactly with the scroll.
      */
     float slope = 0.2 * uAspect;
     float x = uv.y + ( uv.x + ( blk.b * 2.0 - 1.0 ) * 0.4 ) * slope;
     float xn = ( x + 0.4 * slope ) / ( 1.0 + 1.8 * slope );
 
-    float blurField = sweep( xn, 2.0, p );   // broad: how hard each side fringes
-    float shoveField = sweep( xn, 0.9, p );  // medium: the seam push
+    float blurField = sweep( xn, 2.0, p );   // broad: how hard each side disperses
+    float shoveField = sweep( xn, 0.9, p );  // medium: the push, and the wake
     float cutField = sweep( xn, 0.2, p );    // narrow: the wipe itself
 
-    float shove = sweep( blk.g, 1.0, shoveField );
-    float cut = sweep( blk.r, 2.0, cutField );
-
-    // Horizontal bands slide sideways only on the seam itself.
+    // Both peak at the front and are exactly zero at either end of the cut.
     float seam = cutField * ( 1.0 - cutField ) * 4.0;
-    float tear = ( blk.g * 2.0 - 1.0 ) * STRETCH * seam;
+    float wake = shoveField * ( 1.0 - shoveField ) * 4.0;
 
     /*
-     * STATIC GRAIN, where the reference animates its blue noise. The grain
-     * breaks the five taps up so they read as a smear rather than as five
-     * ghost images — but a still page parked mid-cut must be still, and a
-     * per-frame offset would make it crawl.
+     * THE STREAKS. Thin across (46 rows to the frame) and long along (a
+     * couple of cells across it), so each one swells and fades over its
+     * length. A second, finer layer breaks every streak into fibres. Signed,
+     * so neighbouring streaks drag opposite ways and shear against each other.
      */
-    float grainWorld = hash21( gl_FragCoord.xy );
-    float grainPage = hash21( gl_FragCoord.yx + 19.19 );
+    float streak = vnoise( vec2( uv.x * 2.5, uv.y * 46.0 ) + blk.b * 3.0 ) * 2.0 - 1.0;
+    float fibre = vnoise( vec2( uv.x * 6.0 + 7.3, uv.y * 120.0 ) );
+    vec2 drag = vec2(
+      streak * STRETCH * ( 0.35 + fibre ) * ( seam + 0.5 * wake ),
+      SMEAR * wake
+    );
+
+    /* The fragments trail too: the block mask is read along the same drag,
+       so a block leaves a smear of itself behind instead of a hard edge. */
+    float r = 0.0;
+    for ( int k = 0; k < 4; k++ ) {
+      vec2 o = drag * ( float( k ) / 3.0 );
+      r += texture2D( tCut, uvTex + vec2( o.x * uAspect, o.y ) ).r;
+    }
+    r *= 0.25;
+
+    float cut = sweep( r, 2.0, cutField );
+    float shove = sweep( blk.g, 1.0, shoveField );
+
+    /* Static per pixel. A still page parked mid-cut must be still, and a
+       per-frame offset would make every streak crawl. */
+    float jitter = hash21( gl_FragCoord.xy );
 
     // 12 through the middle of the frame, easing to 0 at its very edge.
     float edge = ( 1.0 - smoothstep( 0.7, 1.0, abs( uv.x * 2.0 - 1.0 ) ) )
@@ -212,17 +271,23 @@ const FRAGMENT = /* glsl */ `
     vec3 page = vec3( 0.0 );
 
     if ( cut < 1.0 ) {
-      vec2 at = uv - vec2( tear, PARALLAX * p * p + DISPLACE * shove );
-      world = spectralWorld( at, SPREAD * modulator * blurField * grainWorld );
+      vec2 at = uv - vec2( streak * STRETCH * 0.25 * seam, PARALLAX * p * p + DISPLACE * shove );
+      world = smearWorld( at, drag, SPREAD * modulator * blurField, jitter );
     }
 
     if ( cut > 0.0 ) {
       float q = 1.0 - p;
-      vec2 at = uv + vec2( tear * 0.5, PARALLAX * q * q + DISPLACE * ( 1.0 - shove ) );
-      page = spectralIce( at, SPREAD * modulator * ( 1.0 - blurField ) * grainPage );
+      vec2 at = uv + vec2( streak * STRETCH * 0.12 * seam, PARALLAX * q * q + DISPLACE * ( 1.0 - shove ) );
+      page = smearIce( at, drag * 0.5, SPREAD * modulator * ( 1.0 - blurField ), jitter );
     }
 
-    outputColor = vec4( clamp( mix( world, page, cut ), 0.0, 1.0 ), 1.0 );
+    vec3 color = mix( world, page, cut );
+
+    /* Frost on the front: the seam lifts toward white, the way the reference
+       dissolves into cloud where one picture gives way to the other. */
+    color = mix( color, vec3( 1.0 ), HAZE * wake * ( 1.0 - 0.5 * cut ) );
+
+    outputColor = vec4( clamp( color, 0.0, 1.0 ), 1.0 );
   }
 `;
 

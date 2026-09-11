@@ -39,20 +39,20 @@ import { Vector3, CatmullRomCurve3 } from 'three';
  * country is by leaving.
  */
 /*
- * THE EXPANSE IS GONE, AND THE CUT TAKES ITS PLACE.
+ * THE CUT COMES STRAIGHT AFTER THE HORIZON.
  *
- * The retreat now ends in a cut to the work page rather than running on until
- * the igloo is a speck. The reference cuts while its igloo still fills a good
- * part of the frame, and the lift-out only reads when there is something of
- * size to lift — a speck leaving the top of the frame is not an event.
+ * The Expanse went first, then the Retreat: the opening frame and the first
+ * of the pull-back are the whole journey now, and the cut to the work page
+ * follows immediately. The reference does the same — a short move off its
+ * igloo, then the cut while the igloo still fills a good part of the frame —
+ * and the lift-out only reads when there is something of size to lift.
  *
  * The act boundaries are still in camera-journey units (see JOURNEY below), so
  * the work act begins exactly where the cut does.
  */
 export const ACTS = [
   { id: 'horizon', index: 1, start: 0.0, end: 0.34, label: 'Horizon' },
-  { id: 'retreat', index: 2, start: 0.34, end: 0.72, label: 'The Retreat' },
-  { id: 'work', index: 3, start: 0.72, end: 1.0, label: 'Selected Work' },
+  { id: 'work', index: 2, start: 0.34, end: 1.0, label: 'Selected Work' },
 ];
 
 export function actAt(progress) {
@@ -68,14 +68,16 @@ export function actProgress(progress, act) {
 /*
  * THE SCROLL, IN THREE STRETCHES, measured in screens.
  *
- *   world  the journey up to the end of the retreat. 2.2 screens is where the
- *          retreat ended on the old three-screen extent, so the pace of the
- *          first two acts is exactly what it was.
- *   cut    the wipe to the work page. 1.2 screens, about what the reference
- *          spends on its own.
+ *   world  the Horizon, and nothing after it. Half a screen — the pace the
+ *          Horizon already had — so the cut starts three or four wheel
+ *          notches in. The rig's damping keeps the pull-back a glide rather
+ *          than a jump.
+ *   cut    the wipe to the work page. 0.9 of a screen — but nobody scrolls
+ *          through it by hand: ScrollProvider plays it through the moment it
+ *          starts, so this is how far that play travels, not how far you do.
  *   page   whatever the work page measures (ScrollProvider adds it).
  */
-export const SEGMENTS = { world: 2.2, cut: 1.2 };
+export const SEGMENTS = { world: 0.5, cut: 0.9 };
 
 /*
  * Where on the camera curve the world stretch ends, and how much further the
@@ -83,7 +85,7 @@ export const SEGMENTS = { world: 2.2, cut: 1.2 };
  * reference; the curve's last waypoint is simply never reached, and the curve
  * itself is untouched.
  */
-export const JOURNEY = { atCut: 0.72, end: 0.8 };
+export const JOURNEY = { atCut: 0.34, end: 0.42 };
 
 /** How far each picture travels vertically across the cut, as a share of the frame. From the reference. */
 export const CUT_PARALLAX = 0.4;

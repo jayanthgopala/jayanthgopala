@@ -1,4 +1,4 @@
-import { DataTexture, NearestFilter, RepeatWrapping, RGBAFormat, UnsignedByteType } from 'three';
+import { DataTexture, LinearFilter, RepeatWrapping, RGBAFormat, UnsignedByteType } from 'three';
 import { makeFbm, makeNoise2D } from './noise.js';
 
 /**
@@ -10,19 +10,23 @@ import { makeFbm, makeNoise2D } from './noise.js';
  *
  *   r  WHERE THE CUT ARRIVES FIRST. Rectangles from a recursive split, biased
  *      wide, each holding one value — so the wipe crosses a block all at once
- *      and the front reads as masonry rather than as a soft line. Neighbouring
- *      blocks share a coarse noise term, so they cluster instead of flickering
- *      as salt and pepper.
- *   g  THE SEAM PUSH AND TEAR. Horizontal bands of long runs. Constant along a
- *      row, which is exactly what turns a sideways offset into the stretched
- *      scanline bands along the seam.
- *   b  THE FRONT'S RAGGEDNESS. Smooth low-frequency noise, made to tile
- *      seamlessly, because a jump in this channel is a jump in the diagonal
- *      itself and would draw a vertical line down the wipe at every repeat.
+ *      and the front reads as fragments rather than as a soft line. The shader
+ *      drags this channel along the smear, so the fragments trail.
+ *      Neighbouring blocks share a coarse noise term, so they cluster instead
+ *      of flickering as salt and pepper.
+ *   g  THE SEAM PUSH. Soft horizontal streaks: long along x, thin along y, and
+ *      smooth in both. This used to be hard-edged bands constant along whole
+ *      rows, and every one of them showed up on screen as a dead-straight
+ *      horizontal line wherever the push changed from one band to the next.
+ *   b  THE FRONT'S RAGGEDNESS. Smooth low-frequency noise.
  *
- * NEAREST FILTERING, so a block's edge stays a hard edge on screen. Linear
- * filtering would soften every rectangle into a smear and throw away the one
- * property this texture exists for.
+ * g and b are made to tile seamlessly, because a jump in either is a jump in
+ * the seam itself and would draw a vertical line down the wipe at every repeat.
+ *
+ * LINEAR FILTERING. It was nearest, to keep every block edge razor sharp, and
+ * razor sharp is exactly what read as a straight line. Linear keeps the blocks'
+ * shapes and softens their edges to a couple of pixels, which is what lets the
+ * shader's smear pull them into streaks rather than slide hard rectangles.
  */
 
 const SIZE = 256;
@@ -100,36 +104,12 @@ function blockField(rand, noise) {
   return field;
 }
 
-/** g: horizontal bands of long runs. */
-function bandField(rand) {
-  const field = new Float32Array(SIZE * SIZE);
-  let y = 0;
-  while (y < SIZE) {
-    const height = Math.min(SIZE - y, 1 + Math.floor(rand() * 6));
-    const base = rand();
-    let x = 0;
-    while (x < SIZE) {
-      const run = Math.min(SIZE - x, 16 + Math.floor(rand() * 112));
-      const value = base + (rand() - 0.5) * 0.35;
-      for (let j = y; j < y + height; j += 1) {
-        for (let i = x; i < x + run; i += 1) field[j * SIZE + i] = value;
-      }
-      x += run;
-    }
-    y += height;
-  }
-  normalise(field);
-  return field;
-}
-
 /**
- * b: smooth jitter, tiled seamlessly by blending the field with copies of
- * itself shifted by one tile. At every edge the blend is entirely the copy that
- * continues on the far side, so the repeat has no seam.
+ * A field that tiles: blended with copies of itself shifted by one tile, so at
+ * every edge the blend is entirely the copy that continues on the far side.
  */
-function slopeField(fbm) {
+function seamless(at) {
   const field = new Float32Array(SIZE * SIZE);
-  const at = (x, y) => fbm(x / 88, y / 88);
   for (let y = 0; y < SIZE; y += 1) {
     for (let x = 0; x < SIZE; x += 1) {
       const u = x / SIZE;
@@ -148,8 +128,11 @@ function slopeField(fbm) {
 export function createCutTexture(seed = 4051) {
   const rand = mulberry32(seed);
   const r = blockField(rand, makeNoise2D(seed + 1));
-  const g = bandField(rand);
-  const b = slopeField(makeFbm(makeNoise2D(seed + 2), { octaves: 3 }));
+  /* Stretched about fourteen to one: streaks, not blobs. */
+  const streaks = makeFbm(makeNoise2D(seed + 3), { octaves: 3 });
+  const g = seamless((x, y) => streaks(x / 70, y / 5));
+  const slope = makeFbm(makeNoise2D(seed + 2), { octaves: 3 });
+  const b = seamless((x, y) => slope(x / 88, y / 88));
 
   const data = new Uint8Array(SIZE * SIZE * 4);
   for (let i = 0; i < SIZE * SIZE; i += 1) {
@@ -162,8 +145,8 @@ export function createCutTexture(seed = 4051) {
   const texture = new DataTexture(data, SIZE, SIZE, RGBAFormat, UnsignedByteType);
   texture.wrapS = RepeatWrapping;
   texture.wrapT = RepeatWrapping;
-  texture.magFilter = NearestFilter;
-  texture.minFilter = NearestFilter;
+  texture.magFilter = LinearFilter;
+  texture.minFilter = LinearFilter;
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
   return texture;

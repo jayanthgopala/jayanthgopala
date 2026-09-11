@@ -79,7 +79,7 @@ export default function ScrollProvider({ children }) {
   const cut = useRef(0);
   /** Pixels scrolled into the work page after the cut has finished. */
   const page = useRef(0);
-  /** 0..1 through the whole document. The HUD's progress bar. */
+  /** 0..1 through the whole document. */
   const total = useRef(0);
   const lenis = useRef(null);
 
@@ -141,6 +141,25 @@ export default function ScrollProvider({ children }) {
     /* Reused every frame rather than allocated. */
     const state = { journey: 0, cut: 0, page: 0 };
 
+    /*
+     * THE CUT PLAYS ITSELF THROUGH ONCE IT STARTS.
+     *
+     * Scrubbed, the cut could be parked anywhere — half a world and half a
+     * page on screen, for as long as the wheel happened to stop there. So the
+     * moment the scroll enters it, Lenis is handed the rest of the way: down
+     * into the cut carries on to the page, fully arrived; up out of the page
+     * carries on back to the world. Still driven through the scroll position,
+     * so every frame of it is the same frame a slow scroll would have shown,
+     * and it still runs backwards on the way back.
+     *
+     * LOCKED while it plays, or the next wheel notch would fight it and the
+     * cut would stutter. 1.4 seconds is long enough to see the wipe and short
+     * enough that nobody reaches for the wheel again waiting for it.
+     */
+    const CUT_SECONDS = 1.4;
+    const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+    let playing = false;
+
     let frame = requestAnimationFrame(function raf(time) {
       instance.raf(time);
 
@@ -156,6 +175,29 @@ export default function ScrollProvider({ children }) {
       page.current = state.page;
       total.current =
         instance.limit > 0 ? Math.min(1, Math.max(0, instance.scroll / instance.limit)) : 0;
+
+      /* A hair of margin at both ends: the native scroll position is rounded,
+         and a cut sitting at 0.9999 would otherwise re-trigger forever. */
+      if (!playing && state.cut > 0.005 && state.cut < 0.995) {
+        const vh = vhRef.current;
+        const down = instance.direction >= 0;
+        const target = down
+          ? (SEGMENTS.world + SEGMENTS.cut) * vh + 2
+          : SEGMENTS.world * vh - 2;
+        playing = true;
+        instance.scrollTo(target, {
+          duration: reduce ? 0 : CUT_SECONDS,
+          immediate: reduce,
+          easing: easeInOut,
+          lock: true,
+          force: true,
+          onComplete: () => {
+            playing = false;
+          },
+        });
+        /* immediate scrolls do not call onComplete in every Lenis version. */
+        if (reduce) playing = false;
+      }
 
       /* Clamped, because a backgrounded tab resumes with an enormous dt and an
          un-clamped exponential would snap the value across in one frame. */

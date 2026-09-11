@@ -110,24 +110,6 @@ function SoundToggle() {
 
 function Hud({ profile = {} }) {
   const act = useActiveAct();
-  const { total } = useWorldScroll();
-  const barRef = useRef(null);
-
-  /* The progress bar is written directly to the DOM node rather than rendered,
-     for the same reason the camera is: it changes every frame. It reads the
-     whole document rather than the camera journey, so it keeps filling down
-     the work page and reaches the end with the scrollbar. */
-  useEffect(() => {
-    let frame = 0;
-    const tick = () => {
-      if (barRef.current) {
-        barRef.current.style.transform = `scaleX(${total.current.toFixed(4)})`;
-      }
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [total]);
 
   return (
     <div className="w-hud">
@@ -136,18 +118,9 @@ function Hud({ profile = {} }) {
         <p className="w-role">{profile.role || ''}</p>
       </header>
 
-      <div className="w-hud-act" key={act.id}>
-        <span className="w-act-num">{String(act.index).padStart(2, '0')}</span>
-        <span className="w-act-label">{act.label}</span>
-      </div>
-
       <footer className="w-hud-bottom">
         <SoundToggle />
-        <span className={`w-hint${act.id === 'work' ? ' is-away' : ''}`}>Scroll to travel</span>
-        <span className="w-progress" aria-hidden="true">
-          <i ref={barRef} />
-        </span>
-      </footer>
+        <span className={`w-hint${act.id === 'work' ? ' is-away' : ''}`}>Scroll to travel</span>      </footer>
     </div>
   );
 }
