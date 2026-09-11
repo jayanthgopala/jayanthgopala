@@ -4,6 +4,7 @@ import { createWind } from './lib/wind.js';
 import Stage from './Stage.jsx';
 import WorkPage from './WorkPage.jsx';
 import WorldLoader from './WorldLoader.jsx';
+import MinimalLink from './MinimalLink.jsx';
 import { loadBakedWorld } from './lib/baked.js';
 import { ACTS, actAt } from './chapters.js';
 import { copy } from '../lib/api.js';
@@ -120,12 +121,10 @@ function Hud({ profile = {}, content = {} }) {
           <p className="w-mark">{profile.name || 'Portfolio'}</p>
           <p className="w-role">{profile.role || ''}</p>
         </div>
-        {/* Back to the minimal site. A full navigation, for the same reason
-            the way in is one: the route is read once at load. */}
-        <a className="w-glass" href="/" aria-label="Back to the minimal site">
-          <span aria-hidden="true">←</span>
-          {copy(content, 'world.minimal', 'Minimal')}
-        </a>
+        {/* Back to the minimal site — a full navigation, for the same reason
+            the way in is one: the route is read once at load. The glass
+            ripples under the pointer; see MinimalLink. */}
+        <MinimalLink label={copy(content, 'world.minimal', 'Minimal')} />
       </header>
 
       <footer className="w-hud-bottom">

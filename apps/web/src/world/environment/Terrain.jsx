@@ -1897,7 +1897,7 @@ const slabReveal = (shader, uReveal) => {
   );
 };
 
-export default function Terrain({ begin = false }) {
+export default function Terrain() {
   const geometry = useMemo(() => buildTerrainGeometry(512, -300), []);
 
   /*
@@ -1978,7 +1978,13 @@ export default function Terrain({ begin = false }) {
          finishes arriving with the camera — including when a scroll hurries
          the descent. INTRO.tail is a shade longer than the fall, so the last
          of the land arrives just after the shot settles rather than before. */
-      uReveal.current.value = begin ? Math.min(1, intro.current / INTRO.tail) : 0;
+      /* THE CLOCK ALONE, not the clock AND `begin`. The clock cannot start
+         until `begin` has flipped, so it already carries that signal — and
+         reading `begin` as well gave the land a second way to be held at zero.
+         A `begin` that read false under a camera which had already landed
+         left the reveal at nothing: every hill discarded, the igloo standing
+         on bare sky. The clock only ever runs forward. */
+      uReveal.current.value = Math.min(1, intro.current / INTRO.tail);
     }
   });
 

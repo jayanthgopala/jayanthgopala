@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Vector3 } from 'three';
 import { CAMERA_CURVE, INTRO, TARGET_CURVE } from '../chapters.js';
@@ -107,6 +107,39 @@ export default function CameraRig({ begin = true }) {
   const smoothedTarget = useRef(new Vector3());
   const started = useRef(false);
 
+  /*
+   * WHAT KIND OF POINTER, AND WHETHER A FINGER IS STILL DOWN.
+   *
+   * state.pointer keeps the last position it was given, and on a touchscreen
+   * the last position is wherever the last tap was — so the lens leaned toward
+   * that spot and stayed there for the rest of the visit. A mouse never has
+   * this problem, because a mouse is always somewhere. So a lifted finger
+   * counts as no pointer at all, and the lens eases back to centre.
+   */
+  const touch = useRef({ type: 'mouse', down: false });
+  useEffect(() => {
+    const onDown = (e) => {
+      touch.current.type = e.pointerType;
+      if (e.pointerType === 'touch') touch.current.down = true;
+    };
+    const onUp = (e) => {
+      if (e.pointerType === 'touch') touch.current.down = false;
+    };
+    const onMove = (e) => {
+      if (e.pointerType === 'mouse') touch.current.type = 'mouse';
+    };
+    window.addEventListener('pointerdown', onDown, { passive: true });
+    window.addEventListener('pointerup', onUp, { passive: true });
+    window.addEventListener('pointercancel', onUp, { passive: true });
+    window.addEventListener('pointermove', onMove, { passive: true });
+    return () => {
+      window.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      window.removeEventListener('pointermove', onMove);
+    };
+  }, []);
+
   useFrame((state, delta) => {
     // A tab restored from the background delivers one enormous delta, which
     // would snap the camera to its target and discard all the inertia.
@@ -192,8 +225,10 @@ export default function CameraRig({ begin = true }) {
        arrive, so the lean felt heavier rather than larger. The damping is still
        what gives the move its weight — this only stops the lag growing with the
        amplitude. */
-    pointer.current.x = damp(pointer.current.x, state.pointer.x, 4.6, dt);
-    pointer.current.y = damp(pointer.current.y, state.pointer.y, 4.6, dt);
+    /* A lifted finger is no pointer — see `touch` above. */
+    const lifted = touch.current.type === 'touch' && !touch.current.down;
+    pointer.current.x = damp(pointer.current.x, lifted ? 0 : state.pointer.x, 4.6, dt);
+    pointer.current.y = damp(pointer.current.y, lifted ? 0 : state.pointer.y, 4.6, dt);
     /* Faded in with the descent. At full strength during the fall the parallax
        fights a move fifty times its size and reads as the camera wobbling on
        the way down; by the time it matters, the shot has landed. */

@@ -151,11 +151,12 @@ function buildLattice(at) {
 }
 
 /**
- * @param {boolean} begin   flips true when the loader lifts — same signal the
- *                          camera descent runs on, so the two are in step.
  * @param {number}  seconds how long the descent takes; the web is gone by then.
+ *                          Timed on the intro clock CameraRig runs, which only
+ *                          starts once the loader lifts — so it is in step with
+ *                          the descent without reading `begin` itself.
  */
-export default function Lattice({ at = [-30, 252], begin = false, seconds = 3.6 }) {
+export default function Lattice({ at = [-30, 252], seconds = 3.6 }) {
   const lines = useRef(null);
   const done = useRef(false);
   const { intro } = useWorldScroll();
@@ -166,7 +167,7 @@ export default function Lattice({ at = [-30, 252], begin = false, seconds = 3.6 
     const mesh = lines.current;
     if (!mesh || done.current) return;
 
-    if (!begin) {
+    if (intro.current <= 0) {
       /* Held at full strength while the loader is still up, so the web is
          already there in the first frame the visitor sees rather than fading
          in after it. */

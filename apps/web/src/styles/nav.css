@@ -60,7 +60,131 @@
 
 .nav-cta { height: 38px; padding-inline: var(--s-4); }
 
+/* --- The way into the immersive version ------------------------------------
+   A nav link like its neighbours, but the one focal point in the bar: the only
+   saturated thing in it, which is exactly the budget tokens.css allows. */
+
+.nav-immersive {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* Keeps useRipple's burst inside the link. */
+  overflow: hidden;
+  /* The ripple paints in currentColor. */
+  color: var(--iris);
+  font-weight: 560;
+}
+
+.nav-immersive:hover { background: var(--iris-soft); }
+
+/*
+ * The accent gradient as the text, with a band of light that crosses it every
+ * five seconds. Two layers, both clipped to the glyphs: the sheen on top
+ * travels, the gradient under it stays put. The band starts and ends outside
+ * the word, so the loop restarting is invisible.
+ */
+.nav-immersive-label {
+  display: inline-block;
+  background:
+    linear-gradient(110deg, transparent 40%, rgba(255, 255, 255, 0.95) 50%, transparent 60%),
+    var(--gradient-accent);
+  background-size: 300% 100%, 100% 100%;
+  background-position: 100% 0, 0 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: nav-immersive-sheen 5s var(--ease-soft) infinite;
+}
+
+@keyframes nav-immersive-sheen {
+  0%, 55% { background-position: 100% 0, 0 0; }
+  100%    { background-position: 0% 0, 0 0; }
+}
+
+/* The cursor: taps, and a ring spreads from its tip. */
+.nav-immersive-tap {
+  position: relative;
+  display: inline-flex;
+  color: var(--mint);
+  transform-origin: 20% 10%;
+  animation: nav-immersive-tap 3.2s var(--ease) infinite;
+}
+
+.nav-immersive-tap svg {
+  fill: currentColor;
+  stroke: var(--bg);
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+
+.nav-immersive-tap::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border: 1px solid var(--mint);
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  animation: nav-immersive-ring 3.2s var(--ease-soft) infinite;
+}
+
+@keyframes nav-immersive-tap {
+  0%, 70%, 100% { transform: translate(0, 0) scale(1); }
+  76%           { transform: translate(-1px, -1px) scale(0.8); }
+  84%           { transform: translate(0, 0) scale(1); }
+}
+
+@keyframes nav-immersive-ring {
+  0%, 74% { transform: scale(0.4); opacity: 0; }
+  77%     { opacity: 0.9; }
+  100%    { transform: scale(2.8); opacity: 0; }
+}
+
+/* The click itself: the word flares, the cursor presses, the ring bursts —
+   all inside the 420ms Nav waits before it navigates. */
+.nav-immersive.is-launching .nav-immersive-label {
+  animation: nav-immersive-flash 420ms var(--ease) forwards;
+}
+
+.nav-immersive.is-launching .nav-immersive-tap {
+  animation: nav-immersive-press 420ms var(--ease) forwards;
+}
+
+.nav-immersive.is-launching .nav-immersive-tap::after {
+  animation: nav-immersive-burst 420ms var(--ease-soft) forwards;
+}
+
+@keyframes nav-immersive-flash {
+  0%   { filter: brightness(1);   transform: scale(1); }
+  40%  { filter: brightness(1.9); transform: scale(1.06); }
+  100% { filter: brightness(1.3); transform: scale(1); }
+}
+
+@keyframes nav-immersive-press {
+  30%  { transform: scale(0.7); }
+  100% { transform: scale(1); }
+}
+
+@keyframes nav-immersive-burst {
+  from { transform: scale(0.4); opacity: 1; }
+  to   { transform: scale(4.5); opacity: 0; }
+}
+
+/* The tokens shorten transitions under reduced motion, but these are keyframe
+   loops with their own durations, so they are switched off by name. */
+@media (prefers-reduced-motion: reduce) {
+  .nav-immersive-label,
+  .nav-immersive-tap,
+  .nav-immersive-tap::after { animation: none; }
+}
+
 @media (max-width: 720px) {
-  .nav-links { display: none; }
+  /* The section anchors go on narrow screens, but the way into the immersive
+     version stays — it is the one link here with no other route to it. */
+  .nav-links .nav-link:not(.nav-immersive) { display: none; }
   .nav-name { display: none; }
 }

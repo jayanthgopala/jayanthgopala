@@ -1,4 +1,5 @@
-import { useScrolled } from '../lib/motion.jsx';
+import { useEffect, useRef } from 'react';
+import { useRipple, useScrolled } from '../lib/motion.jsx';
 import { copy, externalUrl } from '../lib/api.js';
 import { SocialIcon } from './Icons.jsx';
 import '../styles/nav.css';
@@ -12,6 +13,54 @@ export default function Nav({
 }) {
   const scrolled = useScrolled(24);
   const github = socials.find((s) => s.icon === 'github');
+
+  const ripple = useRipple();
+  const immersiveRef = useRef(null);
+  const launching = useRef(false);
+
+  /*
+   * The click into the immersive version PLAYS before it leaves.
+   *
+   * A full navigation tears the page down on the next frame, so a click
+   * animation on a plain link is never seen. The ripple and the flash get
+   * 420ms, then the browser goes. Modified clicks (new tab, new window) are left
+   * entirely to the browser — this page is not going anywhere in those cases,
+   * so there is nothing to wait for. Reduced motion skips the wait.
+   */
+  const launchImmersive = (event) => {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+    ripple(event);
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    event.preventDefault();
+    if (launching.current) return;
+    launching.current = true;
+    const link = event.currentTarget;
+    link.classList.add('is-launching');
+    setTimeout(() => window.location.assign(link.href), 420);
+  };
+
+  /* Coming Back restores this page from the back-forward cache exactly as it
+     was left — mid-launch. Reset, or the link would stay lit and ignore the
+     next click. */
+  useEffect(() => {
+    const onShow = (event) => {
+      if (!event.persisted) return;
+      launching.current = false;
+      immersiveRef.current?.classList.remove('is-launching');
+    };
+    window.addEventListener('pageshow', onShow);
+    return () => window.removeEventListener('pageshow', onShow);
+  }, []);
 
   // Targets are structural (they must match section ids); only the labels are
   // editable, which is the part that ever needs changing.
@@ -43,14 +92,26 @@ export default function Nav({
               {link.label}
             </a>
           ))}
+          {/* The way into the immersive igloo version, styled as one more nav
+              link. A plain href, not a client route: the app reads the path
+              once at load, so a full navigation is what switches it over. */}
+          <a
+            ref={immersiveRef}
+            href="/world"
+            className="nav-link nav-immersive"
+            onClick={launchImmersive}
+          >
+            <span className="nav-immersive-label">
+              {copy(content, 'nav.immersive', 'Immersive')}
+            </span>
+            {/* A cursor that taps now and then — the invitation to click. */}
+            <span className="nav-immersive-tap" aria-hidden="true">
+              <svg viewBox="0 0 16 16" width="13" height="13">
+                <path d="M3 1.5v11.2l2.9-2.7 2.1 4.4 1.8-.9-2.1-4.3 3.9-.3z" />
+              </svg>
+            </span>
+          </a>
         </nav>
-
-        {/* The way into the immersive igloo version. A plain link, not a client
-            route: the app reads the path once at load, so a full navigation is
-            what switches it over. */}
-        <a className="btn btn-secondary nav-cta" href="/world">
-          {copy(content, 'nav.immersive', 'Immersive')}
-        </a>
 
         {/* Résumé only renders when a URL is actually set — an empty button
             that goes nowhere is worse than no button. */}

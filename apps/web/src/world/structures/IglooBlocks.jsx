@@ -979,6 +979,12 @@ export default function IglooBlocks({
            */
           click: false,
 
+          /* But a finger is not a click. On a touchscreen there is no hover to
+             answer, so a finger held on the dome stands in for one: the
+             blocks under it lift, follow a sideways drag, and settle when it
+             lifts. A vertical swipe still scrolls the page. */
+          touchHover: true,
+
           /* The canvas that already exists. IglooInteraction adds its passive
              pointer listeners to it and raycasts once per frame — it does not
              create anything of its own. */

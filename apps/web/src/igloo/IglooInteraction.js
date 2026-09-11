@@ -73,10 +73,17 @@ export class IglooInteraction {
    *   Defaults to 'pointer' when clicking is on and 'crosshair' when it is
    *   off, because a pointer cursor over something that cannot be pressed is a
    *   promise the page does not keep.
+   * @param {boolean} [opts.touchHover=false]
+   *   Whether a finger held on the screen stands in for the hover a mouse
+   *   gives. Off by default, which is the standalone page's behaviour: there a
+   *   tap knocks a block and that is all a finger does. The world turns it on,
+   *   because with clicking off a touchscreen would otherwise get no answer
+   *   from the igloo at all.
    */
-  constructor({ dom, camera, mesh, blocks, physics, click = true, hoverCursor }) {
+  constructor({ dom, camera, mesh, blocks, physics, click = true, hoverCursor, touchHover = false }) {
     this.dom = dom;
     this.click = click;
+    this.touchHover = touchHover;
     this.hoverCursor = hoverCursor || (click ? 'pointer' : 'crosshair');
     this.camera = camera;
     this.mesh = mesh;
@@ -109,14 +116,20 @@ export class IglooInteraction {
     this.inside = false;
     this.hasPointer = false;
     this.touch = false;
+    /** A finger is currently down — only tracked with touchHover. */
+    this.pressed = false;
 
     this._hits = [];
     this._onMove = this._onMove.bind(this);
     this._onDown = this._onDown.bind(this);
     this._onLeave = this._onLeave.bind(this);
+    this._onUp = this._onUp.bind(this);
 
     dom.addEventListener('pointermove', this._onMove, { passive: true });
-    if (click) dom.addEventListener('pointerdown', this._onDown, { passive: true });
+    /* Passive either way, so a press is never swallowed or prevented — with
+       clicking off, a mouse press still passes straight through. */
+    if (click || touchHover) dom.addEventListener('pointerdown', this._onDown, { passive: true });
+    if (touchHover) dom.addEventListener('pointerup', this._onUp, { passive: true });
     dom.addEventListener('pointerleave', this._onLeave, { passive: true });
     dom.addEventListener('pointercancel', this._onLeave, { passive: true });
   }
@@ -125,6 +138,7 @@ export class IglooInteraction {
     const { dom } = this;
     dom.removeEventListener('pointermove', this._onMove);
     dom.removeEventListener('pointerdown', this._onDown);
+    dom.removeEventListener('pointerup', this._onUp);
     dom.removeEventListener('pointerleave', this._onLeave);
     dom.removeEventListener('pointercancel', this._onLeave);
     dom.style.cursor = '';
@@ -146,13 +160,28 @@ export class IglooInteraction {
 
   _onLeave() {
     this.inside = false;
+    this.pressed = false;
     /* Recentre the parallax when the pointer leaves, or the camera stays
        leaning at whatever angle it was abandoned at. */
     this.parallaxTarget.set(0, 0);
     this.dom.style.cursor = '';
   }
 
+  /* A finger lifting is the touch version of the cursor leaving. A vertical
+     swipe arrives as pointercancel instead — the browser takes it for scrolling
+     — and that already routes to _onLeave. */
+  _onUp(e) {
+    if (e.pointerType === 'touch') this._onLeave();
+  }
+
   _onDown(e) {
+    /* With touchHover, a finger put down is the hover starting: from here
+       until it lifts, update() casts under it exactly as it would under a
+       cursor, and a sideways drag carries the disturbance along with it. */
+    if (this.touchHover && e.pointerType === 'touch') {
+      this._track(e);
+      this.pressed = true;
+    }
     if (!this.click) return;
     this._track(e);
     /* Cast immediately rather than waiting for the next frame: on a tap the
@@ -257,8 +286,12 @@ export class IglooInteraction {
      * block lit up permanently after the finger lifts. Same for a pointer that
      * has left the canvas — in both cases we stop casting but keep easing, so
      * the shell closes gradually instead of dropping.
+     *
+     * With touchHover a finger that is still DOWN is the exception: it is a
+     * hover for as long as it stays there, and lifting it hands the shell to
+     * the same slow release a departing cursor gets.
      */
-    const looking = this.hasPointer && this.inside && !this.touch;
+    const looking = this.hasPointer && this.inside && (!this.touch || this.pressed);
     const hit = looking ? this._cast() : null;
     const id = hit ? hit.batchId : -1;
 

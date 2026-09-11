@@ -154,6 +154,13 @@ function Warmup({ armed = false, onWarm }) {
 
   useEffect(() => {
     if (!armed) return undefined;
+    /* Already warmed — asked again only because the parent lost track of it.
+       Say so at once rather than leave the loading gate waiting on a warm-up
+       that will never run a second time. */
+    if (phase.current.step === 'done') {
+      onWarm?.();
+      return undefined;
+    }
     let cancelled = false;
     const p = phase.current;
     p.armedAt = performance.now();
@@ -428,9 +435,11 @@ export default function Stage({ onIglooReady, begin = false, warm = false, onWar
               why the cloud in the sky texture is switched off and this draws it
               instead. */}
           <Clouds />
-          {/* begin drives the opening slab: the ground starts as a block and
-              uncovers the land and hills as the camera comes down. */}
-          <Terrain begin={begin} />
+          {/* The opening slab: the ground starts as a block and uncovers the
+              land and hills as the camera comes down, on the intro clock
+              CameraRig runs — see the note in Terrain for why it reads that
+              clock and not `begin`. */}
+          <Terrain />
           {/* Loose stone on the ground. It goes with the terrain rather than
               with the igloo because it is landscape, not set dressing — the
               apron happens to bank against the dome the way drift does. */}
@@ -483,7 +492,7 @@ export default function Stage({ onIglooReady, begin = false, warm = false, onWar
             clears in step with the descent it belongs to. Outside Suspense
             with the camera, because it is part of the move rather than part of
             the scenery. */}
-        <Lattice at={[-30, 252]} begin={begin} />
+        <Lattice at={[-30, 252]} />
 
         {/*
           Drops resolution when the framerate falls and restores it when there is

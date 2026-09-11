@@ -323,27 +323,61 @@
  * the same recipe still separates it, because the shadow and the rim do the
  * work the blur cannot do against a flat ground.
  */
+/* The anchor is only layout and hit area. The pane itself is drawn by
+   MinimalLink: a frost layer clipped to the live outline, under an SVG of that
+   outline, both reaching past the anchor so the surface has room to swell. */
 .w-glass {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
   padding: 10px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  border-radius: 999px;
   color: var(--w-ink);
   text-decoration: none;
   white-space: nowrap;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.14));
-  box-shadow: 0 8px 26px rgba(40, 60, 90, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.75);
-  -webkit-backdrop-filter: blur(14px) saturate(1.4);
-  backdrop-filter: blur(14px) saturate(1.4);
-  transition: background 260ms ease, transform 260ms var(--w-ease), box-shadow 260ms ease;
+  -webkit-tap-highlight-color: transparent;
+  /* A finger dragged across the glass should make it flow, not scroll the
+     page away underneath it. A tap still clicks. */
+  touch-action: none;
 }
 
-.w-glass:hover {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.24));
-  box-shadow: 0 10px 30px rgba(40, 60, 90, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  transform: translateY(-1px);
+.w-glass-frost {
+  position: absolute;
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  pointer-events: none;
+}
+
+.w-glass-shape {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+  filter: drop-shadow(0 8px 16px rgba(40, 60, 90, 0.16));
+}
+
+.w-glass-pane {
+  fill: url(#w-glass-fill);
+  stroke: url(#w-glass-rim);
+  stroke-width: 1;
+}
+
+/* A brightening wash on hover, as its own path so it can fade. */
+.w-glass-sheen {
+  fill: #fff;
+  opacity: 0;
+  transition: opacity 260ms ease;
+}
+
+.w-glass:hover .w-glass-sheen { opacity: 0.16; }
+
+.w-glass-label {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  gap: 8px;
+}
+
+@media (max-width: 480px) {
+  .w-glass { padding: 8px 13px; }
 }
 
 .w-glass:focus-visible {
@@ -355,6 +389,7 @@
   .w-glass { transition: none; }
   .w-glass:hover { transform: none; }
 }
+
 
 .w-mark {
   margin: 0;
