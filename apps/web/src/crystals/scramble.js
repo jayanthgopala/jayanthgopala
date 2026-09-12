@@ -5,18 +5,24 @@ const GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/<>[]_-+*#=';
 const reduced = () =>
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export function scramble(el, text = '', { duration = 650, delay = 0 } = {}) {
+export function scramble(
+  el,
+  text = '',
+  { duration = 650, delay = 0, onTick, onDone } = {}
+) {
   if (!el) return () => {};
   el._scrambleStop?.();
 
   if (reduced()) {
     el.textContent = text;
+    onDone?.();
     return () => {};
   }
 
   const start = performance.now() + delay;
   const len = Math.max(1, text.length);
   let frame = 0;
+  let settled = false;
 
   const tick = (now) => {
     const t = (now - start) / duration;
@@ -28,8 +34,16 @@ export function scramble(el, text = '', { duration = 650, delay = 0 } = {}) {
       else out += GLYPHS[(Math.random() * GLYPHS.length) | 0];
     }
     el.textContent = out;
-    if (t < 1) frame = requestAnimationFrame(tick);
-    else el._scrambleStop = null;
+    if (t < 1) {
+      if (now >= start) onTick?.(t);
+      frame = requestAnimationFrame(tick);
+    } else {
+      if (!settled) {
+        settled = true;
+        onDone?.();
+      }
+      el._scrambleStop = null;
+    }
   };
 
   tick(performance.now());

@@ -4,6 +4,8 @@ import { scramble } from '../crystals/scramble.js';
 import { copy, externalUrl, mediaUrl } from '../lib/api.js';
 import WaterStage from './water/WaterStage.jsx';
 import { shapeFor } from './water/shapes.js';
+import { sound } from './lib/sound.js';
+import GlassCloseButton from './GlassCloseButton.jsx';
 
 // The project index, shown as water in the shape of each project's initial.
 // Scrolling moves between projects; clicking opens the one on screen.
@@ -123,7 +125,15 @@ function useReducedMotion() {
 }
 
 // Text element that triggers character decode scramble animation when revealed
-function Decoded({ as: Tag = 'span', text, className, arrival, delay = 0 }) {
+function Decoded({
+  as: Tag = 'span',
+  text,
+  className,
+  arrival,
+  delay = 0,
+  duration = 650,
+  withSound = false,
+}) {
   const ref = useRef(null);
 
   // One effect, and a layout one.
@@ -139,8 +149,13 @@ function Decoded({ as: Tag = 'span', text, className, arrival, delay = 0 }) {
       el.textContent = text;
       return undefined;
     }
-    return scramble(el, text, { delay });
-  }, [arrival, text, delay]);
+    return scramble(el, text, {
+      delay,
+      duration,
+      onTick: withSound ? () => sound.decodeTick?.() : undefined,
+      onDone: withSound ? () => sound.decodeDone?.() : undefined,
+    });
+  }, [arrival, text, delay, duration, withSound]);
 
   return <Tag ref={ref} className={className} aria-label={text} />;
 }
@@ -158,7 +173,7 @@ const stamp = (value) => {
  * the style is borrowed, the readings are not, which keeps it from reading as
  * decoration pretending to be information.
  */
-function Readout({ project, number, total, hint, boxRef }) {
+function Readout({ project, number, total, hint, boxRef, onOpen }) {
   const date = stamp(project.updatedAt || project.createdAt);
   const stack = project.tech?.length || 0;
 
@@ -197,7 +212,11 @@ function Readout({ project, number, total, hint, boxRef }) {
         <span>IDX</span> {pad(number)} / {pad(total)}
       </p>
 
-      <p className="w-readout-cta">
+      <p
+        className="w-readout-cta"
+        onClick={onOpen}
+        style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+      >
         {date && <span className="w-readout-date">D {date}</span>}
         <span className="w-readout-go">{hint}</span>
       </p>
@@ -227,15 +246,193 @@ function About({ profile, content, boxRef, shown = true }) {
   );
 }
 
-// Everything a project has to say, revealed only on request.
-function Detail({ project, number, onClose }) {
-  // Mounted fresh each time a project is opened, so the decode runs once from
-  // the first paint rather than being triggered after one.
-  const arrival = 1;
-  const closeRef = useRef(null);
+// Ambient water waves and interactive liquid ripples around explore text
+function DetailWaves() {
+  const canvasRef = useRef(null);
+  const ripplesRef = useRef([]);
+  const lastMoveRef = useRef(0);
 
   useEffect(() => {
-    closeRef.current?.focus();
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return undefined;
+
+    const reduced =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    let animFrame = 0;
+    let width = 0;
+    let height = 0;
+    let dpr = 1;
+
+    const resize = () => {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+    };
+
+    resize();
+    window.addEventListener('resize', resize);
+
+    const onPointerMove = (e) => {
+      const now = performance.now();
+      if (now - lastMoveRef.current < 70) return;
+      lastMoveRef.current = now;
+
+      if (ripplesRef.current.length < 18) {
+        ripplesRef.current.push({
+          x: e.clientX,
+          y: e.clientY,
+          r: 2,
+          maxR: 90 + Math.random() * 40,
+          alpha: 0.38,
+          speed: 1.8 + Math.random() * 0.8,
+        });
+      }
+    };
+
+    const onPointerDown = (e) => {
+      ripplesRef.current.push(
+        { x: e.clientX, y: e.clientY, r: 2, maxR: 140, alpha: 0.6, speed: 2.4 },
+        { x: e.clientX, y: e.clientY, r: 12, maxR: 160, alpha: 0.4, speed: 2.1 }
+      );
+      sound.drop?.(0.5);
+    };
+
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    window.addEventListener('pointerdown', onPointerDown, { passive: true });
+
+    const start = performance.now();
+
+    const render = (time) => {
+      const elapsed = (time - start) / 1000;
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, width, height);
+
+      // Soft undulating water waves across the background
+      const waveCount = 3;
+      for (let w = 0; w < waveCount; w += 1) {
+        const speed = 0.5 + w * 0.3;
+        const amplitude = 12 + w * 6;
+        const wavelength = 240 + w * 80;
+        const yOffset = height * (0.2 + w * 0.3);
+
+        ctx.beginPath();
+        ctx.moveTo(0, height);
+
+        for (let x = 0; x <= width; x += 16) {
+          const k = (x / wavelength) * Math.PI * 2;
+          const phase = elapsed * speed + w * 1.8;
+          const y = yOffset + Math.sin(k + phase) * amplitude + Math.cos(k * 0.5 - phase * 0.7) * (amplitude * 0.5);
+          if (x === 0) ctx.lineTo(0, y);
+          else ctx.lineTo(x, y);
+        }
+
+        ctx.lineTo(width, height);
+        ctx.closePath();
+
+        const grad = ctx.createLinearGradient(0, yOffset - amplitude, 0, yOffset + amplitude * 3);
+        grad.addColorStop(0, `rgba(255, 255, 255, ${0.12 - w * 0.02})`);
+        grad.addColorStop(0.5, `rgba(185, 212, 238, ${0.09 - w * 0.02})`);
+        grad.addColorStop(1, 'rgba(185, 212, 238, 0)');
+
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // Wave crest highlight
+        ctx.beginPath();
+        for (let x = 0; x <= width; x += 16) {
+          const k = (x / wavelength) * Math.PI * 2;
+          const phase = elapsed * speed + w * 1.8;
+          const y = yOffset + Math.sin(k + phase) * amplitude + Math.cos(k * 0.5 - phase * 0.7) * (amplitude * 0.5);
+          if (x === 0) ctx.moveTo(0, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = `rgba(255, 255, 255, ${0.24 - w * 0.04})`;
+        ctx.lineWidth = 1.25;
+        ctx.stroke();
+      }
+
+      // Interactive expanding liquid ripples
+      const ripples = ripplesRef.current;
+      for (let i = ripples.length - 1; i >= 0; i -= 1) {
+        const rip = ripples[i];
+        rip.r += rip.speed;
+        rip.alpha *= 0.965;
+
+        if (rip.alpha < 0.01 || rip.r >= rip.maxR) {
+          ripples.splice(i, 1);
+          continue;
+        }
+
+        ctx.beginPath();
+        ctx.arc(rip.x, rip.y, rip.r, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${rip.alpha.toFixed(3)})`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        if (rip.r > 6) {
+          ctx.beginPath();
+          ctx.arc(rip.x, rip.y, rip.r - 5, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(118, 142, 170, ${(rip.alpha * 0.65).toFixed(3)})`;
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+        }
+      }
+
+      ctx.restore();
+
+      if (!reduced) {
+        animFrame = requestAnimationFrame(render);
+      }
+    };
+
+    if (reduced) {
+      render(performance.now());
+    } else {
+      animFrame = requestAnimationFrame(render);
+    }
+
+    return () => {
+      window.removeEventListener('resize', resize);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerdown', onPointerDown);
+      cancelAnimationFrame(animFrame);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="w-detail-waves"
+      aria-hidden="true"
+    />
+  );
+}
+
+// Everything a project has to say, revealed only on request.
+function Detail({ project, number, onClose }) {
+  const arrival = 1;
+  const closeRef = useRef(null);
+  const detailRef = useRef(null);
+
+  // Always reset scroll position to top when modal opens
+  useEffect(() => {
+    if (detailRef.current) {
+      detailRef.current.scrollTop = 0;
+    }
+  }, [project]);
+
+  useEffect(() => {
+    closeRef.current?.focus({ preventScroll: true });
   }, [project]);
 
   useEffect(() => {
@@ -247,22 +444,26 @@ function Detail({ project, number, onClose }) {
   }, [onClose]);
 
   const tech = project.tech || [];
-  const hasDescription = project.description && project.description !== project.summary;
   const hasLinks = project.liveUrl || project.repoUrl;
+  const descriptionText = project.description || project.summary || '';
+  const hasSeparateSummary =
+    project.summary &&
+    project.description &&
+    project.summary.trim() !== project.description.trim();
 
   return (
-    <div className="w-detail" role="dialog" aria-modal="true" aria-label={project.title}>
-      <div className="w-detail-panel">
-        <button
-          ref={closeRef}
-          type="button"
-          className="w-detail-close"
-          onClick={onClose}
-          aria-label="Close project"
-        >
-          [ Close ]
-        </button>
+    <div
+      ref={detailRef}
+      className="w-detail"
+      role="dialog"
+      aria-modal="true"
+      aria-label={project.title}
+    >
+      <DetailWaves />
 
+      <GlassCloseButton ref={closeRef} onClick={onClose} label="Close" />
+
+      <div className="w-detail-panel">
         <Decoded as="p" className="w-work-code" text={`PROJECT_${pad(number)}`} arrival={arrival} />
         <Decoded
           as="h2"
@@ -272,15 +473,41 @@ function Detail({ project, number, onClose }) {
           delay={120}
         />
 
-        {project.summary && <p className="w-work-lead">{project.summary}</p>}
-        {hasDescription && <p className="w-work-body">{project.description}</p>}
+        <div className="w-work-wave" aria-hidden="true">
+          <svg viewBox="0 0 160 10" preserveAspectRatio="none">
+            <path d="M 0 5 Q 20 0, 40 5 T 80 5 T 120 5 T 160 5" />
+          </svg>
+        </div>
+
+        {hasSeparateSummary && (
+          <Decoded
+            as="p"
+            className="w-work-lead"
+            text={project.summary}
+            arrival={arrival}
+            delay={180}
+            duration={700}
+            withSound
+          />
+        )}
+
+        <p className="w-work-rule">////// {hasSeparateSummary ? 'Description' : 'Summary'}</p>
+        <Decoded
+          as="p"
+          className="w-work-body"
+          text={descriptionText}
+          arrival={arrival}
+          delay={260}
+          duration={1200}
+          withSound
+        />
 
         {tech.length > 0 && (
           <>
             <p className="w-work-rule">/// Stack</p>
             <ul className="w-work-tech">
               {tech.map((t) => (
-                <li key={t}>{t}</li>
+                <li key={t}>[{t}]</li>
               ))}
             </ul>
           </>
@@ -304,12 +531,12 @@ function Detail({ project, number, onClose }) {
             <p className="w-work-links">
               {project.liveUrl && (
                 <a href={externalUrl(project.liveUrl)} target="_blank" rel="noreferrer noopener">
-                  [ Live ]
+                  [ Live ] ↗
                 </a>
               )}
               {project.repoUrl && (
                 <a href={externalUrl(project.repoUrl)} target="_blank" rel="noreferrer noopener">
-                  [ Source ]
+                  [ Source ] ↗
                 </a>
               )}
             </p>
@@ -491,7 +718,7 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
   return (
     <section
       ref={layerRef}
-      className={`w-work${live ? ' is-live' : ''}`}
+      className={`w-work${live ? ' is-live' : ''}${open ? ' has-detail' : ''}`}
       inert={!live}
       aria-label="Selected work"
     >
@@ -528,6 +755,7 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
               number={arrived + 1}
               total={list.length}
               hint={copy(content, 'world.jarGo', 'Click to explore')}
+              onOpen={onOpen}
             />
           )}
           <p className="w-water-hint" aria-hidden="true">

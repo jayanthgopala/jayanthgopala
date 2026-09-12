@@ -379,6 +379,56 @@ function bloop(power = 1) {
   osc.stop(now + 0.4);
 }
 
+// Delicate electronic data chatter tick for character scramble decode
+let lastDecodeTick = 0;
+function decodeTick(freq = 2400) {
+  if (!ctx || !on) return;
+  const now = ctx.currentTime;
+  if (now - lastDecodeTick < 0.036) return;
+  lastDecodeTick = now;
+
+  const f = freq + (Math.random() * 600 - 300);
+
+  const osc = ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(f, now);
+  osc.frequency.exponentialRampToValueAtTime(f * 0.5, now + 0.015);
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = f;
+  filter.Q.value = 2.8;
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.linearRampToValueAtTime(0.024, now + 0.002);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.016);
+
+  osc.connect(filter).connect(gain).connect(master);
+  osc.start(now);
+  osc.stop(now + 0.02);
+}
+
+// Gentle resolution chime when text decoding completes
+function decodeDone() {
+  if (!ctx || !on) return;
+  const now = ctx.currentTime;
+
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(1480, now);
+  osc.frequency.exponentialRampToValueAtTime(1980, now + 0.06);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.linearRampToValueAtTime(0.028, now + 0.003);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
+
+  osc.connect(gain).connect(master);
+  osc.start(now);
+  osc.stop(now + 0.12);
+}
+
 function swell() {
   const now = ctx.currentTime;
   const osc = ctx.createOscillator();
@@ -631,5 +681,13 @@ export const sound = {
     } else if (landed && progress < 0.6) {
       landed = false;
     }
+  },
+
+  decodeTick(freq) {
+    decodeTick(freq);
+  },
+
+  decodeDone() {
+    decodeDone();
   },
 };

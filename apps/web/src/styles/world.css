@@ -85,12 +85,19 @@
   overflow-wrap: anywhere;
 }
 
-.w-work-lead { margin: 1em 0 0; }
+.w-work-lead {
+  margin: 1.2em 0 0;
+  font-size: 0.92rem;
+  line-height: 1.65;
+  color: var(--w-ink);
+}
 
 .w-work-body {
-  margin: 0.8em 0 0;
+  margin: 0.9em 0 0;
   white-space: pre-line;
-  color: rgba(31, 38, 43, 0.78);
+  font-size: 0.84rem;
+  line-height: 1.72;
+  color: rgba(31, 38, 43, 0.88);
 }
 
 .w-work-tech {
@@ -602,7 +609,7 @@
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   box-sizing: border-box;
-  padding: clamp(32px, 6vh, 64px) clamp(20px, 5vw, 48px);
+  padding: clamp(48px, 9vh, 88px) clamp(20px, 5vw, 48px) 120px;
   background-color: #cbd7e4;
   background-image:
     radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.45) 0%, rgba(200, 214, 230, 0.2) 100%),
@@ -612,6 +619,12 @@
   animation: w-detail-in 260ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
+.w-work.has-detail {
+  z-index: 60;
+  pointer-events: auto;
+}
+
+.w-work.has-detail .w-detail { pointer-events: auto; }
 .w-work.is-live .w-detail { pointer-events: auto; }
 
 .w-detail::-webkit-scrollbar {
@@ -635,6 +648,7 @@
 
 .w-detail-panel {
   position: relative;
+  z-index: 2;
   width: min(38rem, 100%);
   margin: 0 auto;
   padding: 0 0 5rem 0;
@@ -645,33 +659,63 @@
   line-height: 1.7;
 }
 
-.w-detail-close {
-  float: right;
-  margin: 0 0 1em 1.5em;
-  padding: 0.35em 0.8em;
-  border: 1px solid rgba(63, 72, 85, 0.3);
-  background: rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(4px);
-  font: inherit;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--w-ink);
-  cursor: pointer;
-  transition: background 160ms ease, border-color 160ms ease;
+/* Ambient water wave canvas behind text */
+.w-detail-waves {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 0;
 }
 
-.w-detail-close:hover,
-.w-detail-close:focus-visible {
-  background: rgba(255, 255, 255, 0.85);
-  border-color: rgba(63, 72, 85, 0.55);
+/* Glass close button styled identically to minimal button */
+.w-detail-glass-close {
+  position: fixed;
+  top: clamp(16px, 2.4vw, 34px);
+  right: clamp(16px, 2.4vw, 34px);
+  z-index: 70;
+  border: none;
+  background: none;
+  font: inherit;
+  font-family: var(--w-mono);
+  font-size: var(--w-meta);
+  letter-spacing: var(--w-track);
+  text-transform: uppercase;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* Water wave accent line under title */
+.w-work-wave {
+  width: 140px;
+  height: 8px;
+  margin: 0.8rem 0 1.4rem;
+  overflow: hidden;
+  opacity: 0.75;
+}
+
+.w-work-wave svg {
+  width: 200%;
+  height: 100%;
+  display: block;
+  fill: none;
+  stroke: rgba(118, 142, 170, 0.6);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  animation: w-wave-scroll 3.6s linear infinite;
+}
+
+@keyframes w-wave-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .w-water,
   .w-water-ring { transition: none; }
   .w-detail { animation: none; }
+  .w-work-wave svg { animation: none; }
 }
 
 /* ── Instrument labels ─────────────────────────────────────────────────────
