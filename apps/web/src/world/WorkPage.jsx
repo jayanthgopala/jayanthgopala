@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useWorldScroll } from './scroll/ScrollProvider.jsx';
 import { scramble } from '../crystals/scramble.js';
 import { copy, externalUrl, mediaUrl } from '../lib/api.js';
-import { sound } from './lib/sound.js';
 import WaterStage from './water/WaterStage.jsx';
 import { shapeFor } from './water/shapes.js';
 
@@ -42,27 +41,6 @@ const FOLLOW = 4.2;
  */
 const MAX_RATE = 1.6;
 
-/**
- * How long the wheel must be quiet before the page settles onto a project, in
- * milliseconds.
- *
- * Without this the page simply rests wherever the scroll was left — 2.37 of the
- * way along, say — so the object sits slightly off centre and never counts as
- * having arrived anywhere. Settling is what gives the labels a moment to be
- * drawn for.
- */
-const SETTLE_AFTER = 150;
-
-/**
- * How long the page is held still once the introduction appears, so it can
- * finish arriving before it can be scrolled away from.
- *
- * Matches the last line's delay plus its duration. It is deliberately the only
- * moment on this page that takes the scroll away from the reader, and it is
- * over before a second has passed.
- */
-const ABOUT_HOLD = 860;
-
 const smoothstep = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
@@ -83,7 +61,7 @@ const FORCE_DEMO =
 const DEMO_PROFILE = {
   name: 'Jayanth Gopala V',
   role: 'Software Engineer',
-  location: 'Asia / banglore',
+  location: 'Asia / Banglore',
   description:
     'I build systems that hold up when they are leaned on — schedulers that deliver exactly once, content that compiles to immutable bundles, search that answers while the slowest shard is still thinking. Mostly backend, mostly distributed, and increasingly the rendering that puts a face on it.',
 };
@@ -232,17 +210,13 @@ function Readout({ project, number, total, hint, boxRef }) {
  * page that is read rather than looked at, and giving it an object of its own
  * would make it compete with the work it introduces.
  */
-function About({ profile, content, boxRef, shown }) {
+function About({ profile, content, boxRef }) {
   const name = profile.name || '';
   const role = profile.role || '';
   const body = profile.description || profile.headline || '';
 
   return (
-    <section
-      className={`w-about${shown ? ' is-in' : ''}`}
-      ref={boxRef}
-      aria-label="About"
-    >
+    <section className="w-about" ref={boxRef} aria-label="About">
       <p className="w-about-rule">////// {copy(content, 'world.aboutEyebrow', 'About')}</p>
       {name && <h2 className="w-about-name">{name}</h2>}
       {role && <p className="w-about-role">{role}</p>}
@@ -350,7 +324,7 @@ function Detail({ project, number, onClose }) {
 }
 
 export default function WorkPage({ projects = [], content = {}, profile = {} }) {
-  const { cut, page, setPageHeight, lenis } = useWorldScroll();
+  const { cut, page, setPageHeight } = useWorldScroll();
   const layerRef = useRef(null);
   const [live, setLive] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -370,7 +344,7 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
   const position = useRef(0);
   // Where the object sits on screen, in 0..1, written by the stage each frame
   // and read back here to place the labels on it.
-  const anchor = useRef({ x: 0.5, y: 1.6, whole: false });
+  const anchor = useRef({ x: 0.5, y: 1.6 });
   const readoutRef = useRef(null);
   const aboutRef = useRef(null);
   const reduced = useReducedMotion();
@@ -407,8 +381,6 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
     let hasOpened = false;
     let shown = 0;
     let settledAt = null;
-    let restingAt = null;
-    let stillSince = 0;
     let eased = null; // Damped follower of the raw scroll position.
     let last = performance.now();
 
@@ -435,42 +407,17 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
         setMounted(nextStage);
       }
 
-      // Waits for the cut to be genuinely finished, not nearly: stopping the
-      // scroll at 0.92 would interrupt the settle that carries it the rest of
-      // the way.
-      const nextOpened = c >= 0.995;
+      const nextOpened = c >= 0.92;
       if (nextOpened !== hasOpened) {
         hasOpened = nextOpened;
         setOpened(nextOpened);
       }
 
       const step = Math.max(1, window.innerHeight);
-      const lastIndex = Math.max(list.length - 1, 0);
-
-      // Pinned to the introduction until the cut has actually finished.
-      //
-      // The cut is rate limited to about 1.8 seconds however fast the wheel is
-      // turned, but the page offset answers the scroll immediately. Anyone
-      // scrolling briskly therefore carried the page past the introduction
-      // while the transition was still catching up, and it was already behind
-      // them by the time it was allowed to appear.
-      const scrolled = nextOpened
-        ? Math.min(lastIndex, page.current / step - ABOUT_SPAN)
-        : -ABOUT_SPAN;
-
-      // Has the wheel actually stopped?
-      if (restingAt === null || Math.abs(scrolled - restingAt) > 0.002) {
-        restingAt = scrolled;
-        stillSince = now;
-      }
-
-      // Once it has, aim at the nearest whole project rather than at the exact
-      // place the scroll was abandoned. The introduction is left alone: it is
-      // not a project and should not be snapped to one.
-      const settle = now - stillSince > SETTLE_AFTER && scrolled > -0.4;
-      const target = settle
-        ? Math.min(lastIndex, Math.max(0, Math.round(scrolled)))
-        : scrolled;
+      const target = Math.min(
+        Math.max(list.length - 1, 0),
+        page.current / step - ABOUT_SPAN
+      );
 
       // Exponential follow, framed in dt so the glide is the same length at any
       // refresh rate. It always starts at the introduction rather than at
@@ -489,13 +436,12 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
       const about = aboutRef.current;
       if (about) {
         const gone = smoothstep(-ABOUT_SPAN + 0.1, -0.15, raw);
-        const arriving = smoothstep(0.9, 0.99, c);
-        about.style.opacity = ((1 - gone) * arriving).toFixed(3);
+        about.style.opacity = (1 - gone).toFixed(3);
         // Keeps the centring the stylesheet set. Writing a bare translate here
         // replaced it, which is what pushed the introduction off its middle.
         about.style.transform =
           `translate(-50%, -50%) translateY(${(-gone * 12).toFixed(2)}vh)`;
-        about.style.visibility = gone >= 1 || arriving <= 0 ? 'hidden' : 'visible';
+        about.style.visibility = gone >= 1 ? 'hidden' : 'visible';
       }
 
       // Labels ride the object rather than the viewport.
@@ -506,17 +452,13 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
         labels.style.setProperty('--ay', `${(y * 100).toFixed(2)}%`);
       }
 
-      // Arrival is "the whole object is on screen", which the stage works out
-      // from the camera. Waiting for the scroll to come to rest instead meant
-      // the labels held off until everything had stopped moving, long after
-      // there was plainly an object there to name.
+      // Arrival, rather than "the index changed": the object has stopped within
+      // a hair of a whole position and is past the introduction. Mounting the
+      // labels on that moment is what lets them draw themselves in.
       const nearest = Math.round(raw);
-      const showing = raw > -0.25 && anchor.current.whole;
-      const nextSettled = showing ? Math.min(Math.max(nearest, 0), lastIndex) : null;
+      const atRest = raw > -0.25 && Math.abs(raw - nearest) < 0.05;
+      const nextSettled = atRest ? Math.min(Math.max(nearest, 0), Math.max(list.length - 1, 0)) : null;
       if (nextSettled !== settledAt) {
-        // Only on the way in. Leaving one behind is the same transition from
-        // the other side, and sounding it again would double every move.
-        if (nextSettled !== null) sound.arrive(nextSettled);
         settledAt = nextSettled;
         setArrived(nextSettled);
       }
@@ -533,25 +475,6 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [cut, page, reduced, list.length]);
-
-  // The introduction takes most of a second to arrive, which was long enough to
-  // scroll straight past it. The page is held for exactly that long, once, the
-  // first time it is shown.
-  const held = useRef(false);
-  useEffect(() => {
-    if (!opened || held.current || reduced) return undefined;
-    held.current = true;
-
-    const instance = lenis?.current;
-    if (!instance) return undefined;
-
-    instance.stop();
-    const id = setTimeout(() => instance.start(), ABOUT_HOLD);
-    return () => {
-      clearTimeout(id);
-      instance.start();
-    };
-  }, [opened, reduced, lenis]);
 
   const onOpen = useCallback(() => {
     // Mid-slide the letter on screen is the nearer of the two, not the one the
@@ -581,12 +504,11 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
         />
       )}
 
-      {mounted && (
+      {opened && (
         <About
           profile={DEV && !profile.name ? DEMO_PROFILE : profile}
           content={content}
           boxRef={aboutRef}
-          shown={opened}
         />
       )}
 
