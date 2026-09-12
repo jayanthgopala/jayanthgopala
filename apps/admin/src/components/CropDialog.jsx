@@ -4,17 +4,7 @@ import '../styles/crop.css';
 
 const NUDGE = 12; // px per arrow press, in display space
 
-/**
- * Crop tool: drag to reposition, scroll or pinch to zoom, arrows to nudge.
- *
- * `shape` picks the frame:
- *   circle   1:1, circular mask — the minimal-mode portrait
- *   portrait 3:4, rectangular   — the cinematic full-bleed plate
- *
- * Position is held in *display* pixels and converted to source pixels only at
- * export. Tracking it in source space means every zoom rescales the offsets and
- * the image slides out from under the cursor.
- */
+// Image crop modal supporting drag, zoom, and arrow nudging
 export default function CropDialog({ file, src, shape = 'circle', title = 'Adjust portrait', onCancel, onCropped }) {
   const isCircle = shape === 'circle';
   const isPortrait = shape === 'portrait';
@@ -41,16 +31,12 @@ export default function CropDialog({ file, src, shape = 'circle', title = 'Adjus
 
   useEffect(() => {
     if (!file && !src) return;
-    // Either a freshly chosen File, or an image already stored in R2 that is
-    // being re-framed. The stored path needs crossOrigin or canvas.toBlob()
-    // throws on a tainted canvas — /media sends the CORS header for this.
+    // Load local object URL or remote image with CORS support
     const objectUrl = file ? URL.createObjectURL(file) : null;
     const image = new Image();
     if (!file) image.crossOrigin = 'anonymous';
     image.onload = () => {
       const { w, h } = frameSize();
-      // Smallest scale that still covers the frame, so the corners can never
-      // be dragged empty.
       const fit = Math.max(w / image.width, h / image.height);
       setImg(image);
       setMinScale(fit);

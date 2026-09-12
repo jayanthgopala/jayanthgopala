@@ -1,21 +1,4 @@
-/*
- * igloo.glb  ->  quantised binary + manifest + compressed textures
- *
- * The GLB ships 6.0 MB, of which 5.26 MB is two 2048 PNGs and 684 KB is
- * geometry. Neither number is acceptable for a hero object on a landing page,
- * and neither needs to be that big:
- *
- *   - Geometry is float32 position/normal/uv. Blocks are ~1.7 units across, so
- *     float32 spends 32 bits resolving a distance no eye will ever see. int16
- *     over each block's own bbox gives 2.7e-5 unit precision and halves it.
- *   - Normals go to int8 (~0.5 deg error, invisible on a bumpy snow surface).
- *   - Textures go 2048 -> 1024 WebP.
- *
- * What this script does NOT do is dedupe geometry, because it cannot: every
- * block owns a private UV island in the atlas, so no two blocks share vertex
- * data. That is also why the runtime uses BatchedMesh rather than
- * InstancedMesh -- see src/igloo/Igloo.js.
- */
+// Converts igloo.glb into quantized binary buffers, manifest, and WebP textures.
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
@@ -23,10 +6,7 @@ import sharp from 'sharp';
 const SRC = process.argv[2] ?? '../igloo.glb';
 const OUT = process.argv[3] ?? 'apps/web/public/igloo';
 
-/* The site's world is built at radius 22 (see world/structures/Igloo.jsx).
-   The Blender model is radius 2.435, so everything scales by this and the
-   model's own proportions (h/r = 1.42) are preserved rather than forced to
-   the procedural version's 1.50. */
+// Scale model to target world radius (22) while preserving proportions.
 const TARGET_RADIUS = 22;
 
 const buf = fs.readFileSync(SRC);
@@ -58,7 +38,7 @@ function readAccessor(i) {
   return { data: out, count: a.count, n };
 }
 
-/* ---- gather blocks ------------------------------------------------------ */
+// Gather mesh blocks from glTF
 
 const ringOf = (name) => {
   if (name.startsWith('Entrance')) return 0;
@@ -82,14 +62,7 @@ const raw = gltf.meshes.map((mesh, mi) => {
   };
 });
 
-/* Model bounds, so we can scale to the site's world units and sit the dome
-   on y = 0 with its axis through the origin.
- *
- * RADIUS IS MEASURED OVER THE RING COURSES ONLY. The entrance porch projects
- * to z = 3.15 while the dome wall stops at 2.435, so including it measured the
- * porch instead of the dome and scaled the whole model down by a quarter
- * (6.62 rather than 9.04). Height still spans everything, since the porch
- * never rises above the crown. */
+// Compute model bounding extents and target scaling
 let modelMaxR = 0;
 let modelMinY = Infinity;
 let modelMaxY = -Infinity;
@@ -106,7 +79,7 @@ for (const b of raw) {
 }
 const SCALE = TARGET_RADIUS / modelMaxR;
 
-/* ---- quantise ----------------------------------------------------------- */
+// Quantise block geometries to 16-bit
 
 const posParts = [];
 const norParts = [];
@@ -130,9 +103,7 @@ const blocks = raw.map((b) => {
     }
   }
 
-  /* Centroid is the instance origin; vertices are stored relative to it so the
-     BatchedMesh matrix owns placement and the physics can move a block by
-     writing one matrix rather than touching vertex data. */
+  // Centroid as instance origin for physics matrix updates
   const c = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2];
   const ext = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]].map((e) => e || 1e-6);
 
@@ -182,9 +153,7 @@ const blocks = raw.map((b) => {
   return rec;
 });
 
-/* Outward direction per block: radial in XZ, tilting to +Y as the courses
-   close over the crown. Derived from where the block actually sits rather than
-   authored by hand, so it stays correct if the model is re-exported. */
+// Outward normal vector per block
 const apexY = Math.max(...blocks.map((b) => b.centroid[1]));
 for (const b of blocks) {
   const [x, y, z] = b.centroid;
@@ -217,7 +186,7 @@ fs.mkdirSync(OUT, { recursive: true });
 fs.writeFileSync(path.join(OUT, 'igloo.bin'), bin);
 fs.writeFileSync(path.join(OUT, 'igloo.json'), JSON.stringify(manifest));
 
-/* ---- textures ----------------------------------------------------------- */
+// Textures
 
 const images = [];
 for (const im of gltf.images) {
@@ -228,8 +197,7 @@ for (const im of gltf.images) {
   const out = path.join(OUT, (isNormal ? 'normal' : 'basecolor') + '.webp');
   await sharp(png)
     .resize(1024, 1024, { kernel: 'lanczos3' })
-    /* Normal maps carry vectors, not colour, so chroma subsampling would bend
-       them. Higher quality and 4:4:4 forced for that reason. */
+    // Preserve normal map precision without subsampling
     .webp(isNormal
       ? { quality: 92, effort: 6, smartSubsample: false }
       : { quality: 86, effort: 6 })
@@ -237,7 +205,7 @@ for (const im of gltf.images) {
   images.push({ name: im.name, from: bv.byteLength, to: fs.statSync(out).size });
 }
 
-/* ---- report ------------------------------------------------------------- */
+// Summary report
 
 const kb = (b) => (b / 1024).toFixed(0).padStart(6) + ' KB';
 console.log('scale ' + SCALE.toFixed(4) + '  ->  radius ' + TARGET_RADIUS + ', height ' + manifest.height);

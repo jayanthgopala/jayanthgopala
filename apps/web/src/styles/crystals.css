@@ -1,7 +1,4 @@
-/* ==========================================================================
-   THE CRYSTAL PAGE (/work)
-   Every selector is prefixed c- and only this route emits them.
-   ========================================================================== */
+/* THE CRYSTAL PAGE (/work) Every selector is prefixed c- and only this route emits them. */
 
 :root[data-route='work'] {
   --c-ink: #ffffff;
@@ -38,7 +35,7 @@
   pointer-events: none;
 }
 
-/* --- Leader-line labels --------------------------------------------------- */
+/* Leader-line labels */
 
 .c-labels {
   position: fixed;
@@ -104,7 +101,7 @@
   gap: 1.6rem;
 }
 
-/* --- HUD ------------------------------------------------------------------ */
+/* HUD */
 
 .c-hud {
   position: fixed;
@@ -180,9 +177,7 @@
 .c-explore:hover,
 .c-explore:focus-visible { opacity: 1; }
 
-/* --- Arrival fog ----------------------------------------------------------
-   The crystal comes out of white cloud, the way the reference's first one
-   emerges from the cut. Clears once there is something to show. */
+/* Arrival fog */
 
 .c-fog {
   position: fixed;
@@ -205,7 +200,7 @@
   color: #5b6573;
 }
 
-/* --- Detail: inside the ice ---------------------------------------------- */
+/* Detail: inside the ice */
 
 .c-detail {
   position: fixed;

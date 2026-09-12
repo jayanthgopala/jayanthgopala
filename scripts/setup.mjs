@@ -1,18 +1,5 @@
 #!/usr/bin/env node
-/**
- * One-command Cloudflare setup.
- *
- *     npm run setup            provision everything and deploy the backend
- *     npm run setup -- --origins   update ALLOWED_ORIGINS once Pages is live
- *
- * What this does NOT do — and why — is documented in docs/MANUAL-STEPS.md.
- * The short version: creating the two Pages projects is dashboard-only, because
- * `wrangler pages deploy` is a *direct upload* that produces a project with no
- * Git connection, and therefore no deploy-on-push and no build watch paths.
- *
- * Every step is safe to re-run. Resources that already exist are reused rather
- * than recreated, so a failed run halfway through is fixed by running it again.
- */
+// Cloudflare provisioning and deployment script
 
 import { spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
@@ -47,23 +34,7 @@ function die(msg) {
   process.exit(1);
 }
 
-/** Runs wrangler and returns { status, stdout }. Never throws. */
-function wrangler(args, { cwd = API, capture = true, stdin } = {}) {
-  const res = spawnSync('npx', ['wrangler', ...args], {
-    cwd,
-    encoding: 'utf8',
-    shell: process.platform === 'win32',
-    input: stdin,
-    stdio: capture ? ['pipe', 'pipe', 'pipe'] : 'inherit',
-  });
-  const out = `${res.stdout || ''}${res.stderr || ''}`;
-  return { status: res.status, out };
-}
-
-/**
- * Wrangler writes progress to stderr and data to stdout, and mixes both when a
- * command half-fails. Anything parsing output has to look at the combined text.
- */
+// Parses JSON from mixed stdout/stderr output
 function jsonFrom(text) {
   const start = text.search(/[[{]/);
   if (start === -1) return null;
@@ -74,7 +45,7 @@ function jsonFrom(text) {
   }
 }
 
-// --- Steps -----------------------------------------------------------------
+// Setup steps
 
 async function ensureLogin() {
   heading('Cloudflare account');
@@ -117,63 +88,7 @@ async function collect(rl) {
   return { githubUser, githubRepo, workerName, dbName, bucket };
 }
 
-/** Creates the database if absent; returns its uuid either way. */
-function ensureD1(name) {
-  const list = jsonFrom(wrangler(['d1', 'list', '--json']).out);
-  const found = Array.isArray(list) && list.find((d) => d.name === name);
-  if (found) {
-    ok(`D1 "${name}" already exists.`);
-    return found.uuid || found.id;
-  }
-
-  const created = wrangler(['d1', 'create', name]);
-  if (created.status !== 0) die(`Could not create D1 "${name}".\n${created.out}`);
-
-  // The id is echoed in a TOML snippet; re-listing is more reliable than
-  // parsing prose that changes between wrangler releases.
-  const after = jsonFrom(wrangler(['d1', 'list', '--json']).out);
-  const row = Array.isArray(after) && after.find((d) => d.name === name);
-  const id = row && (row.uuid || row.id);
-  if (!id) die(`Created D1 "${name}" but could not read its id back.`);
-  ok(`D1 "${name}" created.`);
-  return id;
-}
-
-function ensureKV(title) {
-  const list = jsonFrom(wrangler(['kv', 'namespace', 'list']).out);
-  const found = Array.isArray(list) && list.find((n) => n.title === title);
-  if (found) {
-    ok(`KV "${title}" already exists.`);
-    return found.id;
-  }
-
-  const created = wrangler(['kv', 'namespace', 'create', title]);
-  if (created.status !== 0) die(`Could not create KV "${title}".\n${created.out}`);
-
-  const after = jsonFrom(wrangler(['kv', 'namespace', 'list']).out);
-  const row = Array.isArray(after) && after.find((n) => n.title === title);
-  const id = row?.id || created.out.match(/id\s*=\s*"([0-9a-f]{32})"/i)?.[1];
-  if (!id) die(`Created KV "${title}" but could not read its id back.`);
-  ok(`KV "${title}" created.`);
-  return id;
-}
-
-function ensureR2(name) {
-  const created = wrangler(['r2', 'bucket', 'create', name]);
-  // Already existing is success for our purposes, not an error.
-  if (created.status === 0) ok(`R2 bucket "${name}" created.`);
-  else if (/already (exists|owned)/i.test(created.out)) ok(`R2 bucket "${name}" already exists.`);
-  else die(`Could not create R2 bucket "${name}".\n${created.out}`);
-}
-
-/**
- * Reads one `KEY = "value"` out of an existing config, if there is one.
- *
- * Deliberately not anchored to end-of-line: several entries in the template
- * carry a trailing comment, and an anchored match would silently return null
- * for them — which, for ALLOWED_ORIGINS, would mean resetting a working site's
- * CORS to localhost on a re-run.
- */
+// Reads a key-value pair from existing config
 function existingVar(key) {
   if (!existsSync(CONFIG)) return null;
   const m = readFileSync(CONFIG, 'utf8').match(new RegExp(`^${key} *= *"([^"]*)"`, 'm'));
@@ -183,12 +98,7 @@ function existingVar(key) {
 function writeConfig({ workerName, dbName, bucket, githubUser, githubRepo, d1Id, kvId }) {
   if (!existsSync(TEMPLATE)) die(`Missing ${TEMPLATE}.`);
 
-  /*
-   * Re-running must not undo the two values that are only knowable after the
-   * first pass. Regenerating them blindly would reset ALLOWED_ORIGINS to
-   * localhost and then redeploy — taking a working site's admin panel down with
-   * a CORS error, on a command whose whole promise is that it is safe to repeat.
-   */
+  // Preserve existing origins and public URL across re-runs
   const keepOrigins = existingVar('ALLOWED_ORIGINS');
   const keepPublicUrl = existingVar('PUBLIC_API_URL');
 
@@ -292,10 +202,7 @@ function deploy() {
   return url;
 }
 
-/**
- * PUBLIC_API_URL is what the profile README points its live SVG cards at, so it
- * is only knowable after the first deploy. Write it back and redeploy once.
- */
+// Update PUBLIC_API_URL and redeploy worker
 function backfillPublicUrl(url) {
   if (!url || !existsSync(CONFIG)) return;
   const toml = readFileSync(CONFIG, 'utf8').replace(
@@ -354,7 +261,7 @@ ${c.dim('Everything that cannot be scripted is in docs/MANUAL-STEPS.md.')}
 `);
 }
 
-// --- Origins pass ----------------------------------------------------------
+// Allowed origins configuration
 
 async function updateOrigins(rl) {
   if (!existsSync(CONFIG)) die('No wrangler.toml — run `npm run setup` first.');
@@ -385,7 +292,7 @@ async function updateOrigins(rl) {
   ok('Redeployed. The admin panel should work now.');
 }
 
-// --- Entry -----------------------------------------------------------------
+// CLI entry point
 
 const rl = createInterface({ input, output });
 

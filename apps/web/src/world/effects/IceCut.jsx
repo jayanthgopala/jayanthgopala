@@ -7,55 +7,11 @@ import { CUT_PARALLAX } from '../chapters.js';
 import { createCutTexture } from '../lib/cut-texture.js';
 import { ICE_PAGE } from '../lib/ice-page.js';
 
-/**
- * THE CUT FROM THE WORLD TO THE WORK PAGE.
- *
- * Ported from the reference's own composite shader rather than built by eye,
- * and the behaviour it has to reproduce is specific:
- *
- *   - The world slides UP and out of the frame while the page rises in from
- *     below, both on a squared ease over the same 40% of the frame height.
- *   - The seam between them is a DIAGONAL front, lower-left first, broken into
- *     fragments by a block texture so the wipe arrives in pieces rather than as
- *     a line.
- *   - Along that seam both pictures are SMEARED: dragged into streaks that
- *     taper out along their length, split into a rainbow as they go, with a
- *     frost-white haze riding the front. The world smears more as it leaves,
- *     the page less as it arrives, so the page lands sharp.
- *
- * SMEAR, NOT TEAR. The first version displaced whole rows by a constant each,
- * and every row boundary showed as a dead-straight horizontal line. Nothing
- * here is constant along a row any more: the streaks come from smooth noise,
- * so they fade in and out along their length, and each pixel is an average of
- * twelve samples trailing behind it rather than one sample moved sideways.
- *
- * SCRUBBED, NOT PLAYED. Every term is a pure function of scroll position, so the
- * cut stops where the scroll stops and runs backwards when the scroll does —
- * which is what the reference does, and why it reads as a place you move
- * through rather than an animation you trigger.
- *
- * THE PAGE IS DRAWN HERE. Scene two is the ice ground from lib/ice-page.js,
- * evaluated per fragment, because a wipe can only reveal something it can
- * sample. The text lives in the DOM above it (WorkPage.jsx), riding the same
- * parallax.
- *
- * ON THE LENS, NOT THE SUBJECT. It is a screen-space pass; the igloo is never
- * touched, scaled or lit by it.
- */
-
-/** Extra vertical shove along the seam, as a fraction of the frame. From the reference. */
+// Transition wipe and smear parameters
 const DISPLACE = 0.025;
-/** How far a streak drags sideways at its strongest, as a fraction of the frame. */
 const STRETCH = 0.075;
-/** How far the wake drags vertically, behind the direction of travel. */
 const SMEAR = 0.05;
-/**
- * Chromatic spread across the smear. With the 12x modulator in the middle of
- * the frame a full-strength fringe spans about 3% of the frame — a rainbow
- * smear, not a lens defect.
- */
 const SPREAD = 0.01;
-/** How white the frost on the front gets, at the middle of the wake. */
 const HAZE = 0.14;
 
 const f = (n) => n.toFixed(4);
@@ -90,8 +46,7 @@ const FRAGMENT = /* glsl */ `
     return fract( ( p3.x + p3.y ) * p3.z );
   }
 
-  /* Smooth value noise. Continuous in both directions, which is the whole
-     point: a streak built from it has no hard edge anywhere. */
+  // Smooth value noise for seamless procedural streaks
   float vnoise( vec2 p ) {
     vec2 i = floor( p );
     vec2 f = fract( p );
@@ -103,11 +58,7 @@ const FRAGMENT = /* glsl */ `
     return mix( mix( a, b, f.x ), mix( c, d, f.x ), f.y );
   }
 
-  /*
-   * The reference's falloff(): a front sweeping across x as progress runs
-   * 0 -> 1, soft over "margin". Exactly 0 everywhere at progress 0 and exactly
-   * 1 everywhere at progress 1, for any x in 0..1.
-   */
+  // Smooth linear ramp clamped to [0, 1]
   float sweep( float x, float margin, float progress ) {
     float front = mix( -margin, 1.0, progress );
     return clamp( ( front + margin - x ) / margin, 0.0, 1.0 );
@@ -117,18 +68,13 @@ const FRAGMENT = /* glsl */ `
     return mix( c / 12.92, pow( ( c + 0.055 ) / 1.055, vec3( 2.4 ) ), step( 0.04045, c ) );
   }
 
-  /* A CSS gradient layer over what is below it: stops interpolated
-     premultiplied, the way browsers do. */
+  // Blends two color stops with premultiplied alpha
   vec3 overGradient( vec4 a, vec4 b, float t, vec3 below ) {
     vec3 pm = mix( a.rgb * a.a, b.rgb * b.a, t );
     return pm + below * ( 1.0 - mix( a.a, b.a, t ) );
   }
 
-  /*
-   * The page's ground. Built in CSS pixels from the top-left, in sRGB, in
-   * the layer order of the stylesheet it replaces — then converted to linear,
-   * because the chain is linear until the final pass encodes for the display.
-   */
+  // Generates the ice background surface for the work page in linear space
   vec3 iceGround( vec2 uv ) {
     vec2 px = vec2( uv.x, 1.0 - uv.y ) * uViewport;
     vec3 c = uIceBase;
@@ -149,20 +95,12 @@ const FRAGMENT = /* glsl */ `
     return toLinear( c );
   }
 
-  /* Red at the head of a streak, through green, to blue at its tail. The small
-     floor keeps every channel present along the whole length, so the smear
-     reads as light dispersing rather than as three coloured ghosts. */
+  // Spectral tint weight function
   vec3 spectrum( float t ) {
     return vec3( 1.0 - t, 1.0 - abs( t * 2.0 - 1.0 ), t ) + 0.1;
   }
 
-  /*
-   * One smeared, dispersed sample. TAPS samples trailing along "drag" from
-   * the pixel, each tinted by its place in the spectrum, and each also pushed
-   * out from the frame centre by "spread" for the prismatic split. "jitter"
-   * slides the taps by a fraction of their spacing per pixel, so twelve
-   * discrete samples blend into one continuous streak instead of stepping.
-   */
+  // Multi-tap directional smear with chromatic dispersion for the 3D world scene
   vec3 smearWorld( vec2 uv, vec2 drag, float spread, float jitter ) {
     vec2 dir = uv - 0.5;
     vec3 sum = vec3( 0.0 );
@@ -177,6 +115,7 @@ const FRAGMENT = /* glsl */ `
     return sum / weight;
   }
 
+  // Multi-tap directional smear for incoming ice page
   vec3 smearIce( vec2 uv, vec2 drag, float spread, float jitter ) {
     vec2 dir = uv - 0.5;
     vec3 sum = vec3( 0.0 );
@@ -193,52 +132,41 @@ const FRAGMENT = /* glsl */ `
   void mainImage( const in vec4 inputColor, const in vec2 uv, out vec4 outputColor ) {
     float p = uCut;
 
-    // The world, untouched, for the whole journey before the cut.
+    // Passthrough before transition begins
     if ( p <= 0.0 ) {
       outputColor = inputColor;
       return;
     }
 
-    // The page, and nothing else, once it has fully arrived.
+    // Fully transitioned page
     if ( p >= 1.0 ) {
       outputColor = vec4( iceGround( uv ), 1.0 );
       return;
     }
 
-    // Reduced motion: the same two pictures, crossfaded. No travel, no smear.
+    // Simple crossfade for reduced motion preference
     if ( uReduced > 0.5 ) {
       outputColor = vec4( mix( inputColor.rgb, iceGround( uv ), p ), 1.0 );
       return;
     }
 
-    // Square blocks on screen: the texture is sampled in aspect-corrected space.
+    // Sample mask in aspect-corrected UV space
     vec2 uvTex = vec2( ( uv.x - 0.5 ) * uAspect + 0.5, uv.y );
     vec3 blk = texture2D( tCut, uvTex ).rgb;
 
-    /*
-     * The diagonal. Height plus a share of the horizontal position, jittered
-     * by the texture's blue channel so the front is ragged — lower-left is
-     * covered first, upper-right last. Normalised back to 0..1 so the sweeps
-     * below start and finish exactly with the scroll.
-     */
+    // Calculate diagonal wipe boundary
     float slope = 0.2 * uAspect;
     float x = uv.y + ( uv.x + ( blk.b * 2.0 - 1.0 ) * 0.4 ) * slope;
     float xn = ( x + 0.4 * slope ) / ( 1.0 + 1.8 * slope );
 
-    float blurField = sweep( xn, 2.0, p );   // broad: how hard each side disperses
-    float shoveField = sweep( xn, 0.9, p );  // medium: the push, and the wake
-    float cutField = sweep( xn, 0.2, p );    // narrow: the wipe itself
+    float blurField = sweep( xn, 2.0, p );
+    float shoveField = sweep( xn, 0.9, p );
+    float cutField = sweep( xn, 0.2, p );
 
-    // Both peak at the front and are exactly zero at either end of the cut.
     float seam = cutField * ( 1.0 - cutField ) * 4.0;
     float wake = shoveField * ( 1.0 - shoveField ) * 4.0;
 
-    /*
-     * THE STREAKS. Thin across (46 rows to the frame) and long along (a
-     * couple of cells across it), so each one swells and fades over its
-     * length. A second, finer layer breaks every streak into fibres. Signed,
-     * so neighbouring streaks drag opposite ways and shear against each other.
-     */
+    // Procedural noise streaks and directional drag vector
     float streak = vnoise( vec2( uv.x * 2.5, uv.y * 46.0 ) + blk.b * 3.0 ) * 2.0 - 1.0;
     float fibre = vnoise( vec2( uv.x * 6.0 + 7.3, uv.y * 120.0 ) );
     vec2 drag = vec2(
@@ -246,8 +174,7 @@ const FRAGMENT = /* glsl */ `
       SMEAR * wake
     );
 
-    /* The fragments trail too: the block mask is read along the same drag,
-       so a block leaves a smear of itself behind instead of a hard edge. */
+    // Multi-sample the block wipe mask along the drag direction
     float r = 0.0;
     for ( int k = 0; k < 4; k++ ) {
       vec2 o = drag * ( float( k ) / 3.0 );
@@ -257,12 +184,8 @@ const FRAGMENT = /* glsl */ `
 
     float cut = sweep( r, 2.0, cutField );
     float shove = sweep( blk.g, 1.0, shoveField );
-
-    /* Static per pixel. A still page parked mid-cut must be still, and a
-       per-frame offset would make every streak crawl. */
     float jitter = hash21( gl_FragCoord.xy );
 
-    // 12 through the middle of the frame, easing to 0 at its very edge.
     float edge = ( 1.0 - smoothstep( 0.7, 1.0, abs( uv.x * 2.0 - 1.0 ) ) )
                * ( 1.0 - smoothstep( 0.7, 1.0, abs( uv.y * 2.0 - 1.0 ) ) );
     float modulator = 12.0 * edge;
@@ -283,8 +206,7 @@ const FRAGMENT = /* glsl */ `
 
     vec3 color = mix( world, page, cut );
 
-    /* Frost on the front: the seam lifts toward white, the way the reference
-       dissolves into cloud where one picture gives way to the other. */
+    // Frost glow on the transition seam
     color = mix( color, vec3( 1.0 ), HAZE * wake * ( 1.0 - 0.5 * cut ) );
 
     outputColor = vec4( clamp( color, 0.0, 1.0 ), 1.0 );
@@ -298,8 +220,6 @@ class IceCutEffect extends Effect {
   constructor(texture) {
     super('IceCutEffect', FRAGMENT, {
       blendFunction: BlendFunction.NORMAL,
-      /* CONVOLUTION: it samples inputBuffer away from the current fragment.
-         See TravelGlitch for what goes wrong without it. */
       attributes: EffectAttribute.CONVOLUTION,
       uniforms: new Map([
         ['tCut', new Uniform(texture)],
@@ -320,18 +240,7 @@ class IceCutEffect extends Effect {
   }
 }
 
-/**
- * The cut, as the last pass in the chain.
- *
- * LAST, because it is not the camera. Bloom, the tone map, the vignette and the
- * travel fringe are all the world being photographed; this is one picture being
- * exchanged for another, and the page it brings in must not be bloomed, tone
- * mapped or vignetted on the way.
- *
- * ITS OWN EffectPass, for the same reason TravelGlitch builds one: a
- * convolution effect cannot share a pass with the ChromaticAberration before
- * it, and handing it to the composer bare would throw and take the Canvas down.
- */
+// Fullscreen post-processing transition from 3D world to 2D ice page
 export default function IceCut() {
   const { cut } = useWorldScroll();
   const camera = useThree((s) => s.camera);
@@ -357,19 +266,7 @@ export default function IceCut() {
   return <primitive object={pass} dispose={null} />;
 }
 
-/**
- * Stops rendering the world once the page has covered it.
- *
- * With the cut complete every pixel on the canvas is the ice ground, which
- * does not change. Rendering the terrain, the igloo and the whole post chain
- * underneath it sixty times a second to throw every one of those pixels away
- * is the most expensive nothing on the site. So the loop drops to 'demand' and
- * the canvas keeps showing the last frame it drew — the finished page — until
- * the scroll comes back up into the cut.
- *
- * Driven from its own rAF rather than useFrame, because once the R3F loop is
- * parked useFrame is exactly the thing that no longer runs.
- */
+// Pauses R3F rendering loop once page transition is complete to save GPU resources
 export function CutFrameGate() {
   const { cut } = useWorldScroll();
   const setFrameloop = useThree((s) => s.setFrameloop);
@@ -383,8 +280,6 @@ export function CutFrameGate() {
 
     const tick = () => {
       if (cut.current >= 1) {
-        /* A few frames at full cover first, so the frame left on the canvas is
-           the finished page and not the last step of the wipe. */
         covered += 1;
         if (!held && covered > 3) {
           held = true;
@@ -395,7 +290,6 @@ export function CutFrameGate() {
         if (held) {
           held = false;
           setFrameloop('always');
-          /* A parked loop does not restart on its own when the mode changes. */
           invalidate();
         }
       }
@@ -409,8 +303,7 @@ export function CutFrameGate() {
     };
   }, [cut, setFrameloop, invalidate]);
 
-  /* A resize clears the canvas. While the loop is parked nothing would redraw
-     it, so ask for exactly one frame. */
+  // Request frame on canvas resize
   useEffect(() => {
     invalidate();
   }, [size, invalidate]);

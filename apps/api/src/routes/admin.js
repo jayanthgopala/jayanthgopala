@@ -21,15 +21,11 @@ import { visitorStats } from '../lib/visitors.js';
 
 const app = new Hono();
 
-/**
- * Every mutation funnels through here: invalidate the public cache, then push
- * to GitHub in the background. The operator's request returns immediately.
- */
+// Invalidates cache and triggers background sync after mutations.
 async function afterWrite(c, { media = false } = {}) {
   await bumpVersion(c.env);
   syncInBackground(c, 'auto');
-  // Writes that can leave an image unreferenced reconcile the bucket against
-  // the database afterwards. Backgrounded — the panel must not wait on R2.
+  // Reconcile bucket in background for operations that may orphan images.
   if (media) {
     c.executionCtx.waitUntil(
       reapOrphans(c.env)
@@ -59,7 +55,7 @@ const bool = (v) => (v ? 1 : 0);
 const num = (v) => Number(v) || 0;
 const json = (v) => JSON.stringify(Array.isArray(v) ? v : []);
 
-// --- Overview -------------------------------------------------------------
+// Overview
 
 app.get('/overview', async (c) => {
   const [site, syncs, lastSync, visitors] = await Promise.all([
@@ -83,7 +79,7 @@ app.get('/overview', async (c) => {
   });
 });
 
-// --- Profile --------------------------------------------------------------
+// Profile
 
 app.get('/profile', async (c) => c.json(await getProfile(c.env.DB)));
 
@@ -108,7 +104,7 @@ app.put('/profile', async (c) => {
   return c.json(await getProfile(c.env.DB));
 });
 
-// --- Status ---------------------------------------------------------------
+// Status
 
 app.get('/status', async (c) => c.json(await getStatus(c.env.DB)));
 
@@ -132,7 +128,7 @@ app.put('/status', async (c) => {
   return c.json(await getStatus(c.env.DB));
 });
 
-// --- Projects -------------------------------------------------------------
+// Projects
 
 app.get('/projects', async (c) => c.json(await getProjects(c.env.DB, { includeDrafts: true })));
 
@@ -213,9 +209,7 @@ app.delete('/projects/:id', async (c) => {
 
   await c.env.DB.prepare('DELETE FROM projects WHERE id = ?').bind(id).run();
 
-  // Reclaim the R2 object so deleted projects don't leave orphaned uploads.
-  // Immediate rather than left to the sweep: this one is unambiguous, and the
-  // sweep's grace period would otherwise keep a just-uploaded screenshot.
+  // Delete associated R2 screenshot immediately.
   const key = String(project?.screenshot || '').split('/media/')[1];
   if (key) await c.env.MEDIA.delete(decodeURIComponent(key)).catch(() => {});
 
@@ -238,7 +232,7 @@ app.post('/projects/reorder', async (c) => {
   return c.json(await getProjects(c.env.DB, { includeDrafts: true }));
 });
 
-// --- Stack ----------------------------------------------------------------
+// Stack
 
 app.get('/stack', async (c) => c.json(await getStack(c.env.DB)));
 
@@ -285,7 +279,7 @@ app.delete('/stack/:id', async (c) => {
   return c.json({ ok: true });
 });
 
-// --- Socials --------------------------------------------------------------
+// Socials
 
 app.get('/socials', async (c) => c.json(await getSocials(c.env.DB)));
 
@@ -333,11 +327,7 @@ app.delete('/socials/:id', async (c) => {
   return c.json({ ok: true });
 });
 
-// --- Education & experience ------------------------------------------------
-//
-// Both are ordered lists with the same lifecycle, so one factory serves both
-// rather than two near-identical blocks of CRUD.
-
+// Shared CRUD route generator for ordered lists (Education and Experience).
 function listRoutes({ path, table, read, columns, required }) {
   app.get(path, async (c) => c.json(await read(c.env.DB, { includeDrafts: true })));
 
@@ -433,16 +423,11 @@ listRoutes({
   },
 });
 
-// --- Site copy -------------------------------------------------------------
+// Site copy
 
 app.get('/content', async (c) => c.json(await getContentRows(c.env.DB)));
 
-/**
- * Bulk update. The editor saves the whole form at once, and a single batch is
- * both faster and atomic — a half-applied set of headings is worse than none.
- * Unknown keys are ignored rather than inserted: the key list is defined by the
- * schema, not by whatever the client posts.
- */
+// Bulk update site copy key-value pairs
 app.put('/content', async (c) => {
   const body = await c.req.json();
   const entries = Object.entries(body || {}).filter(([, v]) => typeof v === 'string');
@@ -459,7 +444,7 @@ app.put('/content', async (c) => {
   return c.json(await getContentRows(c.env.DB));
 });
 
-// --- Media ----------------------------------------------------------------
+// Media
 
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/avif', 'image/gif'];
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -490,7 +475,7 @@ app.delete('/media/:key', async (c) => {
   return c.json({ ok: true });
 });
 
-// --- GitHub sync ----------------------------------------------------------
+// GitHub sync
 
 app.get('/readme/preview', async (c) => {
   const site = await loadSite(c.env.DB);
@@ -509,11 +494,7 @@ app.post('/sync', async (c) => {
 
 app.get('/sync/log', async (c) => c.json(await recentSyncs(c.env, 50)));
 
-/**
- * Compares the live content hash against the last successfully published one.
- * Drives the "unpublished changes" indicator, and makes the cron's skip
- * decision observable instead of something you infer from an absent commit.
- */
+// Compares live content hash against last published state to track pending changes.
 app.get('/sync/state', async (c) => {
   const site = await loadSite(c.env.DB);
   const current = await contentHash(site);

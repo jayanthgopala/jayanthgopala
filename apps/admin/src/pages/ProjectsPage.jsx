@@ -13,8 +13,7 @@ const BLANK = {
   tech: [], liveUrl: '', repoUrl: '', accent: 'iris', featured: true, published: true,
 };
 
-/* --- Editor ---------------------------------------------------------------- */
-
+// Project editor form
 function Editor({ initial, onSaved, onCancel }) {
   const toast = useToast();
   const [draft, setDraft] = useState(initial);
@@ -124,8 +123,6 @@ function Editor({ initial, onSaved, onCancel }) {
   );
 }
 
-/* --- Page ------------------------------------------------------------------ */
-
 export default function ProjectsPage() {
   const toast = useToast();
   const { data, setData, loading, reload } = useResource(api.getProjects);
@@ -146,7 +143,7 @@ export default function ProjectsPage() {
     }
   }
 
-  /** Optimistic reorder — the list snaps immediately, then persists. */
+  // Optimistic reorder
   async function commitOrder(from, to) {
     if (from === to || from == null || to == null) return;
     const next = [...projects];
@@ -158,7 +155,7 @@ export default function ProjectsPage() {
       await api.reorderProjects(next.map((p) => p.id));
     } catch (err) {
       toast.error(err);
-      reload(); // server is the authority; roll back to it
+      reload(); // Rollback on failure
     }
   }
 

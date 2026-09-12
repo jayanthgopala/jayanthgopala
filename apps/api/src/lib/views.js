@@ -1,11 +1,4 @@
-/**
- * Profile view counter for the README.
- *
- * Counts are approximate by design. GitHub proxies README images through camo,
- * which caches aggressively, so a share of views never reach this Worker no
- * matter what headers we send. `no-store` gets most of them through; treating
- * the number as a rough signal rather than analytics is the honest framing.
- */
+// Profile view counter badge for GitHub README
 
 const KEY = 'views:total';
 
@@ -20,11 +13,7 @@ const T = {
 const FONT =
   "-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,Helvetica,Arial,sans-serif";
 
-/**
- * KV is eventually consistent and has no atomic increment, so two views landing
- * together can read the same value and write the same result. For a vanity
- * counter that's an acceptable trade against the cost of a Durable Object.
- */
+// Increments total profile views in KV
 export async function bumpViews(env) {
   const current = Number((await env.CACHE.get(KEY)) || 0);
   const next = current + 1;

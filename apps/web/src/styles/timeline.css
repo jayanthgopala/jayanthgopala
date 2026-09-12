@@ -8,8 +8,7 @@
   padding-left: var(--s-6);
 }
 
-/* The rail. Drawn on the list rather than per item so it's one continuous
-   line, and stopped short at both ends so it doesn't dangle past the markers. */
+/* Continuous rail line */
 .timeline::before {
   content: '';
   position: absolute;

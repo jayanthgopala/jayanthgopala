@@ -44,7 +44,7 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
 .muted { color: var(--text-muted); }
 .dim { color: var(--text-dim); }
 
-/* --- Login ---------------------------------------------------------------- */
+/* Login */
 
 .login {
   min-height: 100dvh;
@@ -80,7 +80,7 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
   font-weight: 700;
 }
 
-/* --- Shell ---------------------------------------------------------------- */
+/* Shell */
 
 .shell { display: grid; grid-template-columns: 236px 1fr; min-height: 100dvh; }
 
@@ -130,7 +130,7 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
 }
 .page-title { font-size: 1.5rem; }
 
-/* --- Cards / panels ------------------------------------------------------- */
+/* Cards and panels */
 
 .panel {
   background: var(--surface);
@@ -152,7 +152,7 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
 .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--s-4); }
 .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--s-3); }
 
-/* --- Forms ---------------------------------------------------------------- */
+/* Forms */
 
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field-full { grid-column: 1 / -1; }
@@ -208,7 +208,7 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
 .switch input:checked + .switch-track::after { transform: translateX(17px); background: #fff; }
 .switch input:focus-visible + .switch-track { outline: 2px solid var(--iris); outline-offset: 2px; }
 
-/* --- Buttons -------------------------------------------------------------- */
+/* Buttons */
 
 .btn {
   display: inline-flex;
@@ -244,7 +244,7 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
 .btn-sm { height: 30px; padding-inline: var(--s-3); font-size: var(--t-xs); }
 .btn-block { width: 100%; }
 
-/* --- List rows ------------------------------------------------------------ */
+/* List rows */
 
 .row {
   display: flex;
@@ -275,7 +275,7 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
 .row[data-dragging='true'] { opacity: 0.4; border-color: var(--iris); }
 .row[data-dragover='true'] { border-color: var(--iris); background: var(--iris-soft); }
 
-/* --- Misc ----------------------------------------------------------------- */
+/* Utilities */
 
 .pill {
   display: inline-flex;
@@ -337,7 +337,7 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
   color: var(--text-muted);
 }
 
-/* --- Toasts --------------------------------------------------------------- */
+/* Toasts */
 
 .toasts {
   position: fixed;

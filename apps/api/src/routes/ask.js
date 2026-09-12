@@ -1,20 +1,8 @@
 import { loadSite } from '../lib/db.js';
 
-/**
- * Grounded Q&A about the site owner, running on Cloudflare Workers AI.
- *
- * The model is given the site's own content as context and told to answer only
- * from it. That matters more than model quality here: a portfolio bot that
- * invents a job you never had is worse than no bot, because visitors have no
- * way to tell the difference and it is your professional reputation.
- */
+// Grounded Q&A about the site owner using Cloudflare Workers AI.
 
-/**
- * Verified against `wrangler ai models` — there is no plain
- * `llama-3.1-8b-instruct` on Workers AI, only the fp8 build. A wrong id fails
- * at request time with a generic error, so the list is tried in order and the
- * fallback covers a model being retired without warning.
- */
+// Models tried in priority order with fallback if a model is retired or unavailable.
 const MODELS = ['@cf/meta/llama-3.1-8b-instruct-fp8', '@cf/meta/llama-3.2-3b-instruct'];
 const MAX_QUESTION = 400;
 const RATE_LIMIT = 12; // requests per window
@@ -86,14 +74,7 @@ function buildContext(site) {
   return lines.join('\n');
 }
 
-/**
- * Voice presets for the assistant.
- *
- * Tone only — every one of these sits on top of the same grounding rules, so
- * none of them may invent anything. A casual register is a way of saying true
- * things, not a licence to embellish, and the Gen Z preset says so explicitly
- * because that is exactly where a model starts improvising.
- */
+// Voice presets for the assistant (controls tone without altering grounding rules).
 export const TONES = {
   professional: {
     label: 'Professional',
@@ -169,11 +150,7 @@ ${context}
 --- END ---`;
 }
 
-/**
- * Per-IP rate limit in KV. The endpoint is unauthenticated and every call costs
- * Workers AI quota, so without this a single script could burn the daily
- * allowance in a minute.
- */
+// Per-IP rate limit in KV to protect Workers AI quota.
 async function rateLimited(env, ip) {
   const key = `ask:rate:${ip}`;
   const current = Number((await env.CACHE.get(key)) || 0);
@@ -184,11 +161,7 @@ async function rateLimited(env, ip) {
   return false;
 }
 
-/**
- * Registered directly on the root app rather than as a mounted sub-app: a Hono
- * sub-route at '/' does not reliably match the mount path itself, which showed
- * up here as a 404 on POST /api/ask.
- */
+// Handles grounded Q&A requests for the portfolio.
 export async function askHandler(c) {
   if (!c.env.AI) {
     return c.json({ error: 'The assistant is not configured on this deployment.' }, 503);
@@ -206,14 +179,7 @@ export async function askHandler(c) {
   const site = await loadSite(c.env.DB);
   const name = site.profile?.name || 'the site owner';
 
-  /**
-   * Prior turns, so continuations work. Without these the endpoint is
-   * stateless and "yes" or "go on" arrives with no antecedent — the model
-   * can only read it as a new, meaningless question and refuses.
-   *
-   * Capped at MAX_HISTORY: the system prompt already carries the whole site as
-   * context, and an unbounded transcript would push it out of the window.
-   */
+  // Retain recent turns for conversation continuity, capped at MAX_HISTORY.
   const tone = TONES[body.tone] ? body.tone : DEFAULT_TONE;
 
   const history = Array.isArray(body.history) ? body.history.slice(-MAX_HISTORY) : [];

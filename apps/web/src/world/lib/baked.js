@@ -3,25 +3,15 @@ import { applyIceSettings, tagIceMaps, makeIceMaps } from './ice-texture.js';
 import { ICE_SETS, ICE_MAPS } from './ice-sets.js';
 import { setBakedField } from './terrain.js';
 
-// The baked world, fetched once before anything is built from it. scripts/bake-world.mjs is the other half.
-// Starting this scene cost 16.9s of blocked main thread recomputing what a fixed seed had already determined.
-// The call sites are all synchronous, terrain vertices, scree scatter, igloo footing and camera clearance all ask from inside
-// useMemo and useFrame where there's nowhere to await, so the fetch happens strictly before any of them exist.
-// Every part degrades on its own, a missing manifest or a failed image falls back to generating that piece the old way.
-
+// Pre-baked world textures and heightfield; falls back to runtime generation if unavailable.
 const BASE = '/baked';
 
 // name -> { roughnessMap, normalMap, colorMap, aoMap, reliefStops, patchStops }
 const cache = new Map();
 let loaded = false;
-// A boolean alone isn't enough, loaded is only set once everything arrives so two callers would both fetch the whole set.
-// StrictMode mounts effects twice in dev and was measured doing exactly that, 36 requests for 18 files.
-let inFlight = null;
+let inFlight = null; // Prevent duplicate concurrent fetches
 
-// createImageBitmap decodes off the main thread in compiled code, so four sets decode in parallel.
-// That's the axis the generate-on-load path failed on, a slow phone is much worse at a noise loop and barely worse at a PNG.
-// premultiplyAlpha would scale colour by a constant 255 alpha, not worth trusting for maps carrying normals and roughness.
-// colorSpaceConversion none, these files carry no profile so a transform should do nothing and this means it can't.
+// Decode bitmap off the main thread without color transform
 async function fetchBitmap(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url} -> ${res.status}`);
@@ -33,12 +23,11 @@ async function fetchBitmap(url) {
 
 function textureFrom(bitmap) {
   const tex = new Texture(bitmap);
-  tex.needsUpdate = true; // a Texture built round an existing image never uploads without this
+  tex.needsUpdate = true;
   return tex;
 }
 
-// The heightfield back from 16-bit into the units the terrain thinks in.
-// It's a raw array not a PNG because canvas silently truncates 16-bit PNGs to 8.
+// Unpack 16-bit raw heightfield data into world units.
 async function loadHeightfield(meta) {
   const res = await fetch(`${BASE}/heightfield.bin`);
   if (!res.ok) throw new Error(`heightfield -> ${res.status}`);
@@ -57,7 +46,7 @@ async function loadHeightfield(meta) {
   setBakedField(data);
 }
 
-// Resolves either way. A rejection would only be handled into the same fallback this already does.
+// Load all baked assets with fallback
 export async function loadBakedWorld() {
   if (loaded) return true;
   if (inFlight) return inFlight;
@@ -71,14 +60,11 @@ async function fetchEverything() {
     if (!res.ok) throw new Error(`manifest -> ${res.status}`);
     const manifest = await res.json();
 
-    // A 200 is not proof the file is there, any SPA host answers an unknown path with index.html and a 200.
-    // So a missing bake arrives as a successful response containing a web page, seen here as Unexpected token '<'.
-    // The JSON parse above already throws on that, this is so the next failure of this shape says what's actually wrong.
     if (manifest?.version !== 1) {
       throw new Error(`manifest is not a v1 bake (got ${JSON.stringify(manifest?.version)}), run: npm run bake`);
     }
 
-    // All of it at once, seventeen sequential fetches would serialise seventeen round trips.
+    // Fetch all texture sets in parallel
     const sets = await Promise.all(
       Object.keys(ICE_SETS).map(async (name) => {
         const meta = manifest.sets[name];
@@ -99,14 +85,12 @@ async function fetchEverything() {
     return true;
   } catch (error) {
     console.warn('[world] baked assets unavailable, generating at runtime:', error.message);
-    inFlight = null; // cleared so a later mount can retry, this is as likely to be a flaky connection as a missing file
+    inFlight = null;
     return false;
   }
 }
 
-// The maps for one surface, from the bake if it loaded and generated if not.
-// repeat is applied here rather than baked, it's how the texture maps onto its surface rather than part of the texture.
-// The textures are shared not copied, which is right while each set is used once. Two repeats would need a clone.
+// Returns texture maps from cache or generates them on demand.
 export function iceMapsFor(name, repeat = 1) {
   const entry = cache.get(name);
   if (!entry) return makeIceMaps({ ...ICE_SETS[name], repeat });

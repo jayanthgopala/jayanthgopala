@@ -1,6 +1,4 @@
-// The ice page's ground as numbers, because the cut has to draw the page it lands on inside the shader.
-// If the DOM painted the same ground too there'd be two renderings of one surface and the handover would flicker.
-// Composited in the shader in the order and space a browser uses, so this is the colour the old CSS produced.
+// Ice page background color and gradient parameters used by the cut shader.
 export const ICE_PAGE = {
   base: [0xcb, 0xd7, 0xe4],
   dot: { color: [118, 142, 170], alpha: 0.42, radius: 1.25, spacing: 36 }, // dots on every multiple of 36px from top left

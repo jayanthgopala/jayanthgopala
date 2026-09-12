@@ -9,15 +9,7 @@ import { makeEmblemGeometry } from './emblem-geometry.js';
 import { getFrost } from './frost.js';
 import { clamp, damp, easeInOut, easeOutCubic, hashString, makeRng, smoothstep } from './util.js';
 
-/**
- * The crystal room: one ice crystal per project, stacked down the Y axis, with
- * the camera travelling down the stack as the page scrolls — so each crystal
- * rises up through the frame and the next one rises in from below, which is
- * how igloo.inc's portfolio moves.
- *
- * Everything here reads one shared ref owned by CrystalSite. Nothing that
- * changes per frame goes through React state.
- */
+// 3D crystal gallery view for projects
 
 /** World units between crystals. */
 export const SPACING = 7;
@@ -30,15 +22,11 @@ const ACCENTS = {
   rose: '#E86A8A',
 };
 
-/* Scene-referred values: the ACES pass at the end of the chain lifts ~0.2
-   linear to the pale grey the reference room sits at. */
+/* Scene-referred fog colors */
 const FOG = new Color().setRGB(0.235, 0.244, 0.265);
 const NAVY = new Color().setRGB(0.012, 0.016, 0.028);
 
-/* ── Backdrop ─────────────────────────────────────────────────────────────
-   A sphere that travels with the camera: pale cool gradient, a soft lift
-   behind the subject, a faint screen-space dot grid, and — while a project is
-   open — a grade down to the navy of being inside the ice. */
+// Background sphere and gradient
 
 const BACKDROP_VERT = /* glsl */ `
   varying vec3 vDir;
@@ -84,10 +72,7 @@ function Backdrop({ shared }) {
   );
 }
 
-/* ── Camera ───────────────────────────────────────────────────────────────
-   The damping is the weight: the rig chases the scroll position rather than
-   equalling it, so the stack coasts into place. Opening a project pushes the
-   lens into the crystal and the room goes dark around it. */
+// Camera rig and damping
 
 function Rig({ shared }) {
   const { camera, scene } = useThree();
@@ -106,8 +91,7 @@ function Rig({ shared }) {
     const dt = Math.min(delta, 1 / 20);
     s.f = damp(s.f, s.fTarget, 4.2, dt);
     s.detail = damp(s.detail, s.detailTarget, 2.4, dt);
-    /* Wall clock, not summed dt: dt is clamped for the damping, and summing
-       clamped deltas makes a timeline crawl on a slow or throttled frame loop. */
+    /* Wall clock intro timer */
     if (s.started) {
       if (!s.introAt) s.introAt = performance.now();
       s.intro = Math.min(1, (performance.now() - s.introAt) / 1900);
@@ -130,7 +114,7 @@ function Rig({ shared }) {
   return null;
 }
 
-/* ── One crystal ──────────────────────────────────────────────────────────── */
+// Individual project crystal component
 
 function CrystalUnit({ project, index, shared, small }) {
   const seed = useMemo(
@@ -279,11 +263,7 @@ function CrystalUnit({ project, index, shared, small }) {
   );
 }
 
-/**
- * Only the crystals near the lens are mounted. Each transmission material
- * renders the scene into its own buffer every frame, so a stack of eight
- * mounted at once would be eight extra scene renders for crystals nobody can see.
- */
+/** Only mount crystals near the camera to optimize transmission passes. */
 function Crystals({ projects, shared, small }) {
   const last = projects.length - 1;
   const [range, setRange] = useState([0, Math.min(1, last)]);
@@ -309,10 +289,7 @@ function Crystals({ projects, shared, small }) {
   return out;
 }
 
-/* ── Blurred data text at depth ───────────────────────────────────────────
-   The reference's big out-of-focus mono lines behind the crystal. Drawn to a
-   canvas in a system mono font and blurred there, so no font file is fetched
-   and no depth-of-field pass is needed. */
+// Blurred background data text
 
 function veilTexture(text) {
   const canvas = document.createElement('canvas');
@@ -380,11 +357,7 @@ function DataVeil({ projects }) {
   );
 }
 
-/* ── Leader-line labels ───────────────────────────────────────────────────
-   DOM text pinned to points on the active crystal. Anchors live on the
-   non-spinning group so the lines track the crystal's float and travel
-   without whipping round as it turns. `o` is where the label attaches,
-   in screen pixels from the anchor. */
+// Pinned leader-line annotations
 
 const ANCHORS = [
   { p: [-0.72, 1.35, 0.4], o: [-70, -60] },
@@ -429,8 +402,7 @@ function Labels({ shared, count }) {
       }
     });
 
-    /* A live readout, the way the reference's TEMP figures tick: the
-       crystal's own heading, in degrees. */
+    /* Live heading readout in degrees */
     if (L.rot && unit.spin) {
       const deg = (((unit.spin.rotation.y * 180) / Math.PI) % 360 + 360) % 360;
       L.rot.textContent = deg.toFixed(2);
@@ -440,9 +412,7 @@ function Labels({ shared, count }) {
   return null;
 }
 
-/* ── Lens ─────────────────────────────────────────────────────────────────
-   Colour fringing on fast scrolls and through the open/close dissolve. The
-   offset Vector2 is mutated in place, as in the world's TravelFringe. */
+// Chromatic fringe post-processing pass
 
 function Fringe({ shared }) {
   const ref = useRef(null);
@@ -478,9 +448,7 @@ export default function CrystalStage({ projects, shared }) {
         <directionalLight position={[3, 6, 7]} intensity={1.6} color="#f4f7fb" />
         <directionalLight position={[-5, -2, 3]} intensity={0.5} color="#b9c8dc" />
 
-        {/* Composed from emissive panels, not a downloaded HDRI — the same
-            approach the world's first environment used. The long vertical
-            strips are what put crisp highlights down the crystal facets. */}
+        {/* Environment lighting from emissive panels */}
         <Environment resolution={256} frames={1}>
           <color attach="background" args={['#7a808a']} />
           <Lightformer form="rect" intensity={2.4} color="#ffffff" scale={[14, 7, 1]} position={[0, 7, -2]} rotation-x={Math.PI / 2} />

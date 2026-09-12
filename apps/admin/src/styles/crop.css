@@ -80,9 +80,7 @@
 .crop-dialog[data-shape='portrait'] { width: min(440px, 100%); }
 .crop-dialog[data-shape='portrait'] .crop-frame { max-height: 52vh; }
 
-/* --- Nudge pad --------------------------------------------------------------
-   A d-pad rather than a row of buttons: the spatial arrangement means you press
-   the direction you want rather than reading a label first. */
+/* Nudge directional pad */
 .crop-pad {
   display: grid;
   grid-template-areas: '. up .' 'left reset right' '. down .';

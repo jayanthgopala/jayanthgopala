@@ -30,8 +30,7 @@
   transform: translateY(-1px);
 }
 
-/* Count sits in its own well, mirroring GitHub's own button treatment so the
-   number reads as data rather than part of the label. */
+/* Count badge */
 .gh-count {
   display: inline-grid;
   place-items: center;

@@ -1,13 +1,7 @@
 import { useEffect, useRef } from 'react';
 import '../styles/lightbox.css';
 
-/**
- * Enlarged view of a project screenshot.
- *
- * Deliberately not a <dialog>: Safari only shipped `showModal` recently enough
- * that the fallback would be a blank overlay on older iOS, and the focus trap
- * here is small enough to own.
- */
+// Modal lightbox for enlarged project screenshots
 export default function Lightbox({ src, alt, onClose }) {
   const closeRef = useRef(null);
   const restoreFocusTo = useRef(null);
@@ -23,7 +17,7 @@ export default function Lightbox({ src, alt, onClose }) {
         onClose();
         return;
       }
-      // Two focusable elements, so trapping is just "keep it on the button".
+      // Trap focus on close button
       if (e.key === 'Tab') {
         e.preventDefault();
         closeRef.current?.focus();
@@ -38,7 +32,7 @@ export default function Lightbox({ src, alt, onClose }) {
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = previous;
-      // Send focus back where it came from, or the page jumps to the top.
+      // Restore focus on close
       if (restoreFocusTo.current instanceof HTMLElement) restoreFocusTo.current.focus();
     };
   }, [src, onClose]);

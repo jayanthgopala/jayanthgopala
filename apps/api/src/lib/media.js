@@ -1,22 +1,9 @@
-/**
- * R2 garbage collection.
- *
- * Uploads happen the moment a file is chosen, but the URL only reaches the
- * database when the form is saved. So R2 is *ahead* of the DB by design, and
- * deleting eagerly from the admin panel gets it wrong in both directions:
- * remove-then-cancel leaves the DB pointing at a file that is gone, and
- * replace-then-cancel deletes the image still in use.
- *
- * Reconciling instead of tracking sidesteps all of it. The database is the only
- * authority on what is referenced; anything in the bucket that nothing points
- * at is garbage, however it got that way.
- */
+// R2 bucket garbage collection for unreferenced media objects
 
-// Objects younger than this are never touched — they are almost certainly an
-// upload sitting in a form that has not been saved yet.
+// Grace period before unreferenced uploads can be pruned
 const GRACE_MS = 2 * 60 * 60 * 1000;
 
-/** Every R2 key the database currently points at, across all three columns. */
+// Set of all R2 keys referenced by database rows
 async function referencedKeys(db) {
   const [profile, projects] = await Promise.all([
     db.prepare('SELECT avatar_url, cinematic_avatar_url, favicon_url FROM profile').all(),
@@ -39,10 +26,7 @@ async function referencedKeys(db) {
   return keys;
 }
 
-/**
- * Deletes every object no row points at. Safe to call after any write and from
- * cron; it converges on the same state either way.
- */
+// Deletes orphaned R2 objects older than grace period
 export async function reapOrphans(env) {
   const keep = await referencedKeys(env.DB);
   const cutoff = Date.now() - GRACE_MS;

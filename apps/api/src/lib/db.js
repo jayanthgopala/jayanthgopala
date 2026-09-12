@@ -1,10 +1,4 @@
-/**
- * Data-access layer over D1.
- *
- * Every public read goes through `loadSite`, and the README generator uses
- * exactly the same function. That is what keeps the website and the GitHub
- * profile from ever drifting apart.
- */
+// D1 database access layer for site records
 
 const parseJson = (value, fallback) => {
   try {
@@ -111,11 +105,7 @@ export async function getSocials(db) {
   }));
 }
 
-/**
- * Editable copy as a flat `{ key: value }` map — the shape consumers actually
- * want. The presentation metadata (label, group, hint) is only needed by the
- * admin form, which reads it via `getContentRows`.
- */
+// Editable copy as a flat key-value map.
 export async function getContent(db) {
   const { results } = await db.prepare('SELECT key, value FROM content').all();
   return Object.fromEntries((results || []).map((r) => [r.key, r.value]));
@@ -191,9 +181,7 @@ export async function loadSite(db, opts = {}) {
       getStack(db),
       getSocials(db),
       getContent(db),
-      // These tables arrived in migration 005. A database that predates it
-      // would throw and take the whole payload down, so degrade to empty
-      // instead — the sections simply don't render.
+      // Fallback gracefully to empty arrays if tables do not exist.
       getEducation(db, opts).catch(() => []),
       getExperience(db, opts).catch(() => []),
     ]);
@@ -211,13 +199,7 @@ export async function loadSite(db, opts = {}) {
   };
 }
 
-/**
- * Stable fingerprint of everything that appears in the README.
- *
- * `updatedAt` is excluded deliberately: it changes on every write, so leaving
- * it in would make the hash differ even when nothing visible changed, and the
- * cron job would commit on every run.
- */
+// Computes SHA-256 fingerprint of visible content (excluding timestamps)
 export async function contentHash(site) {
   const material = JSON.stringify({
     profile: { ...site.profile, updatedAt: undefined },

@@ -1,8 +1,4 @@
-// 2D simplex noise and fBm on top of it.
-// This runs on the CPU because displacing in GLSL makes the height unknowable to JavaScript.
-// The camera rig, the scatter and the character all need to ask how high the ground is, and reading that back off the GPU costs more.
-// Seeded and deterministic, or a camera path authored against one terrain would cut through a different one.
-// Simplex not Perlin, Perlin's gradients align to a square grid and streak visibly in wide open terrain.
+// 2D simplex noise and fractal Brownian motion (fBm)
 
 const F2 = 0.5 * (Math.sqrt(3) - 1);
 const G2 = (3 - Math.sqrt(3)) / 6;
@@ -12,12 +8,12 @@ const GRAD = [
   [1, 0], [-1, 0], [0, 1], [0, -1],
 ];
 
-// Fisher-Yates off a small PRNG, doubled to 512 entries so the inner loop never needs a modulo to wrap.
+// Fisher-Yates permutation table shuffle
 function buildPerm(seed) {
   const p = new Uint8Array(256);
   for (let i = 0; i < 256; i += 1) p[i] = i;
 
-  // mulberry32, good enough to shuffle 256 values
+  // PRNG generator
   let s = seed >>> 0;
   const rand = () => {
     s = (s + 0x6d2b79f5) >>> 0;
@@ -43,7 +39,7 @@ export function makeNoise2D(seed = 1337) {
   const perm = buildPerm(seed);
 
   return function noise2D(xin, yin) {
-    // skew the input space to find which simplex cell we're in
+    // Skew input coordinates to find simplex cell
     const s = (xin + yin) * F2;
     const i = Math.floor(xin + s);
     const j = Math.floor(yin + s);
@@ -52,7 +48,7 @@ export function makeNoise2D(seed = 1337) {
     const x0 = xin - (i - t);
     const y0 = yin - (j - t);
 
-    // which of the cell's two triangles
+    // Simplex triangle simplex vertices
     const i1 = x0 > y0 ? 1 : 0;
     const j1 = x0 > y0 ? 0 : 1;
 
@@ -66,7 +62,7 @@ export function makeNoise2D(seed = 1337) {
 
     let n = 0;
 
-    // each corner contributes a radial falloff times a gradient
+    // Corner falloff and gradient dot product
     let t0 = 0.5 - x0 * x0 - y0 * y0;
     if (t0 > 0) {
       t0 *= t0;
@@ -88,12 +84,11 @@ export function makeNoise2D(seed = 1337) {
       n += t2 * t2 * (g[0] * x2 + g[1] * y2);
     }
 
-    return 70 * n; // roughly [-1, 1]
+    return 70 * n;
   };
 }
 
-// Octaves summed at halving amplitude and doubling frequency.
-// One octave is a field of smooth blobs that reads as a duvet, persistence decides dunes or rubble.
+// Fractal Brownian Motion (fBm) multi-octave summation
 export function makeFbm(noise2D, { octaves = 5, lacunarity = 2, persistence = 0.5 } = {}) {
   return function fbm(x, y) {
     let amplitude = 1;

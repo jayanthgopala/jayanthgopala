@@ -5,14 +5,7 @@ const UV_TILE = 4;
 const DEPTH_ATTR = 'aDepth';
 const EDGE_ATTR = 'aEdge';
 
-/*
- * NARROWED from 0.3. This is the fraction of a face given over to turning the
- * corner (compared against sin() across the span). At 0.3 roughly the outer
- * fifth of every face was rounding, so each block read as a cushion and the
- * joints as wide soft valleys. At 0.16 about 85% of the face is genuinely flat
- * and the turn happens in a tight rim at each edge — a sawn block with its
- * arris knocked off, which is what the reference shows.
- */
+// Edge bevel fillet fraction
 const EDGE_FILLET = 0.34;
 
 const fillet = (x) => {
@@ -145,20 +138,7 @@ export function buildShellSegment({
   return geometry;
 }
 
-/**
- * A single voussoir of the entrance arch.
- *
- * CHANGED: this now builds ONE wedge block spanning [-dAngle/2, +dAngle/2]
- * about the +X axis in the XY plane, extruded along Z for `depth`, with its
- * four side faces filleted exactly like a dome block. Previously the whole
- * arch was one ring built in a single call and placed as one piece, so along
- * the tunnel's length there were no joints at all and the entrance read as a
- * smooth barrel. Building per-voussoir (placed by rotation about Z in Igloo.jsx)
- * gives real joints between neighbouring wedges, matching the dome's coursing.
- *
- * The frosted-rim aEdge runs on all four side faces, and aDepth ramps 0 (outer
- * skin / mouth) to 1 (inner skin) so the joints glow from within like the dome.
- */
+// Generates a single wedge voussoir block for the entrance arch
 export function buildVaultSegment({
   radius,
   thickness,

@@ -1,55 +1,25 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { sound } from './lib/sound.js';
 
-/**
- * The way back to the minimal site: a pane of ice that gives where it is
- * touched and flows back into shape.
- *
- * THE PANE IS A SOFT BODY, NOT A WARPED PICTURE. A displacement filter over
- * the whole button dragged pixels from outside the pill across its edge and
- * tore the outline — it read as a glitch. So the outline itself moves: 48
- * points round the pill, each on a spring back to its place, each tugging its
- * neighbours so a disturbance travels round the edge like a wave. It is
- * redrawn every frame as one smooth closed curve, so its edge is always clean.
- *
- * IT NEVER INFLATES. At rest, and under a pointer that is resting on it, the
- * pane is exactly a pill. Only MOVEMENT disturbs it, and always inward: where
- * the pointer travels the glass gives a few pixels, like liquid parting under
- * a finger, and when the pointer stops it flows back with a small wobble. A
- * press dents it harder. (An earlier version swelled toward the pointer and
- * held the swell for as long as the pointer stayed — the button looked
- * inflated.)
- *
- * THE FROST FOLLOWS THE SHAPE. The blur behind the glass is its own layer,
- * clipped to the same live outline.
- *
- * THE TEXT PINCHES AND RIPPLES BACK. One smooth lens — no rings — under the
- * pointer, driven by the same movement, on its own spring back to nothing. It
- * is attached only while something is moving, so resting text is crisp.
- *
- * Both layers reach MARGIN pixels past the button on every side, so a wobble
- * that overshoots outward is never clipped.
- */
-
+// Interactive ice pill button with dynamic vertex displacement and SVG lens filter
 const MARGIN = 14;
 const POINTS = 48;
-/* The simulation runs in fixed steps, whatever the frame rate. */
 const STEP = 1 / 240;
 
-/* The surface. */
-const SPRING = 380; //       pull of each point back to its place
-const COUPLE = 900; //       pull between neighbours — what makes a touch travel
-const DAMP = 16; //          how quickly the wobble dies
-const REACH = 34; //         px: how far along the edge a touch is felt
-const FLOW = 2400; //        inward push at full pointer speed — about 6px of give
-const FLOW_SPEED = 420; //   px/s of pointer speed that counts as full
-const ENTER_KICK = 240; //   px/s inward on first contact
-const PRESS_DENT = 620; //   px/s inward from a press
+// Surface spring physics constants
+const SPRING = 380;
+const COUPLE = 900;
+const DAMP = 16;
+const REACH = 34;
+const FLOW = 2400;
+const FLOW_SPEED = 420;
+const ENTER_KICK = 240;
+const PRESS_DENT = 620;
 
-/* The text lens. */
+// Text distortion lens parameters
 const LENS = 'w-glass-lens';
-const LENS_R = 32; //        px radius of the lens
-const LENS_FLOW = 4200; //   pinch at full pointer speed
+const LENS_R = 32;
+const LENS_FLOW = 4200;
 const LENS_SPRING = 320;
 const LENS_DAMP = 12;
 const LENS_ENTER = 170;
@@ -60,10 +30,7 @@ const LEAVE_AFTER_MS = 420;
 const reduced = () =>
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/**
- * Points round a pill of w x h, evenly spaced by arc length, each with its
- * outward normal. Offset by MARGIN into the layers' own coordinate space.
- */
+// Generates perimeter sample points along a pill shape
 function pill(w, h, n) {
   const r = h / 2;
   const straight = Math.max(0, w - h);
@@ -95,7 +62,7 @@ function pill(w, h, n) {
 
 const f = (v) => v.toFixed(2);
 
-/** A smooth closed curve through the displaced points (Catmull-Rom as Béziers). */
+// Smooth Catmull-Rom closed SVG path from displaced points
 function outline(rest, off) {
   const n = rest.length;
   const xs = new Array(n);
@@ -117,12 +84,7 @@ function outline(rest, off) {
   return `${d}Z`;
 }
 
-/*
- * The lens, as a displacement map: one smooth radial push, strongest a third
- * of the way out and nothing at the centre or the rim — no edge, no rings. Red
- * is the push along x, green along y, 128 is still. Driven with a negative
- * scale it pinches instead of swelling.
- */
+// Procedural radial displacement map for SVG feDisplacementMap
 let lensUrl = '';
 function lensMap() {
   if (lensUrl) return lensUrl;
@@ -167,7 +129,7 @@ export default function MinimalLink({ label = 'Minimal', href = '/' }) {
   const lensDisp = useRef(null);
   const leaving = useRef(false);
 
-  /* Everything that changes per frame lives here, not in React state. */
+  // Mutable per-frame simulation state
   const sim = useRef({
     rest: [],
     off: new Float32Array(POINTS),
@@ -194,7 +156,6 @@ export default function MinimalLink({ label = 'Minimal', href = '/' }) {
     sheenRef.current?.setAttribute('d', d);
     if (frostRef.current) frostRef.current.style.clipPath = `path('${d}')`;
 
-    /* The lens is placed in the label's own pixels. */
     const img = lensImg.current;
     if (img) {
       img.setAttribute('x', f(s.ax - s.lx - LENS_R));
@@ -209,9 +170,7 @@ export default function MinimalLink({ label = 'Minimal', href = '/' }) {
     if (labelRef.current) labelRef.current.style.filter = on ? `url(#${LENS})` : '';
   };
 
-  /* Rebuild the resting outline whenever the button's size changes — a new
-     label, a font arriving, a narrow screen. Before paint, so the first frame
-     already has its pane. */
+  // Measures layout dimensions and initializes pill shape
   useLayoutEffect(() => {
     const el = linkRef.current;
     const measure = () => {
@@ -222,8 +181,6 @@ export default function MinimalLink({ label = 'Minimal', href = '/' }) {
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
-    // draw only touches refs; it does not need to be a dependency.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -233,7 +190,7 @@ export default function MinimalLink({ label = 'Minimal', href = '/' }) {
     };
   }, []);
 
-  /* An inward shove to the part of the edge near the pointer. */
+  // Applies inward velocity impulse to edge points near pointer
   const dent = (amount, reach) => {
     const s = sim.current;
     const px = s.ax + MARGIN;
@@ -249,10 +206,7 @@ export default function MinimalLink({ label = 'Minimal', href = '/' }) {
   const step = (dt) => {
     const s = sim.current;
     s.speed *= Math.exp(-dt * 8);
-    /* 0..1: how hard the pointer is travelling across the glass right now.
-       Nothing at all while it rests — which is what keeps it from inflating. */
     const drive = s.inside ? Math.min(1, s.speed / FLOW_SPEED) : 0;
-    /* Kept for the glass voice, which is fed from tick(). */
     s.drive = drive;
 
     const px = s.ax + MARGIN;
@@ -272,8 +226,6 @@ export default function MinimalLink({ label = 'Minimal', href = '/' }) {
         s.vel[i] += (push - SPRING * o + COUPLE * neighbours - DAMP * s.vel[i]) * STEP;
       }
       for (let i = 0; i < POINTS; i += 1) {
-        /* Deeper inward than out: the give is the effect, the outward swing is
-           only the rebound, and MARGIN leaves room for it without clipping. */
         s.off[i] = Math.max(-14, Math.min(8, s.off[i] + s.vel[i] * STEP));
       }
       s.lensV += (-LENS_FLOW * drive - LENS_SPRING * s.lens - LENS_DAMP * s.lensV) * STEP;
@@ -297,10 +249,8 @@ export default function MinimalLink({ label = 'Minimal', href = '/' }) {
     s.last = now;
     step(dt);
     draw();
-    /* The glass sings while it is flowing, and bends with the lens. */
     sound.glass(s.drive, s.lens);
     if (settled()) {
-      /* Exactly a pill again, and no filter on the text. */
       s.off.fill(0);
       s.vel.fill(0);
       s.lens = 0;
@@ -324,7 +274,6 @@ export default function MinimalLink({ label = 'Minimal', href = '/' }) {
     s.frame = requestAnimationFrame(tick);
   };
 
-  /* Where the pointer is on the button, and how fast it is going. */
   const locate = (event) => {
     const s = sim.current;
     const box = linkRef.current.getBoundingClientRect();
@@ -378,8 +327,6 @@ export default function MinimalLink({ label = 'Minimal', href = '/' }) {
     if (!reduced()) start();
   };
 
-  /* A full navigation tears the page down on the next frame, so the press is
-     given a moment to be seen first. Modified clicks are left to the browser. */
   const onClick = (event) => {
     if (
       event.defaultPrevented ||
@@ -399,8 +346,7 @@ export default function MinimalLink({ label = 'Minimal', href = '/' }) {
     setTimeout(() => window.location.assign(target), LEAVE_AFTER_MS);
   };
 
-  /* Back restores this page from the back-forward cache exactly as it was
-     left — mid-leave. Reset, or the next click would be ignored. */
+  // Reset leave state if restored from back-forward cache
   useEffect(() => {
     const onShow = (event) => {
       if (event.persisted) leaving.current = false;
@@ -435,13 +381,10 @@ export default function MinimalLink({ label = 'Minimal', href = '/' }) {
             <stop offset="0" stopColor="#fff" stopOpacity="0.46" />
             <stop offset="1" stopColor="#fff" stopOpacity="0.14" />
           </linearGradient>
-          {/* Brighter along the top: light catching the rim. */}
           <linearGradient id="w-glass-rim" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="#fff" stopOpacity="0.95" />
             <stop offset="1" stopColor="#fff" stopOpacity="0.4" />
           </linearGradient>
-          {/* The flat grey flood is the neutral map everywhere the lens is
-              not, so only the letters under the pointer move. */}
           <filter
             id={LENS}
             x="-30%"

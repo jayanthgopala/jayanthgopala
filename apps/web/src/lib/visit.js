@@ -1,17 +1,6 @@
 import { apiUrl } from './api.js';
 
-/**
- * Fires the visit beacon once per page load.
- *
- * The device id is a random value generated here and kept in localStorage. It
- * is not derived from anything about the visitor — no fingerprint, no IP, no
- * personal data — so it identifies "this browser on this machine" and nothing
- * else, and is useless anywhere but this site.
- *
- * That choice is what makes two colleagues on one office IP count as two people
- * while the same person reloading counts as one. The server does the de-duping;
- * this only supplies the id.
- */
+/** Fires anonymous visit beacon once per unique browser. */
 
 const KEY = 'pf_device';
 
@@ -30,9 +19,6 @@ function deviceId() {
     localStorage.setItem(KEY, id);
     return id;
   } catch {
-    // Private mode or storage disabled. Returning null means this visit simply
-    // is not counted, which is the right call: inventing an id per load would
-    // inflate uniques rather than leave a gap.
     return null;
   }
 }
@@ -44,8 +30,7 @@ export function recordVisit() {
   const body = JSON.stringify({ id });
   const url = apiUrl('/api/public/view');
 
-  // sendBeacon survives the page being closed mid-flight and never blocks
-  // unload; fetch with keepalive is the fallback where it is missing.
+  // Prefer sendBeacon for non-blocking unload, fallback to fetch keepalive
   try {
     if (navigator.sendBeacon) {
       navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }));

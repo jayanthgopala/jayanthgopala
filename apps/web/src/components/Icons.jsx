@@ -1,7 +1,4 @@
-/**
- * Inline icon set. Bundling ~1KB of paths beats an icon dependency and keeps
- * stroke weight consistent with the type — everything is 1.6px at 20px.
- */
+// Inline SVG icon components
 
 const base = {
   width: 18,

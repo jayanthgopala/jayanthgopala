@@ -63,8 +63,7 @@
   border: 0;
 }
 
-/* The screenshot becomes a button, so strip the button chrome and keep the
-   image behaving exactly as it did before. */
+/* Unstyled button for zoomable media */
 .project-media-btn {
   display: block;
   width: 100%;

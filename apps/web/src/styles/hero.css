@@ -22,8 +22,7 @@
 }
 
 .hero-badge {
-  /* Shared with the mobile layout, which offsets the portrait by exactly this
-     plus the column gap so it starts level with the headline. */
+  /* Offset for portrait vertical alignment */
   height: var(--hero-badge-h, 32px);
   gap: var(--s-2);
   color: var(--text-muted);
@@ -32,8 +31,7 @@
 .hero-badge-sep { color: var(--text-dim); }
 
 .hero-title {
-  /* Cap the measure independently of the grid column so the line breaks land
-     where they read best, not wherever the column happens to end. */
+  /* Limit headline measure for comfortable line breaks */
   max-width: 15ch;
 }
 
@@ -75,18 +73,13 @@
 
 .hero-orb-wrap { display: grid; place-items: center; }
 
-/* Short viewports (most laptops once browser chrome is subtracted).
-   Without this the hero measures ~900px against a ~640px viewport and both
-   CTAs sit below the fold — the one thing a hero must not do. Scale the
-   display type and tighten the rhythm rather than letting it overflow. */
+/* Short viewports */
 @media (min-width: 961px) and (max-height: 820px) {
   .hero {
     padding-top: calc(var(--nav-h) + var(--s-5));
     padding-bottom: var(--s-7);
   }
   .hero-content { gap: var(--s-4); }
-  /* Two classes, so this beats `.display`'s font-size regardless of the order
-     Vite happens to emit the stylesheets in. */
   .hero .hero-title { font-size: clamp(2.5rem, 5vw, 4rem); }
   .hero-lead { font-size: var(--t-body); }
   .orb { width: clamp(150px, 17vw, 210px); }
@@ -97,13 +90,7 @@
 @media (max-width: 960px) {
   .hero { min-height: auto; padding-block: calc(var(--nav-h) + var(--s-6)) var(--s-8); }
 
-  /* Portrait sits beside the copy rather than stacked above it, so the face and
-     the headline are taken in together and the fold still reaches the CTAs.
-
-     `display: contents` dissolves the aside so its children become grid items
-     in their own right — that is what lets the orb pair with the copy while the
-     status card drops to a full-width row of its own. Reordering `.hero-aside`
-     as a block would drag the card along with it. */
+  /* Mobile layout: pair portrait with copy, status card below */
   .hero-inner {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
@@ -112,10 +99,7 @@
   }
   .hero-aside { display: contents; }
   .hero-content { grid-column: 1; grid-row: 1; }
-  /* Starts level with the headline's first line, not the badge above it and not
-     centred on the column — centring drops it down beside the buttons. The
-     offset is the badge box plus the content column's gap, so it stays correct
-     if either token changes. */
+  /* Align portrait with headline top */
   .hero-orb-wrap {
     display: grid;
     grid-column: 2;
@@ -124,15 +108,14 @@
   }
   .hero-status-wrap { grid-column: 1 / -1; grid-row: 2; }
 
-  /* Narrower column, so the headline needs to come down with it. */
+  /* Narrower column */
   .hero .hero-title { font-size: clamp(1.75rem, 7vw, 2.75rem); max-width: 14ch; }
   .hero-lead { max-width: 34ch; }
   .portrait { width: clamp(116px, 30vw, 200px); }
 }
 
 @media (max-width: 560px) {
-  /* Deliberately not larger than the tablet size: the portrait shares its row
-     with the headline here, and anything wider starves the type. */
+  /* Narrow mobile sizing */
   .hero-inner { column-gap: var(--s-4); }
   .portrait { width: clamp(104px, 32vw, 150px); }
 }

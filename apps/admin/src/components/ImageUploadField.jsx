@@ -3,13 +3,7 @@ import { api } from '../lib/api.js';
 import { Button, useToast } from './ui.jsx';
 import CropDialog from './CropDialog.jsx';
 
-/**
- * Drop-or-browse image upload backed by R2.
- *
- * Shared by the project screenshot and the profile portrait — both need the
- * same drag state, size/type guard and preview, and duplicating that once is
- * one time too many.
- */
+// Drop-or-browse image upload field backed by R2
 export default function ImageUploadField({
   label = 'Image',
   hint = 'PNG, JPEG, WebP or AVIF · max 5MB',
@@ -27,7 +21,7 @@ export default function ImageUploadField({
   const [pendingCrop, setPendingCrop] = useState(null);
   const [adjusting, setAdjusting] = useState(null);
 
-  /** Portraits go through the crop step first; screenshots upload as-is. */
+  // Prompt crop modal if enabled, otherwise upload directly
   function accept(file) {
     if (!file) return;
     if (crop) setPendingCrop(file);

@@ -40,10 +40,7 @@ function Row({ label, state, children }) {
   );
 }
 
-/**
- * The live status widget. Its data is refreshed by App's 60s poll, so this
- * component stays purely presentational.
- */
+/** Live status widget displaying availability, local time, and current project. */
 /** Strips protocol, `www.`, `mailto:` and any trailing slash for display. */
 function prettyUrl(url = '') {
   return String(url)
@@ -100,10 +97,7 @@ export default function StatusCard({ status, loading, content = {}, socials = []
         <span className="mono status-progress">{progress}%</span>
       </div>
 
-      {/* Links, not system metrics. Deployment state, "GitHub: operational" and
-          an uptime percentage were seeded demo values that nothing actually
-          measured — a status card is worse than useless if its numbers are
-          decorative. These come from the Links editor. */}
+      {/* Social / contact links */}
       {socials.length > 0 && (
         <div className="status-rows">
           {socials.map((social) => (

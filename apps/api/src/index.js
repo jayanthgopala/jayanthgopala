@@ -14,10 +14,7 @@ import { askHandler, TONES, DEFAULT_TONE } from './routes/ask.js';
 
 const app = new Hono();
 
-/**
- * Credentialed CORS cannot use a wildcard origin — the admin panel sends its
- * session cookie, so we echo back only origins on the allow-list.
- */
+// Allow credentialed CORS requests only from configured origins.
 app.use('*', (c, next) =>
   cors({
     origin: (origin) => {
@@ -48,8 +45,7 @@ app.get('/', (c) =>
 
 app.get('/health', (c) => c.json({ ok: true, time: new Date().toISOString() }));
 
-// --- Live SVG cards embedded in the GitHub README --------------------------
-// Rendered per request, so the profile updates with no commit.
+// Live SVG cards for GitHub README
 
 app.get('/svg/status.svg', async (c) => {
   const site = await loadSite(c.env.DB);
@@ -61,12 +57,7 @@ app.get('/svg/metrics.svg', async (c) => {
   return svgResponse(metricsCardSvg(site));
 });
 
-/**
- * Animated profile banner, one endpoint per palette. The README embeds both in
- * a <picture> so GitHub picks the right one for the viewer's theme — the same
- * asset can't do both, because SVG served as an <img> has no access to the
- * host page's colour scheme.
- */
+// Animated profile banner for light and dark themes
 app.get('/svg/banner-dark.svg', async (c) => {
   const site = await loadSite(c.env.DB);
   return svgResponse(bannerSvg(site, 'dark'));
@@ -84,14 +75,7 @@ app.get('/svg/views.svg', async (c) => {
   return viewsResponse(viewsSvg(count, label));
 });
 
-/**
- * Star / fork counts for the site's GitHub buttons.
- *
- * Proxied rather than called from the browser so the numbers are cached at the
- * edge instead of spending each visitor's 60-req/hour unauthenticated GitHub
- * rate limit — a handful of visitors would otherwise exhaust it and the buttons
- * would show nothing.
- */
+// GitHub star and fork count stats endpoint
 app.get('/api/public/repo-stats', async (c) => {
   const owner = c.env.GITHUB_USER;
   const repo = c.req.query('repo') || c.env.GITHUB_REPO;
@@ -121,13 +105,11 @@ app.get('/api/public/repo-stats', async (c) => {
     await c.env.CACHE.put(cacheKey, JSON.stringify(data), { expirationTtl: 900 });
     return c.json(data);
   } catch {
-    // Buttons still render and still link to GitHub; they just lose the count.
     return c.json({ stars: null, forks: null }, 200);
   }
 });
 
-// --- R2 media --------------------------------------------------------------
-
+// R2 media asset proxy
 app.get('/media/:key', async (c) => {
   const object = await c.env.MEDIA.get(c.req.param('key'));
   if (!object) return c.notFound();
@@ -139,16 +121,13 @@ app.get('/media/:key', async (c) => {
   return new Response(object.body, { headers });
 });
 
-// --- Routes ----------------------------------------------------------------
+// API routes
 
 app.route('/api/public', publicRoutes);
 app.route('/api/auth', authRoutes);
 app.post('/api/ask', askHandler);
 
-// Voice presets, so the widget renders whatever the Worker actually supports
-// rather than a hardcoded list that can drift out of sync.
-// Deliberately NOT /api/ask/tones — a GET under the same prefix as the POST
-// route would not match and returned 404.
+// Return available assistant voice presets for the frontend.
 app.get('/api/tones', (c) =>
   c.json({
     default: DEFAULT_TONE,
@@ -168,10 +147,7 @@ app.onError((err, c) => {
 export default {
   fetch: app.fetch,
 
-  /**
-   * Cron self-heal. Not forced: if the content hash matches the last successful
-   * push this is a no-op, so an unchanged profile never produces a commit.
-   */
+  // Scheduled background sync and cleanup tasks.
   async scheduled(event, env, ctx) {
     ctx.waitUntil(
       syncProfile(env, { trigger: 'cron' })
@@ -179,8 +155,7 @@ export default {
         .catch((e) => console.error('cron sync failed:', e.message))
     );
 
-    // Backstop for the per-write sweep: a request that ends early can lose its
-    // waitUntil, so orphans get one more chance every half hour.
+    // Periodic sweep for orphaned R2 media assets.
     ctx.waitUntil(
       reapOrphans(env)
         .then((keys) => keys.length && console.log('cron reaped R2:', keys.join(', ')))

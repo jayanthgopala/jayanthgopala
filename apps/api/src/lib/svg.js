@@ -1,10 +1,4 @@
-/**
- * Server-rendered SVG cards embedded in the GitHub README.
- *
- * These re-render on every request, so the profile shows live status without a
- * commit. Colours mirror apps/web/src/styles/tokens.css so the README and the
- * website read as one product.
- */
+// Server-rendered SVG status cards for GitHub README
 
 const T = {
   bg: '#0D0D10',
@@ -113,14 +107,7 @@ export function statusCardSvg(site) {
   const availColor = s.available ? T.mint : T.amber;
   const availText = s.available ? s.availabilityNote : 'Currently at capacity';
 
-  // Links across the lower half, not system metrics. Deployment state and an
-  // uptime percentage were seeded values that nothing measured; a status card
-  // showing decorative numbers is worse than one showing none.
-  /**
-   * Shortens a link to the part that identifies it. Four columns leaves ~24
-   * characters, and a blind truncation produces `github.com/jayanthgop…` —
-   * the handle, which is the only interesting part, is exactly what gets cut.
-   */
+  // Shortens links and extracts recognizable handles for compact presentation.
   const pretty = (url = '') => {
     const bare = String(url)
       .replace(/^mailto:/, '')
@@ -151,10 +138,7 @@ export function statusCardSvg(site) {
     state: 'operational',
   }));
 
-  // No "current project" block. It was the largest element on the card and the
-  // most likely to go stale — a progress percentage nothing measures reads as
-  // noise the moment it stops being edited. Availability plus links is what
-  // stays true. The card shrinks to suit.
+  // Status card body markup with availability and link columns.
   const body = `
     ${dot(48, 44, availColor, !!s.available)}
     ${value(64, 49, availText, { size: 15, weight: 600 })}

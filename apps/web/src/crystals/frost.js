@@ -2,18 +2,7 @@ import { CanvasTexture, NoColorSpace, RepeatWrapping } from 'three';
 import { makeNoise2D, makeFbm } from '../world/lib/noise.js';
 import { smoothstep } from './util.js';
 
-/**
- * Frost for the crystals: a roughness map and a normal map from one field.
- *
- * The reference's ice is PART frosted and part clear — glassy windows you see
- * the object through, broken by milky patches. So roughness is not a texture
- * of grain over a uniform value, it is a MASK: broad noise decides where the
- * frost is, and only inside it does the surface go rough and bumpy. The clear
- * areas stay near-polished, which is what lets the refraction read.
- *
- * Generated once and shared by every crystal — the facets are box-projected,
- * so the same map lands differently on each hull anyway.
- */
+/** Generates procedural frost roughness and normal maps for crystal materials. */
 
 const S = 256;
 let cache = null;
@@ -37,8 +26,7 @@ export function getFrost() {
       const v = y / S;
       const b = broad(u * 3.2, v * 3.2);
       const f = fine(u * 15 + 7.1, v * 15 + 3.4);
-      /* Mostly clear: frost only where the broad field peaks, so the object
-         inside can be seen through the windows between the patches. */
+      /* Frost mask based on broad noise field */
       const frost = smoothstep(0.12, 0.45, b);
       const i = y * S + x;
       height[i] = f * (0.2 + frost * 0.8) + b * 0.25;

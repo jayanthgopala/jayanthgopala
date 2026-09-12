@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-/**
- * Load-once-then-mutate resource. Every editor page has the same shape —
- * fetch, hold a draft, save, report — so it lives here rather than being
- * copy-pasted seven times.
- */
+// Data fetching and reload hook for admin pages
 export function useResource(loader, deps = []) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -30,12 +26,7 @@ export function useResource(loader, deps = []) {
   return { data, setData, loading, error, reload };
 }
 
-/**
- * Editable form state seeded from a fetched record.
- *
- * `dirty` drives the save button — an always-enabled Save invites pointless
- * writes, and every write here triggers a GitHub sync.
- */
+// Form draft state with dirty tracking
 export function useDraft(source) {
   const [draft, setDraft] = useState(source ?? {});
   const [baseline, setBaseline] = useState(source ?? {});

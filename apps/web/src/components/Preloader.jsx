@@ -3,7 +3,7 @@ import { copy } from '../lib/api.js';
 import '../styles/preloader.css';
 
 const SESSION_KEY = 'pf_preloaded';
-const HOLD_MS = 320; // beat at 100% before the fade
+const HOLD_MS = 320;
 const FADE_MS = 420;
 
 const wasPreloaded = () => {
@@ -14,22 +14,7 @@ const wasPreloaded = () => {
   }
 };
 
-/**
- * Cinematic-mode intro overlay.
- *
- * Shown once per browser session, not once per page load — an entrance
- * animation is a first impression, and re-running it on every navigation turns
- * a flourish into a toll booth.
- *
- * Two phases: ease toward 90% while the payload is in flight, then run to 100
- * once it lands. The counter is decorative, so it deliberately refuses to show
- * 100% before the data is actually there.
- *
- * All sequencing lives inside the rAF loop. Driving it from an effect keyed on
- * `percent` does not work: the value changes every frame, so the effect's
- * cleanup cancels the dismissal timer ~16ms after each time it is set, and the
- * overlay sticks at 100% forever.
- */
+// Initial site loading screen with circular progress indicator
 export default function Preloader({ content = {}, ready }) {
   const [percent, setPercent] = useState(0);
   const [phase, setPhase] = useState(() => (wasPreloaded() ? 'done' : 'loading'));
@@ -40,8 +25,6 @@ export default function Preloader({ content = {}, ready }) {
   const readyAt = useRef(0);
   const readyFrom = useRef(0);
 
-  // `ready` is read inside the loop, so keep a ref rather than restarting the
-  // animation (and its clock) when it flips.
   const readyRef = useRef(ready);
   readyRef.current = ready;
 
@@ -51,12 +34,6 @@ export default function Preloader({ content = {}, ready }) {
     const start = performance.now();
     let cancelled = false;
 
-    // Only flips the phase. The unmount timer lives in its own effect below:
-    // scheduling it here put it in `timers.current`, and the phase change then
-    // triggered this effect's cleanup, which cleared the very timer meant to
-    // finish the transition. The overlay faded to opacity 0 but never
-    // unmounted, and the scroll lock never released — an invisible overlay
-    // holding the page hostage.
     const finish = () => setPhase('exiting');
 
     const tick = (now) => {
@@ -64,14 +41,12 @@ export default function Preloader({ content = {}, ready }) {
 
       let next;
       if (!readyRef.current) {
-        // Decelerating toward the 90% ceiling.
         next = 90 * (1 - Math.exp(-(now - start) / 620));
       } else {
         if (!readyAt.current) {
           readyAt.current = now;
           readyFrom.current = current.current;
         }
-        // Linear run-in, so the last stretch doesn't crawl asymptotically.
         const t = Math.min(1, (now - readyAt.current) / 520);
         next = readyFrom.current + (100 - readyFrom.current) * t;
       }
@@ -81,7 +56,7 @@ export default function Preloader({ content = {}, ready }) {
 
       if (next >= 99.9) {
         timers.current.push(setTimeout(finish, HOLD_MS));
-        return; // stop the loop — this is what lets the timer survive
+        return;
       }
       raf.current = requestAnimationFrame(tick);
     };
@@ -96,7 +71,7 @@ export default function Preloader({ content = {}, ready }) {
     };
   }, [phase]);
 
-  // Exit transition, owned by its own effect so no other cleanup can cancel it.
+  // Mark session storage once exit animation finishes
   useEffect(() => {
     if (phase !== 'exiting') return;
     const id = setTimeout(() => {
@@ -110,19 +85,14 @@ export default function Preloader({ content = {}, ready }) {
     return () => clearTimeout(id);
   }, [phase]);
 
-  /**
-   * Failsafe. Whatever happens to the counter — a stalled fetch, a bug like the
-   * one above — the overlay tears itself down after this. An entrance animation
-   * must never be able to trap the page behind a scroll lock.
-   */
+  // Fallback timeout in case asset loading stalls
   useEffect(() => {
     if (phase === 'done') return;
     const id = setTimeout(() => setPhase('done'), 8000);
     return () => clearTimeout(id);
   }, [phase]);
 
-  // Lock scrolling only while the overlay is actually visible. Holding it
-  // through the fade means a stuck exit leaves the page unscrollable.
+  // Lock document scroll while preloader is visible
   useEffect(() => {
     if (phase !== 'loading') return;
     const previous = document.body.style.overflow;

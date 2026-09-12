@@ -2,16 +2,7 @@ import { BufferAttribute, BufferGeometry, Float32BufferAttribute, Vector3 } from
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
 import { makeRng } from './util.js';
 
-/**
- * A chunk of ice, per project.
- *
- * igloo.inc's crystals are authored meshes: tall, irregular, faceted blocks
- * with broken faces. This builds the same kind of body from a seed — points on
- * an elongated ellipsoid, a few flat fracture planes sheared through it, and the
- * convex hull around what is left. The fracture planes are what make it read as
- * split ice rather than as a lumpy sphere: every point beyond a plane is pushed
- * onto it, so the hull gets a large flat face there, the way a cleaved block does.
- */
+// Procedural faceted crystal geometry generation from seeded points and cleavage planes
 
 /* Ellipsoid radii: taller than wide, shallower front to back. */
 const RX = 1.0;
@@ -30,8 +21,7 @@ export function makeCrystalGeometry(seed) {
   const points = [];
   const N = 24;
 
-  /* Fibonacci sphere, jittered: an even spread with no two points stacked,
-     which keeps the hull from collapsing into slivers. */
+  // Jittered Fibonacci sphere point distribution
   for (let i = 0; i < N; i += 1) {
     const y = 1 - ((i + 0.5) / N) * 2;
     const r = Math.sqrt(1 - y * y);
@@ -40,8 +30,7 @@ export function makeCrystalGeometry(seed) {
     points.push(new Vector3(Math.cos(th) * r * RX * k, y * RY * k, Math.sin(th) * r * RZ * k));
   }
 
-  /* Cleavage planes. Offset is a fraction of the body's own extent along the
-     plane normal, so a cut across the top trims the tip rather than halving it. */
+  // Cleavage fracture planes
   const n = new Vector3();
   const cuts = 3 + Math.floor(rand() * 2);
   for (let c = 0; c < cuts; c += 1) {
@@ -56,9 +45,7 @@ export function makeCrystalGeometry(seed) {
 
   const geo = new ConvexGeometry(points);
 
-  /* Box-projected UVs so the frost map lands on every facet without a UV
-     unwrap. The seams this leaves fall on facet edges, where the eye expects a
-     change anyway. */
+  // Triplanar box-projected UV coordinates
   const pos = geo.attributes.position;
   const nor = geo.attributes.normal;
   const uv = new Float32Array(pos.count * 2);
@@ -86,14 +73,7 @@ export function makeCrystalGeometry(seed) {
   return geo;
 }
 
-/**
- * The survey web around the crystal: thin lines between nearby points on a
- * shell, a few tiny triangles, and the points themselves.
- *
- * Points are sorted by angle around the vertical axis before the segments are
- * written, so growing the draw range sweeps the web round the crystal instead
- * of popping it in at random.
- */
+// Procedural wireframe plexus web surrounding the crystal
 export function makePlexus(seed) {
   const rand = makeRng(seed ^ 0x51ed27);
   const pts = [];

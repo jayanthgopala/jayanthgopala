@@ -1,9 +1,4 @@
-/* ==========================================================================
-   3D portrait object.
-
-   Depth comes from translateZ on a preserve-3d scene, so the layers parallax
-   against each other under tilt. Everything animates transform/opacity only.
-   ========================================================================== */
+/* 3D portrait object. Depth comes from translateZ on a preserve-3d scene, so the layers parallax against each other under tilt. Everything animates transform/opacity only. */
 
 .portrait {
   --tilt-x: 0deg;
@@ -27,7 +22,7 @@
   animation: portrait-float 10s var(--ease-soft) infinite alternate;
 }
 
-/* --- Ambient glow (deepest layer) ----------------------------------------- */
+/* Ambient glow (deepest layer) */
 
 .portrait-glow {
   position: absolute;
@@ -39,7 +34,7 @@
   animation: portrait-breathe 8s var(--ease-soft) infinite alternate;
 }
 
-/* --- Subject -------------------------------------------------------------- */
+/* Subject */
 
 .portrait-disc {
   position: absolute;
@@ -101,15 +96,7 @@
   mix-blend-mode: screen;
 }
 
-/* Light treatment for an art-directed upload (e.g. a stylized 3D render).
-   Keep the crop wide, the colour intact, and only enough vignette to seat the
-   subject against the page. */
-/* Framed on the head. A half-body render puts the face in the top fifth of the
-   frame, so a centred crop fills the circle with torso.
-   `transform-origin: top` is the load-bearing part: scale() zooms about the
-   element's centre by default, which drags the visible band down past the face
-   no matter what `object-position` says. Anchoring to the top pins the crop to
-   the head and zooms away from it. */
+/* Light treatment for art-directed uploads */
 .portrait[data-graded='light'] .portrait-img {
   object-position: 48% 0%;
   transform: scale(1.75);
@@ -124,7 +111,7 @@
                     rgba(8, 8, 10, 0.9) 99%);
 }
 
-/* --- Particles ------------------------------------------------------------ */
+/* Particles */
 
 .portrait-particle {
   position: absolute;
@@ -137,10 +124,7 @@
   box-shadow: 0 0 12px rgba(99, 210, 195, 0.85);
 }
 
-/* Depth and radius are per-particle; the orbit keyframe reads them, so one
-   keyframe block serves all three.
-   Negative delays offset the phase — without them all three start at 0° and
-   read as a row of dots rather than independent orbits. */
+/* Per-particle orbit radius, depth, and staggered animation phase */
 .portrait-particle-1 {
   --pz: 80px;
   --pr: clamp(112px, 13vw, 165px);
@@ -163,7 +147,7 @@
   animation-delay: -15s;
 }
 
-/* --- Contact shadow ------------------------------------------------------- */
+/* Contact shadow */
 
 .portrait-shadow {
   position: absolute;
@@ -178,7 +162,7 @@
   transform: translateZ(-70px);
 }
 
-/* --- Keyframes ------------------------------------------------------------ */
+/* Keyframes */
 
 @keyframes portrait-float {
   from { translate: 0 -7px; }
@@ -201,10 +185,7 @@
   }
 }
 
-/* --- Reduced motion --------------------------------------------------------
-   The object stays — it is content, not decoration — but every drift,
-   orbit and spin stops. Tilt is disabled in motion.jsx. */
-
+/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .portrait-scene,
   .portrait-glow,
@@ -218,11 +199,7 @@
   .portrait-scene { transform: none; }
 }
 
-/* --- Hand-cropped uploads --------------------------------------------------
-   An image from the crop tool is already framed exactly as the owner wants, so
-   the orb must show it 1:1. Without this the light-treatment rules above scale
-   it 1.75x from the top edge and the site disagrees with the crop preview —
-   the face ends up pushed below the circle. */
+/* Hand-cropped uploads */
 .portrait[data-cropped] .portrait-img {
   transform: none;
   transform-origin: 50% 50%;
@@ -230,18 +207,7 @@
   object-fit: cover;
 }
 
-/*
- * The disc's feathered mask is removed for cropped images.
- *
- * That mask is `circle at 50% 46%` fading from 62% radius — centred 4% high and
- * dissolving everything past 62%. Against a hand-framed crop that reads as the
- * image being re-cropped to a smaller, off-centre circle: the exact "shows one
- * thing, crops to the outer ring" mismatch.
- *
- * `border-radius: 50%` + `overflow: hidden` already give a hard circle, and
- * because the uploaded image is square and fills the disc, that circle is its
- * inscribed circle — precisely what the crop dialog previews.
- */
+/* Remove feathered mask for cropped images so the crop matches 1:1 */
 .portrait[data-cropped] .portrait-disc {
   -webkit-mask-image: none;
   mask-image: none;

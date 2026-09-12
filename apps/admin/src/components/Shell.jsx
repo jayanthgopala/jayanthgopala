@@ -24,10 +24,7 @@ const PAGES = [
   { id: 'publish', label: 'Publish', Component: PublishPage },
 ];
 
-/**
- * Hash routing. A seven-page single-operator console does not need a router
- * dependency — the hash is already a perfectly good, bookmarkable state store.
- */
+// Hash-based routing without external router dependencies.
 function useHashRoute(fallback) {
   const [route, setRoute] = useState(() => window.location.hash.slice(1) || fallback);
 

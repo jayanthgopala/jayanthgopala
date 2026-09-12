@@ -10,24 +10,12 @@ function ProjectCard({ project, index, featuredLabel, labels, onEnlarge }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
 
-  /*
-   * The card leads with `summary`, falling back to `description` when there is
-   * no summary. So the disclosure is only meaningful when `description` holds
-   * something the card is not already showing — otherwise it would expand to a
-   * duplicate of the line above it.
-   */
-  /*
-   * Click feedback. Fired on pointer *down* rather than click so the animation
-   * runs during the natural press-and-release, instead of delaying the lightbox
-   * to make room for itself.
-   */
+  // Press feedback on pointer down
   function pressFeedback(e) {
     const btn = e.currentTarget;
     const box = btn.getBoundingClientRect();
     btn.style.setProperty('--px', `${e.clientX - box.left}px`);
     btn.style.setProperty('--py', `${e.clientY - box.top}px`);
-    // Clearing the attribute and forcing a reflow before setting it again is
-    // the only reliable way to replay a CSS animation on a repeated click.
     btn.removeAttribute('data-press');
     void btn.offsetWidth;
     btn.setAttribute('data-press', '');
@@ -62,17 +50,14 @@ function ProjectCard({ project, index, featuredLabel, labels, onEnlarge }) {
                 width="800"
                 height="500"
               />
-              {/* Standing affordance — the image is a button, and nothing else
-                  on the card says so. Visible at rest rather than on hover,
-                  which touch devices never get. */}
+              {/* Zoom button affordance */}
               <span className="project-zoom" aria-hidden="true">
                 <ExpandIcon width={14} height={14} />
               </span>
               <span className="project-ripple" aria-hidden="true" />
             </button>
           ) : (
-            /* No screenshot uploaded yet — an accent-tinted placeholder keeps
-               the grid rhythm instead of collapsing the card. */
+            /* Placeholder when no screenshot uploaded */
             <div className="project-media-empty" aria-hidden="true">
               <span>{project.title?.[0] || '·'}</span>
             </div>
@@ -105,9 +90,6 @@ function ProjectCard({ project, index, featuredLabel, labels, onEnlarge }) {
               </button>
 
               <div className="project-details-panel" id={panelId}>
-                {/* The clipping wrapper carries no spacing of its own — padding
-                    on the grid item itself survives the collapsed row and
-                    leaves a visible gap. */}
                 <div className="project-details-inner">
                   <p>{project.description}</p>
                 </div>

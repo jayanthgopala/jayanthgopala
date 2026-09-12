@@ -3,13 +3,7 @@ import { renderReadme, COMMIT_PREFIX } from './readme.js';
 import { pushReadme } from './github.js';
 import { SYNC_HASH_KEY, SYNC_TIME_KEY } from './cache.js';
 
-/**
- * Renders and publishes the GitHub profile README.
- *
- * `force: false` (the default for automatic triggers) short-circuits when the
- * content hash matches the last successful push — that is what keeps the
- * contribution graph free of empty commits.
- */
+// Renders and publishes GitHub profile README with content hash deduplication
 export async function syncProfile(env, { trigger = 'manual', force = false } = {}) {
   const site = await loadSite(env.DB);
   const hash = await contentHash(site);
@@ -64,10 +58,7 @@ export async function recentSyncs(env, limit = 20) {
   }));
 }
 
-/**
- * Fire-and-forget sync used after admin writes. Never rejects — a GitHub
- * outage must not turn a successful content save into a 500 for the operator.
- */
+// Background README sync after admin writes.
 export function syncInBackground(c, trigger = 'auto') {
   c.executionCtx.waitUntil(
     syncProfile(c.env, { trigger }).catch((err) => {

@@ -14,25 +14,10 @@ import ErrorBanner from './components/ErrorBanner.jsx';
 import AskWidget from './components/AskWidget.jsx';
 import { recordVisit } from './lib/visit.js';
 
-/*
- * The 3D world, behind a lazy import.
- *
- * three + @react-three/fiber + drei is by far the largest thing in the
- * repository, and the overwhelming majority of visitors land on the normal site
- * and never ask for the world. A static import would put all of it in the main
- * bundle and make every one of those visits pay for it. Lazy means Vite emits it
- * as its own chunk that is fetched only when this route is actually opened.
- */
+// Lazy load 3D world bundle to keep initial main bundle light
 const WorldSite = lazy(() => import('./world/WorldSite.jsx'));
 
-/*
- * Routing, such as it is.
- *
- * The app has never had a router and does not need one for a second route —
- * pulling in react-router to answer a single boolean would add a dependency and
- * a provider to a site that is otherwise one page. Read once at module scope
- * because this cannot change without a navigation, which reloads the document.
- */
+// Path-based route check for /world
 const IS_WORLD =
   typeof window !== 'undefined' &&
   window.location.pathname.replace(/\/+$/, '') === '/world';
@@ -52,16 +37,12 @@ export default function App() {
       setError(null);
     } catch (err) {
       if (err.name === 'AbortError') return;
-      // The page still renders — every component handles empty data. A dead
-      // API degrades to a skeleton, it never blanks the site.
       setError(err.message);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Once per load. The server de-dupes by device, so a reload or a return
-  // visit does not add a unique — see lib/visit.js.
   useEffect(() => {
     recordVisit();
   }, []);
@@ -72,16 +53,16 @@ export default function App() {
     return () => controller.abort();
   }, [load]);
 
-  // The status card is the only volatile part of the page, so it alone polls.
+  // Poll status endpoint periodically
   useEffect(() => {
     const controller = new AbortController();
     const id = setInterval(async () => {
-      if (document.hidden) return; // don't poll a backgrounded tab
+      if (document.hidden) return;
       try {
         const status = await fetchStatus({ signal: controller.signal });
         setSite((prev) => ({ ...prev, status: { ...prev.status, ...status } }));
       } catch {
-        /* transient — the next tick retries */
+        /* retry on next interval */
       }
     }, STATUS_POLL_MS);
 
@@ -91,8 +72,7 @@ export default function App() {
     };
   }, []);
 
-  // Lets world.css scope every rule under an attribute the normal site never
-  // sets, the same way the old cinematic mode was isolated.
+  // Scope world route styles under data-route="world"
   useEffect(() => {
     if (!IS_WORLD) return;
     document.documentElement.dataset.route = 'world';
@@ -101,8 +81,7 @@ export default function App() {
     };
   }, []);
 
-  // The edge middleware already put the right title in the served HTML; this
-  // keeps it correct after a client-side content change without a reload.
+  // Update document title and meta description
   useEffect(() => {
     const title = site.content?.['seo.title'];
     if (title) document.title = title;
@@ -113,12 +92,7 @@ export default function App() {
     }
   }, [site.content]);
 
-  /*
-   * The world replaces the page entirely — no nav, no backdrop, no sections.
-   * It is a single continuous scene, and the normal site's chrome laid over it
-   * would be exactly the "3D hero with a website underneath" this is meant not
-   * to be.
-   */
+  // Render standalone 3D world when visiting /world
   if (IS_WORLD) {
     return (
       <Suspense fallback={null}>

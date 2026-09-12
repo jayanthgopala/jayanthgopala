@@ -4,7 +4,7 @@
   gap: clamp(var(--s-4), 2.4vw, var(--s-6));
 }
 
-/* --- Card ----------------------------------------------------------------- */
+/* Card */
 
 .project {
   --accent: var(--iris);
@@ -38,7 +38,7 @@
   background: linear-gradient(135deg, var(--accent), transparent 55%, var(--accent));
 }
 
-/* --- Media ---------------------------------------------------------------- */
+/* Media */
 
 .project-media {
   position: relative;
@@ -91,7 +91,7 @@
 }
 .project:hover .project-sheen { opacity: 1; }
 
-/* --- Body ----------------------------------------------------------------- */
+/* Body */
 
 .project-body {
   display: flex;
@@ -142,7 +142,7 @@
 
 .project-tech-item { height: 26px; font-size: var(--t-micro); }
 
-/* --- Links ---------------------------------------------------------------- */
+/* Links */
 
 .project-links {
   display: flex;
@@ -165,7 +165,7 @@
 .project-link-primary { color: var(--accent); }
 .project-link-primary:hover { color: var(--accent); filter: brightness(1.2); }
 
-/* --- Skeleton ------------------------------------------------------------- */
+/* Skeleton */
 
 .project-skeleton {
   min-height: 420px;
@@ -191,11 +191,7 @@
   .project-skeleton { animation: none; }
 }
 
-/* --- Expandable detail -------------------------------------------------------
-   The card shows `summary`; the longer `description` lives behind this. Kept to
-   a hairline and a small label so it reads as a quiet affordance rather than a
-   second call to action competing with Live Demo / GitHub. */
-
+/* Expandable detail */
 .project-details { margin-top: var(--s-4); }
 
 .project-details-toggle {
@@ -225,14 +221,7 @@
 }
 .project-details[data-open] .project-details-chevron { transform: rotate(180deg); }
 
-/*
- * Animating to `1fr` rather than a guessed max-height: the text is DB-driven, so
- * any fixed height would either clip a long description or leave dead space
- * after a short one.
- *
- * `visibility` does double duty — it keeps the collapsed copy out of the
- * accessibility tree and out of the tab order, which `height: 0` alone does not.
- */
+/* Grid template row animation with visibility toggle */
 .project-details-panel {
   display: grid;
   grid-template-rows: 0fr;
@@ -262,12 +251,7 @@
   .project-details-chevron { transition: none; }
 }
 
-/* --- Click feedback ----------------------------------------------------------
-   Two layers, because a press and a selection are different signals. The ripple
-   starts at the exact contact point and reads as physical impact; the reticle
-   snaps to the frame and reads as the system acknowledging a target. Together
-   they cover "realistic" and "futuristic" without tipping into neon — the
-   brightest thing on screen is a one-frame white edge that is gone in 600ms. */
+/* Click feedback */
 
 .project-media-btn {
   position: relative;
@@ -277,11 +261,7 @@
   cursor: zoom-in;
 }
 
-/*
- * Depth on press. Kept shallow and returning to the hover scale rather than to
- * 1: the image is already scaled up while the pointer is over it, so animating
- * back to rest would read as the card flinching away from the click.
- */
+/* Depth on press */
 .project-media-btn[data-press] img { animation: project-press 460ms var(--ease); }
 
 @keyframes project-press {
@@ -290,11 +270,7 @@
   100% { transform: scale(1.035); }
 }
 
-/*
- * Expanding shockwave. The bright edge is part of the gradient rather than a
- * border, so it scales as a proportion of the radius — a real border would
- * thicken to ~30px by the end of the animation.
- */
+/* Expanding shockwave ripple */
 .project-ripple {
   position: absolute;
   left: var(--px, 50%);
@@ -327,14 +303,7 @@
   .project-media-btn[data-press] .project-ripple { animation: none; }
 }
 
-/*
- * The standing "this opens" affordance.
- *
- * At rest rather than on hover: hover does not exist on touch, and the image
- * being a button is otherwise undiscoverable — there is no caption, cursor or
- * outline to hint at it. Low contrast keeps it from competing with the
- * screenshot; it lifts to full strength when the card is hovered.
- */
+/* Zoom button affordance */
 .project-zoom {
   position: absolute;
   top: var(--s-3);

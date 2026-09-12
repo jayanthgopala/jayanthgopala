@@ -18,15 +18,7 @@ export default function Nav({
   const immersiveRef = useRef(null);
   const launching = useRef(false);
 
-  /*
-   * The click into the immersive version PLAYS before it leaves.
-   *
-   * A full navigation tears the page down on the next frame, so a click
-   * animation on a plain link is never seen. The ripple and the flash get
-   * 420ms, then the browser goes. Modified clicks (new tab, new window) are left
-   * entirely to the browser — this page is not going anywhere in those cases,
-   * so there is nothing to wait for. Reduced motion skips the wait.
-   */
+  /* Play launch animation before navigating to immersive world */
   const launchImmersive = (event) => {
     if (
       event.defaultPrevented ||
@@ -49,9 +41,7 @@ export default function Nav({
     setTimeout(() => window.location.assign(link.href), 420);
   };
 
-  /* Coming Back restores this page from the back-forward cache exactly as it
-     was left — mid-launch. Reset, or the link would stay lit and ignore the
-     next click. */
+  /* Reset launching state when restoring from bfcache */
   useEffect(() => {
     const onShow = (event) => {
       if (!event.persisted) return;
@@ -62,10 +52,7 @@ export default function Nav({
     return () => window.removeEventListener('pageshow', onShow);
   }, []);
 
-  // Targets are structural (they must match section ids); only the labels are
-  // editable, which is the part that ever needs changing.
-  // Anchors only appear when the section they point at has content, so the nav
-  // never offers a link that scrolls to nothing.
+  // Section links filtered to sections with content
   const links = [
     { href: '#projects', label: copy(content, 'nav.projects', 'Projects'), show: true },
     {
@@ -92,9 +79,7 @@ export default function Nav({
               {link.label}
             </a>
           ))}
-          {/* The way into the immersive igloo version, styled as one more nav
-              link. A plain href, not a client route: the app reads the path
-              once at load, so a full navigation is what switches it over. */}
+          {/* Link to immersive 3D world */}
           <a
             ref={immersiveRef}
             href="/world"
@@ -104,7 +89,7 @@ export default function Nav({
             <span className="nav-immersive-label">
               {copy(content, 'nav.immersive', 'Immersive')}
             </span>
-            {/* A cursor that taps now and then — the invitation to click. */}
+            {/* Tap cursor indicator */}
             <span className="nav-immersive-tap" aria-hidden="true">
               <svg viewBox="0 0 16 16" width="13" height="13">
                 <path d="M3 1.5v11.2l2.9-2.7 2.1 4.4 1.8-.9-2.1-4.3 3.9-.3z" />
@@ -113,8 +98,7 @@ export default function Nav({
           </a>
         </nav>
 
-        {/* Résumé only renders when a URL is actually set — an empty button
-            that goes nowhere is worse than no button. */}
+        {/* Résumé link */}
         {profile.resumeUrl && (
           <a
             className="btn btn-secondary nav-cta nav-resume"
@@ -134,7 +118,6 @@ export default function Nav({
             rel="noreferrer noopener"
           >
             <SocialIcon icon="github" />
-            {/* The link's own label from the Links editor — no separate key. */}
             <span>{github.label}</span>
           </a>
         )}

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
-/* --- Form primitives ------------------------------------------------------ */
+// Form primitives
 
 export function Field({ label, hint, full, children }) {
   return (
@@ -100,10 +100,7 @@ export function Empty({ children }) {
   return <div className="empty">{children}</div>;
 }
 
-/* --- Toasts ---------------------------------------------------------------
-   Every save, delete and publish reports back here. Silent success is the
-   fastest way to make an operator distrust a panel.                          */
-
+// Toast notification context and provider
 const ToastContext = createContext(null);
 
 export function ToastProvider({ children }) {

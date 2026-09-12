@@ -1,6 +1,6 @@
 /* Stack, Contact, Footer and the error banner. */
 
-/* --- Stack ---------------------------------------------------------------- */
+/* Stack */
 
 .stack-grid {
   display: grid;
@@ -44,7 +44,7 @@
   transition: width var(--d-slow) var(--ease);
 }
 
-/* --- Contact -------------------------------------------------------------- */
+/* Contact */
 
 .contact {
   --accent: var(--iris);
@@ -108,7 +108,7 @@
   transform: translateY(-2px);
 }
 
-/* --- Footer --------------------------------------------------------------- */
+/* Footer */
 
 .footer {
   border-top: 1px solid var(--border);
@@ -140,7 +140,7 @@
 }
 .footer-social:hover { color: var(--text); }
 
-/* --- Error banner --------------------------------------------------------- */
+/* Error banner */
 
 .error-banner {
   position: fixed;

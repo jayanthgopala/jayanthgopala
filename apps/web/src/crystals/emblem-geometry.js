@@ -12,14 +12,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { makeRng } from './util.js';
 import { randomUnit } from './crystal-geometry.js';
 
-/**
- * The object frozen inside each crystal.
- *
- * igloo.inc freezes each company's logo. These projects have no 3D logos, so
- * each one gets a sculptural form generated from its slug: the same project
- * always gets the same object, and no two projects are likely to share one.
- * Three families, so the set reads as varied rather than as one shape re-rolled.
- */
+/** Generates procedural 3D sculpture forms frozen inside crystal hulls. */
 
 const UP = new Vector3(0, 1, 0);
 const RADIUS = 0.42;
@@ -63,8 +56,7 @@ function knot(rand) {
   return new TorusKnotGeometry(0.5, 0.12 + rand() * 0.05, 200, 18, p, qn);
 }
 
-/* A strut lattice: a polyhedron's edges as rods with a node at every vertex,
-   and a smaller rotated one caged inside it. */
+/* Strut lattice structure */
 function lattice(rand) {
   const parts = [];
   const q = new Quaternion();

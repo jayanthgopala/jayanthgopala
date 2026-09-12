@@ -52,9 +52,7 @@ export default function Contact({ profile, socials = [], content = {} }) {
                 )}
               </div>
 
-              {/* Star / fork live down here rather than in the nav: they are a
-                  call to action once someone has read the work, not a
-                  navigation control competing with the mode toggle. */}
+              {/* GitHub action buttons */}
               <GitHubButtons profile={profile} content={content} />
 
               {socials.length > 0 && (

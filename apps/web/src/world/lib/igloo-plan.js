@@ -1,18 +1,16 @@
-/*
- * TRACED OFF igloo.inc, BY SCANNING ITS SILHOUETTE ROW BY ROW.
- */
+/* Igloo silhouette profile curve [radiusRatio, heightRatio] */
 export const PROFILE = [
-  [1.0, 0.0], //  ground
-  [1.0, 0.1], //  the wall is vertical
-  [1.0, 0.2], //
-  [1.0, 0.3], //
-  [1.0, 0.4], //
-  [1.0, 0.5], //
-  [1.0, 0.6], //  and stays vertical to about 0.65
-  [0.966, 0.7], //  the cap begins
-  [0.849, 0.8], //
-  [0.66, 0.9], //
-  [0.0, 1.0], //  pole
+  [1.0, 0.0],
+  [1.0, 0.1],
+  [1.0, 0.2],
+  [1.0, 0.3],
+  [1.0, 0.4],
+  [1.0, 0.5],
+  [1.0, 0.6],
+  [0.966, 0.7],
+  [0.849, 0.8],
+  [0.66, 0.9],
+  [0.0, 1.0],
 ];
 
 export const COURSE_BLOCKS = [13, 13, 13, 13, 13, 12];
@@ -45,9 +43,7 @@ export function makeProfile(radius, height, points = PROFILE) {
   };
 }
 
-/**
- * The entrance archway, dimensioned to match the reference image proportions.
- */
+/** Entrance archway dimensions and masonry plan. */
 export function entrancePlan(radius) {
   const clearSpan = radius * 0.44;
   const intrados = clearSpan / 2;

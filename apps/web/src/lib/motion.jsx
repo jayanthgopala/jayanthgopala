@@ -1,24 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-/**
- * Framer-Motion-style interactions without the dependency.
- *
- * The brief asks for fade-in, slide-up, hover lift, ripple, tilt and gradient
- * movement. Every one of those is a transform or an opacity change, which CSS
- * transitions already do on the compositor. All this module contributes is the
- * *trigger* — which is a few lines of IntersectionObserver and pointer maths,
- * against ~34KB gzipped for the library.
- */
+/** Lightweight CSS transition triggers for scroll reveal and pointer tilt. */
 
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/**
- * Reveal an element when it scrolls into view. Unobserves after the first
- * trigger — re-animating on every scroll-by is the single most common way
- * scroll animation turns distracting.
- */
+/** Reveal an element once when it scrolls into view. */
 export function useReveal({ threshold = 0.15, rootMargin = '0px 0px -10% 0px' } = {}) {
   const ref = useRef(null);
   const [visible, setVisible] = useState(() => prefersReducedMotion());
@@ -60,10 +48,7 @@ export function Reveal({ children, delay = 0, className = '', as: Tag = 'div', .
   );
 }
 
-/**
- * Very subtle card tilt. Capped at 4° — past roughly 6° it stops reading as
- * depth and starts reading as a gimmick.
- */
+/** Pointer tilt effect with configurable max angle. */
 export function useTilt({ max = 4 } = {}) {
   const ref = useRef(null);
   const frame = useRef(0);

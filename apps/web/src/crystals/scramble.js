@@ -1,14 +1,4 @@
-/**
- * Text that decodes out of noise, the way every label on igloo.inc arrives.
- *
- * Written straight to the node's textContent from its own rAF loop — it changes
- * every frame for under a second, and routing that through React state would
- * re-render the page sixty times a second to change some letters.
- *
- * Characters resolve left to right with a ragged front: each one waits until
- * its own threshold, and until then shows a fresh random glyph every frame.
- * Spaces never scramble, so word shapes are readable before the letters are.
- */
+/** Scrambles text into random glyphs that resolve left to right. */
 
 const GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/<>[]_-+*#=';
 

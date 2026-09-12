@@ -2,14 +2,7 @@ import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-/**
- * A production build without VITE_API_URL used to fall back to a hardcoded
- * Worker URL, which meant every fork shipped a bundle pointing at the original
- * author's API. Failing here surfaces it in the build log, where it is one line
- * to fix, instead of as a blank page after deploy.
- *
- * `npm run setup` writes .env for you; on Pages, set it on the project.
- */
+// Validates VITE_API_URL is configured for production builds.
 export function requireApiUrl(mode) {
   if (mode !== 'production') return; // dev proxies to a local Worker
   if (String(process.env.VITE_API_URL || '').trim()) return;
@@ -33,8 +26,7 @@ export default defineConfig(({ mode }) => {
   plugins: [react()],
   resolve: {
     alias: {
-      // See apps/web/vite.config.js — same reason: Pages installs inside this
-      // directory, so the shared tokens have to resolve by path, not workspace.
+      // Resolve shared tokens package path directly.
       '@portfolio/tokens': fileURLToPath(new URL('../../packages/tokens', import.meta.url)),
     },
   },

@@ -24,8 +24,7 @@
         -webkit-font-smoothing: antialiased;
       }
 
-      /* A very slight lift behind the dome. It reads as depth rather than as a
-         gradient because nothing else in the frame is lit from that direction. */
+      /* Radial backdrop glow */
       body::before {
         content: "";
         position: fixed;
@@ -41,8 +40,7 @@
         height: 100%;
         display: block;
         z-index: 1;
-        /* The pointer belongs to the igloo, so the browser must not claim it
-           for panning or double-tap zoom on touch. */
+        /* Prevent browser default touch panning */
         touch-action: none;
       }
 

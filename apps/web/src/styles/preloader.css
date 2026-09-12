@@ -99,8 +99,7 @@
   transition: width 120ms linear;
 }
 
-/* An unskippable full-screen overlay is exactly what reduced-motion users are
-   asking to avoid. Strip the transitions so it appears and clears instantly. */
+/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .preloader,
   .preloader-progress,

@@ -1,10 +1,6 @@
 import '../styles/sections.css';
 
-/**
- * Shown only when the API is unreachable. The page still renders its skeleton
- * behind this — a portfolio that goes blank on a fetch failure is worse than
- * one that shows a degraded shell.
- */
+// Displayed when the content API is unreachable
 export default function ErrorBanner({ message, onRetry }) {
   return (
     <div className="error-banner glass" role="status">

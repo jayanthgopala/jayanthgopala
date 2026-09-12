@@ -1,11 +1,8 @@
 import { DataTexture, LinearFilter, RepeatWrapping, RGBAFormat, UnsignedByteType } from 'three';
 import { makeFbm, makeNoise2D } from './noise.js';
 
-// The block texture that breaks the cut into chunks. Generated from a seed, nothing downloaded.
-// r: where the cut arrives first. One value per rectangle so the wipe crosses a block at once and reads as fragments.
-// g: the seam push. Soft horizontal streaks, hard-edged bands here showed as dead straight lines on screen.
-// b: the front's raggedness, smooth low frequency noise.
-// g and b tile seamlessly, a jump in either draws a vertical line down the wipe at every repeat.
+// Procedural block cut mask texture for transition effects
+// R: arrival step, G: seam distortion, B: raggedness
 
 const SIZE = 256;
 
@@ -20,7 +17,7 @@ function mulberry32(seed) {
   };
 }
 
-// Stretch a field so its values span the whole 0..1 range the shader sweeps
+// Normalise field to [0, 1] range
 function normalise(field) {
   let min = Infinity;
   let max = -Infinity;
@@ -80,7 +77,7 @@ function blockField(rand, noise) {
   return field;
 }
 
-// Blended with copies of itself shifted by one tile, so at every edge the blend is the copy continuing on the far side.
+// 4-corner seamless tiling blend
 function seamless(at) {
   const field = new Float32Array(SIZE * SIZE);
   for (let y = 0; y < SIZE; y += 1) {
@@ -101,7 +98,7 @@ function seamless(at) {
 export function createCutTexture(seed = 4051) {
   const rand = mulberry32(seed);
   const r = blockField(rand, makeNoise2D(seed + 1));
-  const streaks = makeFbm(makeNoise2D(seed + 3), { octaves: 3 }); // stretched about 14:1, streaks not blobs
+  const streaks = makeFbm(makeNoise2D(seed + 3), { octaves: 3 });
   const g = seamless((x, y) => streaks(x / 70, y / 5));
   const slope = makeFbm(makeNoise2D(seed + 2), { octaves: 3 });
   const b = seamless((x, y) => slope(x / 88, y / 88));
@@ -117,7 +114,6 @@ export function createCutTexture(seed = 4051) {
   const texture = new DataTexture(data, SIZE, SIZE, RGBAFormat, UnsignedByteType);
   texture.wrapS = RepeatWrapping;
   texture.wrapT = RepeatWrapping;
-  // Linear, not nearest. Razor sharp block edges are exactly what read as a straight line across the wipe.
   texture.magFilter = LinearFilter;
   texture.minFilter = LinearFilter;
   texture.generateMipmaps = false;

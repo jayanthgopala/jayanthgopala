@@ -1,9 +1,4 @@
-/**
- * Minimal GitHub Contents API client — just enough to keep one file in sync.
- *
- * Token requirement: a fine-grained PAT scoped to the profile repo only, with
- * `Contents: read and write`. See docs/GITHUB-TOKEN.md.
- */
+// GitHub Contents API client for README sync
 
 const API = 'https://api.github.com';
 
@@ -59,10 +54,7 @@ async function putContents(env, { content, sha, message }) {
   return res;
 }
 
-/**
- * Write the README. Re-reads the SHA and retries once on 409/422, which is what
- * GitHub returns when the file moved between our read and our write.
- */
+// Writes the README file with conflict retry on concurrent modifications.
 export async function pushReadme(env, content, message) {
   if (!env.GITHUB_TOKEN) {
     throw new Error('GITHUB_TOKEN is not set — run: wrangler secret put GITHUB_TOKEN');
@@ -79,10 +71,7 @@ export async function pushReadme(env, content, message) {
   if (!res.ok) {
     const body = await res.text();
 
-    // 403 here is almost always a permissions gap, not a bad token — GitHub
-    // returns 401 for those. Fine-grained tokens fail this way when Contents
-    // is missing or read-only, or when the repo wasn't ticked under
-    // "Only select repositories". The raw message says none of that.
+    // Handle permissions error for fine-grained tokens.
     if (res.status === 403) {
       throw new Error(
         `GitHub refused the write (403). The token authenticates but lacks permission. ` +

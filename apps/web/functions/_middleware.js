@@ -1,20 +1,5 @@
-/**
- * Cloudflare Pages middleware — injects live SEO metadata into the served HTML.
- *
- * Why this exists: the site is a client-rendered SPA, so `index.html` ships
- * whatever `<title>` and OG tags were baked in at build time. Google executes
- * JS and would eventually see the updated values, but the crawlers that matter
- * for link previews — LinkedIn, Slack, X, WhatsApp, Discord — read the raw
- * HTML response and never run a line of JavaScript. Setting these from React
- * therefore fixes search but not sharing.
- *
- * HTMLRewriter streams the rewrite at the edge, so this costs no measurable
- * latency and the document still starts flushing immediately.
- *
- * Configure `API_URL` in the Pages project's environment variables.
- */
-
-const CACHE_TTL = 300; // seconds — SEO copy changes rarely
+// Cloudflare Pages middleware — injects live SEO metadata into served HTML.
+const CACHE_TTL = 300; // seconds
 
 const esc = (s = '') =>
   String(s)
@@ -33,14 +18,7 @@ class AttributeSetter {
   }
 }
 
-/**
- * Repoints an icon <link> at the uploaded favicon.
- *
- * `type` and `sizes` are stripped rather than rewritten: the bundled tags
- * declare PNG at a specific size, and an upload may be neither. A wrong `type`
- * makes some browsers skip the icon entirely, and a wrong `sizes` makes them
- * pick badly among links that now all resolve to the same image.
- */
+// Repoints an icon <link> at the uploaded favicon
 class IconSetter {
   constructor(href) {
     this.href = href;
@@ -68,13 +46,7 @@ export async function onRequest(context) {
 
   const type = response.headers.get('content-type') || '';
 
-  /*
-   * A hashed asset that no longer exists falls through to the SPA rule and is
-   * answered with index.html — a 200 of type text/html. The browser then
-   * refuses it as a stylesheet or module and the page renders blank, which
-   * reads as a total outage rather than a missing file. Fail honestly so the
-   * cause is visible and a reload can recover.
-   */
+  // Return 404 for missing hashed assets rather than index.html fallback
   if (url.pathname.startsWith('/assets/') && type.includes('text/html')) {
     return new Response('Not found', {
       status: 404,
@@ -85,15 +57,12 @@ export async function onRequest(context) {
   // Only rewrite HTML documents — never assets, and never a 404.
   if (!type.includes('text/html') || !response.ok) return response;
 
-  // Runtime variable, not build-time — but defaulted for the same reason as the
-  // client: without it the page silently serves placeholder link previews.
-  // Same normalisation as the client: a scheme-less value would make the
-  // fetch below relative to the Worker itself and quietly return HTML.
+  // Resolve API URL
   const rawApi = String(env.API_URL || 'https://portfolio-api.jayanthgopala21.workers.dev')
     .trim()
     .replace(/\/+$/, '');
   const apiUrl = /^https?:\/\//i.test(rawApi) ? rawApi : `https://${rawApi}`;
-  if (!rawApi) return response; // not configured — serve the static head
+  if (!rawApi) return response;
 
   let site;
   try {
@@ -103,7 +72,6 @@ export async function onRequest(context) {
     if (!res.ok) return response;
     site = await res.json();
   } catch {
-    // A metadata fetch must never take the page down with it.
     return response;
   }
 
@@ -116,23 +84,11 @@ export async function onRequest(context) {
     'Portfolio';
 
   const description = content['seo.description'] || profile.headline || '';
-  // Empty means the operator never uploaded one, so the tags stay as built and
-  // the icons bundled in public/ keep serving.
   const favicon = profile.faviconUrl ? esc(profile.faviconUrl) : '';
   const image = profile.avatarUrl ? esc(profile.avatarUrl) : '';
   const canonical = new URL(request.url).origin;
 
-  /**
-   * JSON-LD Person schema.
-   *
-   * This is the piece that lets a search engine treat "Jayanth Gopala V" as an
-   * entity rather than a string of words on a page. `sameAs` is the important
-   * field: it links this site to the profiles that already rank, which is how
-   * a crawler learns they are the same person.
-   *
-   * Injected here rather than in index.html so it always reflects live content,
-   * and so it is present in the raw HTML for crawlers that never run JS.
-   */
+  // JSON-LD Person schema for search engines
   const personSchema = {
     '@context': 'https://schema.org',
     '@type': 'Person',
@@ -195,20 +151,7 @@ export async function onRequest(context) {
   }
 
   const rewritten = rewriter.transform(response);
-  /*
-   * Deliberately NOT shared-cached, despite this being the obvious place for it.
-   *
-   * The edge caches by URL, and publishing a new build does not purge that
-   * entry. For the whole TTL the CDN therefore keeps handing out a document
-   * that references the *previous* build's hashed assets — which no longer
-   * exist, so every one of them 404s into the SPA fallback and the site is
-   * blank until the entry expires. That was the five-minute window after each
-   * deploy, and it matched CACHE_TTL exactly.
-   *
-   * The cost of dropping it is one HTMLRewriter pass, not a round trip: the
-   * metadata fetch above keeps its own `cf.cacheTtl`, so the API call this
-   * depends on is still served from cache.
-   */
+  // Keep HTML responses un-cached at the edge to ensure fresh asset references
   rewritten.headers.set('Cache-Control', 'public, max-age=0, must-revalidate');
   return rewritten;
 }

@@ -11,25 +11,7 @@ import { ACTS, actAt } from './chapters.js';
 import { copy } from '../lib/api.js';
 import '../styles/world.css';
 
-/**
- * The world route: a fixed canvas, a scroll extent, and a thin HUD over it.
- *
- * The HUD is deliberately DOM rather than in-scene. The reference site renders
- * even its wordmark as MSDF geometry inside WebGL, which looks superb and costs
- * it selectable text, real links, screen-reader access and find-in-page. Text
- * that is *part of the world* — headlines standing in the fog at depth — will be
- * drawn in-scene where the depth is the point. Text that is *chrome* stays in
- * the DOM where it belongs.
- */
-
-/**
- * The current act, as state.
- *
- * The one place a scroll-driven value is allowed to become React state, because
- * it changes seven times across the whole journey rather than sixty times a
- * second. It is polled on a frame loop and only committed when the act actually
- * changes, so the tree re-renders exactly seven times.
- */
+// Track current act based on scroll progress.
 function useActiveAct() {
   const { progress } = useWorldScroll();
   const [act, setAct] = useState(ACTS[0]);
@@ -52,27 +34,14 @@ function useActiveAct() {
   return act;
 }
 
-/**
- * The sound control.
- *
- * OFF BY DEFAULT, AND THAT IS NOT A PREFERENCE. Every browser blocks audio
- * until a gesture, so a control that claimed to be on would be lying on first
- * load — and sound that starts by itself on a portfolio is the behaviour people
- * install blockers for. The first click is what both starts the context and
- * turns it on, which is exactly the gesture the policy wants.
- *
- * The soundscape is built lazily inside lib/sound.js — the context is not
- * created until this is first pressed, so a visitor who never touches it
- * allocates nothing at all.
- */
+// Ambient sound toggle.
 function SoundToggle() {
   const [on, setOn] = useState(false);
   const { flight, cut } = useWorldScroll();
 
   useEffect(() => () => sound.dispose(), []);
 
-  /* Stop when the tab is hidden. A backgrounded tab playing wind is the thing
-     people hunt through their tabs to find and close. */
+  // Pause audio when document is hidden.
   useEffect(() => {
     if (!on) return undefined;
     const onVisibility = () => {
@@ -83,15 +52,7 @@ function SoundToggle() {
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, [on]);
 
-  /*
-   * The two voices nobody else can feed.
-   *
-   * The igloo and the glass button report from their own frame loops, because
-   * they own the numbers. The air and the cut are properties of the page as a
-   * whole — how fast it is travelling, how far through the wipe it is, how
-   * hard the cursor is stirring the air — so they are read here, in the one
-   * component that already knows whether there is any sound to feed.
-   */
+  // Feed velocity and cut progress to sound engine.
   useEffect(() => {
     if (!on) return undefined;
     let frame = 0;
@@ -146,9 +107,7 @@ function Hud({ profile = {}, content = {} }) {
           <p className="w-mark">{profile.name || 'Portfolio'}</p>
           <p className="w-role">{profile.role || ''}</p>
         </div>
-        {/* Back to the minimal site — a full navigation, for the same reason
-            the way in is one: the route is read once at load. The glass
-            ripples under the pointer; see MinimalLink. */}
+        {/* Navigation link to minimal mode */}
         <MinimalLink label={copy(content, 'world.minimal', 'Minimal')} />
       </header>
 
@@ -159,16 +118,7 @@ function Hud({ profile = {}, content = {} }) {
   );
 }
 
-/*
- * Dev-only crash reporter.
- *
- * A component that throws inside the R3F Canvas takes down the whole canvas
- * subtree and leaves a correctly-sized, entirely blank canvas behind — visually
- * identical to a scene that simply has nothing in it. The error goes to the
- * console, which is exactly where an automated browser session cannot reliably
- * read it. Mirroring it onto an attribute makes the failure visible in the DOM,
- * which is the one channel that always works.
- */
+// Mirror unhandled errors to DOM in dev mode.
 function useCrashReporter() {
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -189,28 +139,7 @@ function useCrashReporter() {
   }, []);
 }
 
-/**
- * Run `done` after the browser has had two frames to paint — or after a short
- * timer if it is never going to give us any.
- *
- * THE TIMER IS NOT A BELT-AND-BRACES FALLBACK, IT IS THE FIX FOR A REAL BUG.
- *
- * requestAnimationFrame does not fire in a hidden tab. Not late — never, for as
- * long as the tab stays in the background. This handshake gates whether the
- * Stage mounts at all, so a visitor who opens the site in a background tab (a
- * middle-click, a "open link in new tab", a session restore) and switches to it
- * a minute later finds the loader still sitting there, and it stays there: the
- * callback that was supposed to start the world was scheduled for a frame that
- * had not happened yet, and switching to the tab does not retroactively run it.
- *
- * It also makes the world untestable in any automated browser, where the tab is
- * very often not the visible one — which is how this was found.
- *
- * Racing a timeout against the frames keeps the good behaviour when the tab IS
- * visible (the loader gets its two frames to paint before the main thread is
- * taken for a second by the terrain build) and guarantees the world is built
- * either way. Whichever fires first wins and the other is cancelled.
- */
+// Ensures the DOM has painted before blocking work begins.
 function afterTwoFrames(done) {
   let inner = 0;
   let settled = false;
@@ -224,8 +153,6 @@ function afterTwoFrames(done) {
   const outer = requestAnimationFrame(() => {
     inner = requestAnimationFrame(finish);
   });
-  /* Comfortably longer than two frames on any machine that is actually
-     painting, so the rAF path wins whenever there is one. */
   const timer = setTimeout(finish, 120);
 
   return () => {
@@ -238,79 +165,17 @@ function afterTwoFrames(done) {
 export default function WorldSite({ site = {} }) {
   useCrashReporter();
 
-  /*
-   * THE EXTENT IS NOT A PAGE COUNT ANY MORE.
-   *
-   * It was `pages={3}`: three screens for one camera move. The world now hands
-   * over to the work page part-way down, so the scroll is three stretches —
-   * the journey, the cut, the page — set in SEGMENTS in chapters.js, with the
-   * page's length measured rather than chosen. The pacing control lives there
-   * now: more screens in a stretch slows every beat in it together.
-   */
-
-  /*
-   * THE TWO-FRAME HANDSHAKE, and it is the whole reason the loader is visible
-   * at all.
-   *
-   * Mounting <Stage /> kicks off a great deal of SYNCHRONOUS work — three
-   * generated texture sets and a 512x512 displaced terrain. Synchronous means
-   * the browser cannot paint while it runs. Render the loader and the Stage in
-   * the same commit and the loader is queued behind the freeze it exists to
-   * cover, so the user stares at a blank page and then the finished world
-   * appears: the loader is technically present and never seen.
-   *
-   * Waiting two animation frames guarantees a paint has landed before the work
-   * starts. One frame is not enough — the first fires before the commit's paint
-   * on some browsers. The same handshake runs again afterwards to decide when
-   * the world is actually up.
-   */
   const [mountStage, setMountStage] = useState(false);
   const [framesReady, setFramesReady] = useState(false);
   const [iglooReady, setIglooReady] = useState(false);
-  /* The scene compiled and running smoothly — see Warmup in Stage.jsx. */
   const [warmed, setWarmed] = useState(false);
 
-  /*
-   * THE LOADER COMES DOWN WHEN THE IGLOO IS THERE, NOT WHEN THE STAGE IS.
-   *
-   * The two-frame handshake below only knows that the scene graph has been
-   * committed and painted once. It cannot know about the igloo, because the
-   * igloo is the one thing in this world that is FETCHED — a 392 KB .bin and
-   * two textures — and that fetch starts after the canvas is already up. So the
-   * loader was lifting on a world with a hole in it, and the first thing a
-   * visitor saw was the igloo popping in, or worse, assembling.
-   *
-   * Both conditions, and the fetch is the one that actually gates it.
-   */
-  /* Three conditions now: warmed is the scene compiled and running smoothly,
-     which is what keeps the stalls out of the opening descent. */
   const ready = framesReady && iglooReady && warmed;
 
   const handleIglooReady = useCallback(() => setIglooReady(true), []);
   const handleWarm = useCallback(() => setWarmed(true), []);
 
-
-  /*
-   * THE BAKED ASSETS ARE FETCHED BEFORE THE STAGE EXISTS, not by it.
-   *
-   * Everything downstream reads heights and material maps synchronously, from
-   * inside useMemo and useFrame — the terrain's vertex loop, the scree scatter,
-   * the igloo's footing, the camera rig's ground clearance every frame. None of
-   * those can await, and making them able to would mean pushing async through
-   * the whole scene graph for the sake of one fetch. So the fetch is hoisted
-   * out in front of all of it: by the time anything asks, lib/baked.js has the
-   * answer in memory and hands it over synchronously.
-   *
-   * RUN ALONGSIDE THE PAINT HANDSHAKE, NOT AFTER IT. The two are independent —
-   * one waits on the network, the other on the compositor — and sequencing them
-   * would add one to the other for no reason. The fetch is asynchronous, so it
-   * cannot delay the loader's paint the way the old synchronous generation did.
-   *
-   * loadBakedWorld resolves rather than rejects when the assets are missing,
-   * having already logged it, and the generators run as they always did. So a
-   * failed or absent bake costs the seventeen seconds this removed and nothing
-   * else — which is exactly where the site was before.
-   */
+  // Preload baked height and texture assets before mounting stage.
   useEffect(() => {
     let cancelled = false;
     let cancelFrames = () => {};
@@ -334,22 +199,14 @@ export default function WorldSite({ site = {} }) {
     return afterTwoFrames(setFramesReady);
   }, [mountStage]);
 
-  /*
-   * A loader that waits on a fetch must not be able to outlive it.
-   *
-   * IglooBlocks reports ready on failure as well as on success, so this covers
-   * only the case it cannot report from — a request that never settles at all,
-   * on a connection bad enough to hang rather than error. The world behind is
-   * complete apart from the igloo, so showing it is strictly better than a
-   * loading screen that never leaves.
-   */
+  // Fallback timeout in case asset fetch hangs.
   useEffect(() => {
     if (!mountStage || iglooReady) return undefined;
     const id = setTimeout(() => setIglooReady(true), 20_000);
     return () => clearTimeout(id);
   }, [mountStage, iglooReady]);
 
-  /* What the loading screen waits on, in the order they normally finish. */
+  // Loading steps tracked by WorldLoader.
   const loadSteps = [
     { label: 'Fetching the terrain', done: mountStage },
     { label: 'Building the world', done: framesReady },
@@ -358,8 +215,6 @@ export default function WorldSite({ site = {} }) {
   ];
 
   return (
-    /* Locked until ready: a scroll made under the loader would move the
-       camera behind it, and the world would open somewhere it never showed. */
     <ScrollProvider locked={!ready}>
       {mountStage && (
         <Stage

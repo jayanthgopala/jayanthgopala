@@ -1,40 +1,12 @@
-/**
- * API client for the public site.
- *
- * Dev resolves to '' so Vite's proxy handles /api and the browser sees a
- * same-origin request. Production falls back to the deployed Worker.
- *
- * The fallback exists because a missing VITE_API_URL fails in a genuinely
- * confusing way: Vite inlines the variable at BUILD time, so an unset one
- * leaves BASE empty, the app requests /api/public/site from its own origin,
- * Pages' SPA fallback answers with index.html, and JSON.parse reports
- * `Unexpected token '<'`. Nothing in that message points at a missing env var.
- * This URL is a public endpoint, not a secret, so defaulting to it is safe.
- */
+// API client for the public site
 
-/**
- * A base URL without a scheme is a *relative* path to the browser, so
- * `fetch('example.com/api/x')` silently resolves against the current origin.
- * On Pages that hits the SPA fallback, returns index.html, and surfaces as
- * `Unexpected token '<'` — a parse error that says nothing about the real
- * cause. Cheap to normalise, so we do.
- */
+// Normalizes API base URL ensuring protocol scheme is present
 function normaliseBase(value) {
   const raw = String(value || '').trim().replace(/\/+$/, '');
   if (!raw) return '';
   return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
 }
 
-/*
- * No fallback to a hardcoded URL on purpose.
- *
- * A default here would point every fork at the original author's Worker: it
- * would work locally (the preview port is on their allow-list) and then fail in
- * production with an opaque CORS error, showing someone else's content in the
- * one case it did connect. The build refuses to produce that bundle — see the
- * guard in vite.config.js — so this is only ever unset in development, where
- * requests are relative and the dev server proxies them.
- */
 const BASE = normaliseBase(import.meta.env.VITE_API_URL || '');
 
 export const mediaUrl = (path) => {
@@ -42,11 +14,6 @@ export const mediaUrl = (path) => {
   return /^https?:\/\//.test(path) ? path : `${BASE}${path}`;
 };
 
-/**
- * Absolute URL for an API path, for callers that need the URL itself rather
- * than a response — sendBeacon, for one, takes a URL and no options.
- * Empty BASE in development is intentional: the dev server proxies it.
- */
 export const apiUrl = (path) => `${BASE}${path}`;
 
 async function get(path, { signal } = {}) {
@@ -60,14 +27,11 @@ export const fetchStatus = (opts) => get('/api/public/status', opts);
 export const fetchProjects = (opts) => get('/api/public/projects', opts);
 export const fetchRepoStats = (opts) => get('/api/public/repo-stats', opts);
 
-/** Grounded Q&A. Surfaces the server's own wording on failure — it explains
- *  rate limits and outages better than a generic message would. */
+// Grounded Q&A API request with conversation history
 export async function askQuestion(question, history = []) {
   const res = await fetch(`${BASE}/api/ask`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    // History travels with every call — the Worker is stateless, so without it
-    // a reply like "yes" or "go on" reaches the model with no antecedent.
     body: JSON.stringify({ question, history }),
   });
   const data = await res.json().catch(() => ({}));
@@ -75,11 +39,7 @@ export async function askQuestion(question, history = []) {
   return data;
 }
 
-/**
- * Rendered while the network request is in flight. Keeping the shape identical
- * to the real payload means components never branch on "is it loaded yet" —
- * they just render, and the skeleton state comes from `loading`.
- */
+// Initial placeholder schema rendered while network request is in flight
 export const EMPTY_SITE = {
   profile: {
     name: '', role: '', headline: '', description: '', location: '', email: '',
@@ -99,26 +59,10 @@ export const EMPTY_SITE = {
   content: {},
 };
 
-/**
- * Copy lookup with a fallback.
- *
- * Every fixed string on the site goes through this. The fallback is not
- * decoration — it is what renders during the first paint (before the payload
- * lands) and on a database that predates a newly added key, so the page never
- * flashes blank labels.
- */
+// Copy lookup with fallback value
 export const copy = (content, key, fallback = '') => content?.[key] || fallback;
 
-/**
- * Makes a user-entered link safe to put in an href.
- *
- * A URL typed without a scheme — `login.example.net` — is a *relative* path to
- * the browser, so the link silently resolves against the current origin and
- * lands back on this site. Anyone entering a URL in the admin panel will type
- * it that way sooner or later, so normalise rather than expecting discipline.
- *
- * `mailto:`, `tel:` and anchors are left alone.
- */
+// Ensures external URLs have https scheme if omitted
 export function externalUrl(url = '') {
   const raw = String(url).trim();
   if (!raw) return '';

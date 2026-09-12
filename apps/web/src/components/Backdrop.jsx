@@ -1,12 +1,6 @@
 import '../styles/backdrop.css';
 
-/**
- * Ambient background: a slow gradient mesh, three drifting blobs, and a fine
- * grain overlay.
- *
- * Fixed-position and `pointer-events: none`, so it never participates in
- * layout or hit-testing. The blobs animate transform only — no repaints.
- */
+// Ambient background with gradient mesh, drifting blobs, and grain overlay.
 export default function Backdrop() {
   return (
     <div className="backdrop" aria-hidden="true">

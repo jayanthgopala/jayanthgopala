@@ -6,25 +6,12 @@ import { clamp } from './util.js';
 import { externalUrl, mediaUrl } from '../lib/api.js';
 import '../styles/crystals.css';
 
-/**
- * The projects as crystals, at /work.
- *
- * A standalone route for now: the igloo world at /world is untouched, and this
- * can be joined onto the end of it later without changing anything here.
- *
- * A real scrollbar with Lenis on top, the same as the world: each project is a
- * stop on the page, and when the wheel settles the page eases to the nearest
- * stop so a crystal always comes to rest centred.
- */
+/** Projects presented as interactive 3D crystals at /work. */
 
 /** Screens of scroll per project. */
 const STEP = 1.25;
 
-/*
- * Dev only: /work?demo fills the room with sample projects when the API is
- * not reachable locally, so the page can be looked at without the Worker.
- * import.meta.env.DEV is false in a production build, so none of this ships.
- */
+/* Dev demo projects fallback */
 const DEMO =
   import.meta.env.DEV &&
   typeof window !== 'undefined' &&
@@ -198,8 +185,7 @@ export default function CrystalSite({ site = {}, loading = false }) {
     };
   }, []);
 
-  /* Jump straight to a crystal, skipping the glide — for deep links and the
-     back/forward buttons. */
+  /* Immediate scroll jump for deep links and navigation */
   const jumpTo = useCallback((i) => {
     const lenis = lenisRef.current;
     const n = countRef.current;

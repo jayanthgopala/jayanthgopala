@@ -18,7 +18,7 @@
   animation: orb-breathe 7s var(--ease-soft) infinite alternate;
 }
 
-/* --- Core sphere ---------------------------------------------------------- */
+/* Core sphere */
 
 .orb-core {
   position: absolute;
@@ -55,7 +55,7 @@
   filter: blur(12px);
 }
 
-/* --- Rings ---------------------------------------------------------------- */
+/* Rings */
 
 .orb-rings {
   position: absolute;
@@ -81,7 +81,7 @@
 .orb-ring-2 { inset: 8%;  opacity: 0.34; animation: spin-2 24s linear infinite; }
 .orb-ring-3 { inset: -8%; opacity: 0.22; animation: spin-3 32s linear infinite; }
 
-/* --- Particles ------------------------------------------------------------ */
+/* Particles */
 
 .orb-particle {
   position: absolute;
@@ -100,7 +100,7 @@
 .orb-particle-3 { background: var(--amber); box-shadow: 0 0 12px rgba(245, 180, 92, 0.7);
                   animation: orbit 22s linear infinite; }
 
-/* --- Keyframes ------------------------------------------------------------ */
+/* Keyframes */
 
 @keyframes spin-1 {
   from { transform: rotateX(72deg) rotateZ(0deg); }

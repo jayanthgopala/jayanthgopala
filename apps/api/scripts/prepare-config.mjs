@@ -1,18 +1,4 @@
-/**
- * Generates wrangler.toml from wrangler.example.toml.
- *
- * Why this exists: Workers Builds needs a wrangler.toml in the repo to know the
- * entrypoint and bindings, but that file carries account-scoped D1/KV ids. Rather
- * than tracking it — which makes the config a place a real secret eventually gets
- * added by mistake — the template is tracked with placeholders and the ids come
- * from build-time environment variables.
- *
- * Local development is untouched: if wrangler.toml already exists, this exits
- * without writing anything.
- *
- * Set these as Build variables in Workers Builds:
- *   D1_DATABASE_ID    KV_NAMESPACE_ID
- */
+// Generates wrangler.toml from wrangler.example.toml using build environment variables.
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

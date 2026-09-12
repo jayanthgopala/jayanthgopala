@@ -3,13 +3,7 @@ import { api } from '../lib/api.js';
 import { useResource } from '../lib/hooks.js';
 import { Button, Empty, Field, Input, Select, Switch, Textarea, useToast } from '../components/ui.jsx';
 
-/**
- * Shared editor for Education and Experience.
- *
- * Both are ordered lists of dated cards with the same lifecycle, so the page is
- * driven by a field spec rather than written twice. Adding a column to either
- * table means adding one line here.
- */
+// Shared timeline entry editor form
 function Editor({ fields, initial, onCancel, onSaved, save }) {
   const toast = useToast();
   const [draft, setDraft] = useState(initial);

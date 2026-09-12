@@ -8,8 +8,7 @@
   right: clamp(var(--s-4), 3vw, var(--s-6));
   bottom: var(--fab-gap);
   z-index: 300;
-  /* Own compositor layer. A bottom-fixed element repainted on the main thread
-     visibly lags the page during momentum scrolling on phones. */
+  /* Compositor layer to avoid lag on momentum scrolling */
   transform: translateZ(0);
   backface-visibility: hidden;
   display: inline-flex;
@@ -110,8 +109,7 @@
   border-bottom-right-radius: var(--r-xs);
 }
 
-/* Three dots while the model is thinking — a spinner reads as "loading a page",
-   this reads as "composing a reply". */
+/* Typing dots indicator */
 .ask-typing { display: flex; gap: 5px; align-items: center; padding-block: var(--s-4); }
 .ask-typing span {
   width: 6px; height: 6px; border-radius: 50%;
@@ -160,19 +158,7 @@
 }
 .ask-send:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/*
- * Anchor to the SMALL viewport rather than the bottom edge.
- *
- * A fixed element's `bottom` resolves against the *large* viewport — the one
- * with the browser toolbar retracted. While the toolbar is showing, the button
- * is therefore parked underneath it, and it slides down into view as the
- * toolbar retracts on scroll. That is the drift.
- *
- * `lvh` and `svh` are both constants (toolbar hidden / toolbar shown), so their
- * difference is the toolbar's height. Adding it pins the button inside the
- * always-visible area, in one place, whatever the toolbar is doing. Both values
- * are equal on desktop, so the offset there is exactly 0.
- */
+/* Offset by mobile browser toolbar height using svh/lvh */
 @supports (height: 100svh) {
   .ask-fab { bottom: calc(100lvh - 100svh + var(--fab-gap)); }
   .ask-panel {
@@ -185,10 +171,7 @@
 }
 
 @media (max-width: 480px) {
-  /* The label stays. Dropping to a bare icon saved ~100px of a 390px screen and
-     cost the only entry point to the assistant its meaning — an unlabelled
-     circle in the corner of a dark page reads as decoration, not a control.
-     Tightening the type and padding buys back most of the width instead. */
+  /* Mobile padding and sizing */
   .ask-fab { --fab-h: 42px; height: var(--fab-h); padding-inline: var(--s-4); font-size: var(--t-xs); gap: 6px; }
   .ask-panel { right: var(--s-3); left: var(--s-3); width: auto; }
 }
@@ -198,8 +181,7 @@
   .ask-typing span { animation: none; opacity: 0.5; }
 }
 
-/* Links inside an answer. Underlined rather than colour-only: on a muted grey
-   message bubble, colour alone is a weak affordance. */
+/* Links inside answer bubble */
 .ask-link {
   color: var(--iris);
   text-decoration: underline;

@@ -3,13 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { BackSide, Color, ShaderMaterial, SphereGeometry, Vector3 } from 'three';
 import { LOOK } from '../lib/lighting.js';
 
-// Cloud that actually moves. Sky.jsx paints its field once on the CPU, which is right for a gradient and wrong for
-// weather, moving it would mean re-running the noise stack and re-uploading the texture every frame on the main thread.
-// The env map keeps the static approximation on purpose, an IBL lookup is a hemisphere average that cloud movement can't change.
-
-// Sampled on a flat plane overhead, not spherically, and that's what makes it read as cloud instead of a textured ball.
-// Real cloud is a layer, so features converge on the skyline by perspective. A spherical mapping gives constant angular
-// size all the way down, which reads as a painted dome. Dividing the horizontal direction by the vertical is the intersection.
+// Procedural dynamic cloud dome shader
 const CLOUD_SHADER = /* glsl */ `
   varying vec3 vDir;
   uniform float uTime;
@@ -84,8 +78,7 @@ const CLOUD_SHADER = /* glsl */ `
 const CLOUD_VERT = /* glsl */ `
   varying vec3 vDir;
   void main() {
-    // Local space, which is what lets the dome be parented to the camera without the sky moving with it.
-    // Running it through the model matrix would fold the dome's own translation into the direction.
+    // Local space direction vector
     vDir = position;
     gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
   }
@@ -123,11 +116,9 @@ export default function Clouds() {
         uHorizonFade: { value: C.horizonFade },
         uSunDir: { value: sunDir },
       },
-      side: BackSide, // seen from the inside
+      side: BackSide,
       transparent: true,
       depthWrite: false,
-      // Fog off explicitly. The scene runs fogExp2 and this dome sits 2400 units out, so left on the clouds would be
-      // rendered perfectly then replaced pixel for pixel with the fog colour, which looks exactly like a broken shader.
       fog: false,
     });
   }, [C]);
@@ -136,8 +127,7 @@ export default function Clouds() {
 
   useFrame((state) => {
     material.uniforms.uTime.value = state.clock.elapsedTime;
-    // Parented to the lens, so the dome is a sky rather than an object. A fixed dome would parallax against the cloud
-    // as the camera travels, and real cloud doesn't shift because you walked backwards.
+    // Center cloud dome on camera position
     if (ref.current) ref.current.position.copy(camera.position);
   });
 
@@ -147,7 +137,7 @@ export default function Clouds() {
       geometry={geometry}
       material={material}
       frustumCulled={false}
-      renderOrder={-1} // drawn before the terrain, which depth-tests over it normally
+      renderOrder={-1}
     />
   );
 }

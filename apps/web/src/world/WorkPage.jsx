@@ -4,24 +4,7 @@ import { CUT_PARALLAX } from './chapters.js';
 import { scramble } from '../crystals/scramble.js';
 import { externalUrl, mediaUrl } from '../lib/api.js';
 
-/**
- * The page the cut lands on: the projects, as a plain column of text.
- *
- * TEXT ONLY. The ground under it — the pale ice and its dot grid — is drawn on
- * the canvas by IceCut, so the wipe can reveal it; this layer is transparent
- * and sits between the canvas and the HUD. Real text, real links, selectable
- * and findable, for the same reason the HUD is DOM (see WorldSite).
- *
- * IT RIDES THE CUT. While the wipe runs, the column is pushed down by exactly
- * the parallax the shader applies to the ground, so text and ground rise
- * together as one page. After the cut the column scrolls by the scroll that
- * remains, and the ground stays put — the reference's room does not scroll
- * either; the things in it move.
- *
- * Everything that changes per frame is written straight to the nodes, the
- * same way the HUD's progress bar is.
- */
-
+// DOM-based project showcase displayed after the world scroll transition
 const smoothstep = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
@@ -29,11 +12,7 @@ const smoothstep = (a, b, x) => {
 
 const pad = (n) => String(n).padStart(2, '0');
 
-/*
- * Dev only: /world?demo fills the page with sample projects when the API is
- * not reachable locally, the same switch /work has. import.meta.env.DEV is
- * false in a production build, so none of this ships.
- */
+// Local dev mock data fallback
 const DEMO =
   import.meta.env.DEV &&
   typeof window !== 'undefined' &&
@@ -65,13 +44,7 @@ const DEMO_PROJECTS = [
   },
 ];
 
-/**
- * A line whose text decodes out of noise on arrival.
- *
- * The node has no React children on purpose. scramble() owns its textContent
- * while it runs, and a text node React thinks it owns but that has been
- * replaced underneath it is a text node React can no longer update.
- */
+// Text element that triggers character decode scramble animation when revealed
 function Decoded({ as: Tag = 'span', text, className, arrival, delay = 0 }) {
   const ref = useRef(null);
 
@@ -91,7 +64,6 @@ export default function WorkPage({ projects = [] }) {
   const { cut, page, setPageHeight } = useWorldScroll();
   const layerRef = useRef(null);
   const colRef = useRef(null);
-  /* Both of these change a handful of times per visit, never per frame. */
   const [live, setLive] = useState(false);
   const [arrival, setArrival] = useState(0);
 
@@ -99,9 +71,7 @@ export default function WorkPage({ projects = [] }) {
     (p) => p.published !== false
   );
 
-  /* The page's length is the last stretch of the scroll extent, so the
-     provider has to know it — and it changes when projects load and when
-     screenshots arrive. */
+  // Syncs rendered column height to scroll provider
   useEffect(() => {
     const col = colRef.current;
     if (!col) return undefined;
@@ -110,6 +80,7 @@ export default function WorkPage({ projects = [] }) {
     return () => observer.disconnect();
   }, [setPageHeight]);
 
+  // Frame animation loop updating parallax position and opacity during cut
   useEffect(() => {
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let frame = 0;
@@ -123,24 +94,19 @@ export default function WorkPage({ projects = [] }) {
 
       if (layer && col) {
         const q = 1 - c;
-        /* Positive is down: the shader samples the ground from above, which
-           shows it lower on screen, by this share of the frame. */
         const rise = reduced ? 0 : CUT_PARALLAX * q * q * window.innerHeight;
         col.style.transform = `translate3d(0, ${(rise - page.current).toFixed(2)}px, 0)`;
-        /* The text arrives after the ground, the way the reference's labels
-           come in once the room has settled. */
         layer.style.opacity = (reduced ? c : smoothstep(0.55, 0.95, c)).toFixed(3);
       }
 
-      /* Half-way is where the page is more there than not. Before it the
-         layer is inert, so Tab never lands on a link nobody can see. */
+      // Enable pointer interaction once transition is past half mark
       const nextLive = c >= 0.5;
       if (nextLive !== isLive) {
         isLive = nextLive;
         setLive(nextLive);
       }
 
-      /* Decode on every arrival, re-armed once the page has been left. */
+      // Trigger text decode once near completion
       if (!arrived && c >= 0.85) {
         arrived = true;
         setArrival((n) => n + 1);

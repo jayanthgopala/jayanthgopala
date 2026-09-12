@@ -1,17 +1,9 @@
-/**
- * Renders the GitHub profile README from the same site payload the website
- * consumes. Nothing here touches the database directly — that is what
- * guarantees the profile can never drift from what visitors see.
- */
+// Renders the GitHub profile README from the site payload.
 
 /** Pipes break Markdown tables; newlines break table rows. */
 const esc = (s = '') => String(s).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ').trim();
 
-/**
- * A scheme-less URL in a Markdown link is treated as relative by GitHub too —
- * `[Live Demo](example.net)` resolves against the repo, not the internet. Same
- * normalisation as the website applies here.
- */
+// Normalize link URL with default https scheme if omitted.
 const href = (url = '') => {
   const raw = String(url).trim();
   if (!raw) return '';
@@ -54,18 +46,13 @@ function stackByCategory(stack = []) {
     .join('\n');
 }
 
-/**
- * The README embeds live SVG endpoints served by this same Worker. GitHub's
- * camo proxy re-fetches them, so the status card stays current between
- * commits rather than freezing at whatever was true at push time.
- */
+// Renders GitHub profile README with embedded live SVG endpoints.
 export function renderReadme(site, env) {
   const { profile, status, projects, stack, socials, content = {} } = site;
   const api = String(env.PUBLIC_API_URL || '').replace(/\/$/, '');
   const featured = projects.filter((p) => p.published && p.featured);
 
-  // Headings are editable too; the fallbacks keep the README renderable even
-  // against a database that predates the content table.
+  // Fallbacks keep the README renderable even if content keys are missing.
   const t = (key, fallback) => esc(content[key] || fallback);
 
   const socialBadges = socials
@@ -86,11 +73,7 @@ export function renderReadme(site, env) {
 
   return `<div align="center">
 
-<!--
-  Banner is served live from the portfolio Worker, so it reflects the admin
-  panel without a commit. <picture> lets GitHub pick the palette: an SVG
-  embedded as an image can't see the host page's colour scheme itself.
--->
+<!-- Live dynamic SVG banner -->
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="${api}/svg/banner-dark.svg" />
   <source media="(prefers-color-scheme: light)" srcset="${api}/svg/banner-light.svg" />
@@ -117,12 +100,7 @@ ${socialBadges}
   <img src="${api}/svg/status.svg" alt="Live status" width="820" />
 </div>
 
-<!--
-  The links inside that card are pixels, not anchors. GitHub proxies README
-  images through camo and renders them as <img>, so nothing inside an SVG is
-  ever clickable — an <a> in the markup would simply be ignored. The row below
-  is the clickable equivalent.
--->
+<!-- Fallback clickable links row -->
 <div align="center">
 
 ${socials

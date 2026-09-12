@@ -5,11 +5,7 @@ import { recordVisit } from '../lib/visitors.js';
 
 const app = new Hono();
 
-/**
- * One payload for the entire website. A portfolio is small enough that a single
- * round trip beats five parallel ones, and it guarantees the page renders a
- * consistent snapshot rather than a mix of cache generations.
- */
+// Serves complete portfolio site payload in a single cached response.
 app.get('/site', async (c) => {
   const { data, hit } = await cached(c.env, 'site', () => loadSite(c.env.DB));
   c.header('X-Cache', hit ? 'HIT' : 'MISS');
@@ -40,11 +36,7 @@ app.get('/projects/:slug', async (c) => {
 
 export default app;
 
-/**
- * Visit beacon. Always 204, whether or not the visit counted — a response that
- * revealed the decision would let anyone probe whether a given device id is
- * already known.
- */
+// Anonymous visitor beacon endpoint.
 app.post('/view', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   await recordVisit(c.env, {

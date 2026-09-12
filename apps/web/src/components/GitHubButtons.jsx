@@ -16,17 +16,7 @@ const ForkIcon = (props) => (
   </svg>
 );
 
-/**
- * Star and Fork, with live counts.
- *
- * These deep-link to GitHub rather than acting directly: there is no URL that
- * stars a repo, and GitHub blocks it deliberately — a one-click star from any
- * third-party page would be trivially abusable. So the buttons land you on the
- * repo (fork lands on the fork dialog) where one more click does it.
- *
- * Counts come from our Worker, not api.github.com, so visitors don't each spend
- * against the unauthenticated 60-requests-per-hour limit.
- */
+// GitHub Star and Fork buttons with live stats
 export default function GitHubButtons({ profile, content = {} }) {
   const [stats, setStats] = useState({ stars: null, forks: null, url: '' });
 
@@ -35,9 +25,7 @@ export default function GitHubButtons({ profile, content = {} }) {
     import('../lib/api.js').then(({ fetchRepoStats }) =>
       fetchRepoStats({ signal: controller.signal })
         .then(setStats)
-        .catch(() => {
-          /* buttons still work without counts */
-        })
+        .catch(() => {})
     );
     return () => controller.abort();
   }, []);

@@ -1,6 +1,6 @@
 @import '@portfolio/tokens/tokens.css';
 
-/* --- Reset ---------------------------------------------------------------- */
+/* Reset */
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -50,7 +50,7 @@ ul, ol { list-style: none; padding: 0; }
 }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.22); }
 
-/* --- Typography ----------------------------------------------------------- */
+/* Typography */
 
 h1, h2, h3, h4 {
   font-weight: 600;
@@ -94,7 +94,7 @@ p { text-wrap: pretty; }
 
 .mono { font-family: var(--font-mono); font-size: var(--t-xs); }
 
-/* --- Layout --------------------------------------------------------------- */
+/* Layout */
 
 .container {
   width: 100%;
@@ -113,7 +113,7 @@ p { text-wrap: pretty; }
   max-width: 640px;
 }
 
-/* --- Surfaces ------------------------------------------------------------- */
+/* Surfaces */
 
 .card {
   background: var(--surface);
@@ -152,7 +152,7 @@ p { text-wrap: pretty; }
 .gradient-border:hover::before,
 .gradient-border:focus-within::before { opacity: 0.75; }
 
-/* --- Buttons -------------------------------------------------------------- */
+/* Buttons */
 
 .btn {
   position: relative;
@@ -212,7 +212,7 @@ p { text-wrap: pretty; }
 }
 @keyframes ripple { to { transform: scale(2.6); opacity: 0; } }
 
-/* --- Pills / tags --------------------------------------------------------- */
+/* Pills / tags */
 
 .pill {
   display: inline-flex;
@@ -255,9 +255,7 @@ p { text-wrap: pretty; }
   100% { transform: scale(2.4); opacity: 0; }
 }
 
-/* --- Reveal on scroll ------------------------------------------------------
-   Paired with useReveal(). Transform + opacity only, so it stays on the
-   compositor and never triggers layout. */
+/* Reveal on scroll */
 
 .reveal {
   opacity: 0;
@@ -273,8 +271,7 @@ p { text-wrap: pretty; }
   will-change: auto;
 }
 
-/* --- Reduced motion --------------------------------------------------------
-   Everything above degrades to an instant, static presentation. */
+/* Reduced motion */
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

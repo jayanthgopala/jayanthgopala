@@ -60,9 +60,7 @@
 
 .nav-cta { height: 38px; padding-inline: var(--s-4); }
 
-/* --- The way into the immersive version ------------------------------------
-   A nav link like its neighbours, but the one focal point in the bar: the only
-   saturated thing in it, which is exactly the budget tokens.css allows. */
+/* The way into the immersive version */
 
 .nav-immersive {
   display: inline-flex;
@@ -77,12 +75,7 @@
 
 .nav-immersive:hover { background: var(--iris-soft); }
 
-/*
- * The accent gradient as the text, with a band of light that crosses it every
- * five seconds. Two layers, both clipped to the glyphs: the sheen on top
- * travels, the gradient under it stays put. The band starts and ends outside
- * the word, so the loop restarting is invisible.
- */
+/* Shimmering accent text gradient */
 .nav-immersive-label {
   display: inline-block;
   background:
@@ -144,8 +137,7 @@
   100%    { transform: scale(2.8); opacity: 0; }
 }
 
-/* The click itself: the word flares, the cursor presses, the ring bursts —
-   all inside the 420ms Nav waits before it navigates. */
+/* Launch animation on click */
 .nav-immersive.is-launching .nav-immersive-label {
   animation: nav-immersive-flash 420ms var(--ease) forwards;
 }
@@ -174,8 +166,6 @@
   to   { transform: scale(4.5); opacity: 0; }
 }
 
-/* The tokens shorten transitions under reduced motion, but these are keyframe
-   loops with their own durations, so they are switched off by name. */
 @media (prefers-reduced-motion: reduce) {
   .nav-immersive-label,
   .nav-immersive-tap,
@@ -183,8 +173,7 @@
 }
 
 @media (max-width: 720px) {
-  /* The section anchors go on narrow screens, but the way into the immersive
-     version stays — it is the one link here with no other route to it. */
+  /* Keep only immersive link on small screens */
   .nav-links .nav-link:not(.nav-immersive) { display: none; }
   .nav-name { display: none; }
 }

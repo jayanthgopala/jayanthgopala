@@ -1,12 +1,4 @@
-/*
- * Heightfield-only bake.
- *
- * bake-world.mjs regenerates the ice map set as well, which is minutes of noise
- * synthesis that has nothing to do with the landform. While the terrain is being
- * shaped, this rewrites heightfield.bin and patches the existing manifest's
- * `heightfield` block in place, leaving `sets` exactly as the full bake left it.
- * Run the full bake before shipping; this is for the iteration loop.
- */
+// Bakes terrain heightfield to heightfield.bin and updates manifest.json
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';

@@ -1,13 +1,6 @@
 import '../styles/orb.css';
 
-/**
- * The abstract 3D object for the hero.
- *
- * Deliberately CSS + SVG rather than WebGL: a Three.js scene would add ~600KB
- * and a GPU context for what is, visually, a lit sphere behind three rotating
- * rings. This renders instantly, costs nothing on mobile, and degrades to a
- * static gradient under reduced-motion.
- */
+// Lightweight CSS/SVG hero orb with rings and particles
 export default function Orb() {
   return (
     <div className="orb" aria-hidden="true">
@@ -24,7 +17,7 @@ export default function Orb() {
         <div className="orb-core-shadow" />
       </div>
 
-      {/* Orbiting particles — three, not thirty. */}
+      {/* Orbiting particles */}
       <span className="orb-particle orb-particle-1" />
       <span className="orb-particle orb-particle-2" />
       <span className="orb-particle orb-particle-3" />

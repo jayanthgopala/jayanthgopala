@@ -1,10 +1,4 @@
-/**
- * KV-backed read cache for the public endpoints.
- *
- * Admin writes bump a version counter rather than deleting individual keys:
- * invalidation becomes a single atomic write regardless of how many cached
- * entries exist, and stale entries fall off on their own TTL.
- */
+// KV-backed read cache with versioned invalidation
 
 const VERSION_KEY = 'cache:version';
 

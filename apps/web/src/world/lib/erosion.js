@@ -23,9 +23,7 @@
  * SOFTWARE.
  */
 
-// Every noise layer in terrain.js is a function of position alone, but a valley is where material went somewhere downhill.
-// Stacked octaves can't express that, which is why summed noise reads as texture rather than landscape however well tuned.
-// This traces water over the surface and moves material with it, so every hollow connects to the slope that drained into it.
+// Hydraulic erosion simulation to carve natural drainage valleys into heightfield
 
 // Their seeded xorshift, so a seed always yields the same landscape
 export function createRng(seed) {
@@ -50,9 +48,7 @@ export const DEFAULT_EROSION_PARAMS = {
   initialWater: 1,
   initialSpeed: 1,
   maxSpeed: 5,
-  // Cap on how much one step can change a cell. Without it a slightly deeper cell presents a larger slope to the next
-  // droplet and erodes deeper still, an unbounded loop that blows the heightmap up within a few hundred droplets.
-  maxChangePerStep: 0.015,
+  maxChangePerStep: 0.015, // Maximum height delta per step
 };
 
 function clampIndex(v, size) {
@@ -158,9 +154,7 @@ export function erodeStep(heightmap, size, rng, params = {}) {
   }
 
   if (sediment > 0) {
-    // The one local change to the vendored code. Upstream dumps the whole load on one cell, which is what makes its mass
-    // conservation exact, and across this many droplets it produced a field of spikes taller than the igloo.
-    // Their demo hides it because its heightmap spans [0,1]. Capping costs exact conservation, timed-out sediment is discarded.
+    // Cap sediment deposition to prevent heightmap spikes
     const p2 = { ...DEFAULT_EROSION_PARAMS, ...params };
     applyDelta(heightmap, size, x, y, Math.min(sediment, p2.maxChangePerStep));
   }

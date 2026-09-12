@@ -26,8 +26,7 @@ export default function Hero({ profile, loading, children }) {
           </Reveal>
 
           <Reveal delay={80}>
-            {/* The headline is DB-driven; the fallback only ever shows if the
-                API is unreachable on a cold load. */}
+            {/* DB-driven headline with fallback */}
             <h1 className="display hero-title" data-loading={loading || undefined}>
               {profile.headline || 'Building scalable software and exceptional digital experiences.'}
             </h1>
@@ -59,8 +58,7 @@ export default function Hero({ profile, loading, children }) {
         </div>
 
         <div className="hero-aside">
-          {/* graded={false}: the bundled asset is an art-directed render now,
-              not a raw studio photo, so it gets the light treatment. */}
+          {/* Portrait render */}
           <Reveal delay={200} className="hero-orb-wrap">
             <PortraitOrb
               src={portrait}

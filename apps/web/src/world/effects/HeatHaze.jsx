@@ -2,13 +2,7 @@ import { forwardRef, useMemo } from 'react';
 import { Effect } from 'postprocessing';
 import { Uniform } from 'three';
 
-// Rising air, as refraction rather than a particle effect. Nothing is drawn, something already drawn is displaced.
-// Every particle attempt ends up drawing visible puffs, which is smoke, a different phenomenon in the same place.
-// postprocessing's mainUv hook runs before the frame is sampled and lets the shader choose where each pixel reads from.
-//
-// Three things make it read as rising air. It scrolls upward always, noise animated in place reads as a bad codec.
-// It's stretched vertically, isotropic noise gives round blobs which is boiling water seen from above.
-// It strengthens as it rises then fades before the top, or the displacement drags in what's outside the frame.
+// Postprocessing refraction shader simulating upward rising heat haze
 const HAZE_FRAG = /* glsl */ `
   uniform float uTime;
   uniform float uStrength;
@@ -33,17 +27,15 @@ const HAZE_FRAG = /* glsl */ `
   }
 
   void mainUv( inout vec2 uv ) {
-    // one unit across is four up, so the cells come out as columns
     vec2 q = vec2( uv.x * uScale, uv.y * uScale * 0.25 );
 
     float a = hazeNoise( q + vec2( 0.0, -uTime * uRise ) );
     float b = hazeNoise( q * 2.07 + vec2( 3.7, -uTime * uRise * 1.55 ) );
 
-    // The two octaves drive the two axes separately rather than being summed. Summing gives one displacement
-    // direction per pixel and the frame appears to slide, independent fields give a real shear.
+    // Independent displacement axes
     vec2 d = vec2( a - 0.5, ( b - 0.5 ) * 0.6 );
 
-    // zero at the bottom, full through the middle, back to zero before the top so nothing is dragged in from outside
+    // Vertical bounds smoothstep mask
     float rise = smoothstep( uFloor, uFloor + 0.22, uv.y );
     float fade = 1.0 - smoothstep( uCeil - 0.18, uCeil, uv.y );
 
@@ -65,13 +57,11 @@ class HeatHazeEffect extends Effect {
     });
   }
 
-  // postprocessing drives this every frame, deltaTime is seconds
   update(renderer, inputBuffer, deltaTime) {
     this.uniforms.get('uTime').value += deltaTime;
   }
 }
 
-// No wrapEffect, the effect takes an options object and the wrapper spreads props positionally.
 const HeatHaze = forwardRef(function HeatHaze(props, ref) {
   const effect = useMemo(() => new HeatHazeEffect(props), [
     props.strength,

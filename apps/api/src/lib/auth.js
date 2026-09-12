@@ -4,15 +4,9 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 export const SESSION_COOKIE = 'pf_session';
 const SESSION_TTL = 60 * 60 * 12; // 12 hours
 
-// Pinned explicitly rather than left to the library default: recent Hono
-// versions require `alg` on verify, and stating it on both sides removes any
-// chance of a sign/verify mismatch after an upgrade.
 const ALG = 'HS256';
 
-/**
- * Constant-time comparison. Prevents leaking the password through response
- * timing — cheap to do, so we do it.
- */
+// Constant-time string comparison to prevent timing attacks.
 function safeEqual(a, b) {
   const enc = new TextEncoder();
   const ba = enc.encode(String(a));
@@ -43,8 +37,7 @@ export async function issueSession(c) {
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
     secure: true,
-    // The admin panel is on a different origin than the API, so the session
-    // cookie has to be cross-site. `secure` is mandatory alongside this.
+    // Cross-site cookie for admin panel origin.
     sameSite: 'None',
     path: '/',
     maxAge: SESSION_TTL,
@@ -57,10 +50,7 @@ export function clearSession(c) {
   deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true, sameSite: 'None' });
 }
 
-/**
- * Accepts the httpOnly cookie or an `Authorization: Bearer` header, so the
- * same API serves the browser panel and any scripts or CI you point at it.
- */
+// Reads session from httpOnly cookie or Authorization Bearer header.
 export async function readSession(c) {
   let token = getCookie(c, SESSION_COOKIE);
 

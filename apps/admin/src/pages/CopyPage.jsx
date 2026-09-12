@@ -3,13 +3,7 @@ import { api } from '../lib/api.js';
 import { useResource, useUnsavedGuard } from '../lib/hooks.js';
 import { Button, Field, Input, Select, Textarea, useToast } from '../components/ui.jsx';
 
-/**
- * Editor for every fixed string on the site — section headings, nav labels,
- * status row labels, footer, SEO tags and the README headings.
- *
- * The form is generated from the rows themselves rather than hand-written, so
- * adding a key to the database surfaces a field here with no code change.
- */
+// Editor for site copy, headings, and metadata
 export default function CopyPage() {
   const toast = useToast();
   const { data, reload } = useResource(api.getContent);

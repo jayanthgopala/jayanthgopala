@@ -1,10 +1,4 @@
-/* ==========================================================================
-   THE WORLD ROUTE
-
-   A fixed canvas with a scroll extent above it and a thin HUD on top. Every
-   selector here is prefixed w- and only the world route emits those, so nothing
-   in this file can reach the main site.
-   ========================================================================== */
+/* World route layout and HUD styling */
 
 :root[data-route='world'] {
   --w-ink: #171614;
@@ -15,27 +9,18 @@
   --w-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --w-ease: cubic-bezier(0.16, 1, 0.3, 1);
   background: #b9c0c7;
-  /* The scrollbar is hidden, not removed: the page still scrolls natively, so
-     wheel, touch, keys and find-in-page all work. It just no longer draws a
-     dark strip down the edge of the world and the ice page. */
+  /* Hide scrollbar while preserving native scroll interaction */
   scrollbar-width: none;
 }
 
 :root[data-route='world']::-webkit-scrollbar { display: none; }
 
-/* The scroll extent is a spacer with nothing in it, so the document has no
-   background of its own to show. Matching it to the fog means any moment the
-   canvas has not painted yet reads as the world rather than as a white flash. */
+/* Background matches scene atmosphere fog */
 :root[data-route='world'] body {
   background: #b9c0c7;
 }
 
-/* --- The work page ---------------------------------------------------------
-   What the cut lands on. The ground itself — the pale ice and its dot grid —
-   is painted on the canvas by the cut shader (effects/IceCut.jsx, values in
-   world/lib/ice-page.js, which is where the old .w-retreat-dots numbers went),
-   so the page the wipe reveals and the page you read are the same pixels. This
-   layer is text only, between the canvas (0) and the HUD (2). */
+/* Work page container */
 .w-work {
   position: fixed;
   inset: 0;
@@ -47,8 +32,7 @@
   color: #1f262b;
 }
 
-/* Links opt back in once the page is actually there. The rest of the layer
-   stays transparent to the pointer. */
+/* Enable pointer events on active links */
 .w-work.is-live a { pointer-events: auto; }
 
 .w-work-col {
@@ -154,15 +138,7 @@
    you to travel somewhere you have already arrived. */
 .w-hint.is-away { visibility: hidden; }
 
-/* The canvas 
-   Fixed, full-viewport, and behind everything. It is not in the scroll flow at
-   all: the spacer scrolls, the world responds. */
-
-/*
- The positioned layer is ours. R3F sets position/width/height inline on the
- element carrying `.w-canvas`, and inline styles win — so all the layout lives
- on this wrapper, and R3F is simply given a full-viewport box to fill.
- */
+/* Fullscreen canvas stage wrapper */
 .w-stage {
   position: fixed;
   inset: 0;
@@ -173,34 +149,16 @@
 
 .w-canvas {
   display: block;
-  /* Touch scrolling must reach the page, not be swallowed by the canvas. */
+  /* Allow vertical scroll touch actions */
   touch-action: pan-y;
   outline: none;
 }
 
-/*  Annotations 
-   Leader-line labels on the hero object, shown while it is held under the
-   cursor. DOM rather than in-scene text: troika's MSDF renderer would need a
-   font FILE shipped and fetched, and these are chrome pointing AT the world
-   rather than objects in it.
-    */
-
+/* Annotations and measurement labels */
 .w-annotation-wrap,
 .w-measure-wrap { pointer-events: none; }
 
-/*
- The pixel readout on a lifted brick.
-
- Text content and opacity are written straight to this node from the frame
- loop — it changes every frame, and putting it through React state would
- re-render the tree sixty times a second to change a number.
- */
-/*
- A node on the measurement chain: a small crosshair with a number beside it,
- drawn the way a survey drawing marks a point. Text and opacity are written
- straight to the node from the frame loop, because both change every frame and
- routing them through React state would re-render the tree at 60Hz.
- */
+/* Measurement node */
 .w-node {
   display: inline-flex;
   align-items: center;
@@ -278,11 +236,7 @@
   .w-annotation { animation: none; }
 }
 
-/*  HUD 
-   Fixed over the canvas. pointer-events are off on the container so the whole
-   overlay never intercepts a scroll or a drag; individual controls opt back in.
-   */
-
+/* Fixed HUD overlay */
 .w-hud {
   position: fixed;
   inset: 0;
@@ -313,19 +267,7 @@
 
 .w-hud-brand { display: flex; flex-direction: column; gap: 4px; }
 
-/*
- * The way back to the minimal site: a pane of ice over the scene.
- *
- * Frosted rather than filled — the world shows through it, blurred, so it
- * reads as part of the picture instead of a sticker on top of it. The white
- * gradient is the pane's body, the bright inset top edge is light catching its
- * rim, and the soft cool shadow lifts it off the snow. Over the pale ice page
- * the same recipe still separates it, because the shadow and the rim do the
- * work the blur cannot do against a flat ground.
- */
-/* The anchor is only layout and hit area. The pane itself is drawn by
-   MinimalLink: a frost layer clipped to the live outline, under an SVG of that
-   outline, both reaching past the anchor so the surface has room to swell. */
+/* Minimal mode glass button */
 .w-glass {
   position: relative;
   display: inline-flex;
@@ -335,8 +277,7 @@
   text-decoration: none;
   white-space: nowrap;
   -webkit-tap-highlight-color: transparent;
-  /* A finger dragged across the glass should make it flow, not scroll the
-     page away underneath it. A tap still clicks. */
+  /* Disable touch scrolling over interactive glass button */
   touch-action: none;
 }
 
@@ -419,14 +360,7 @@
 }
 
 
-/* 
-   Loading screen.
-
-   Painted in the world's own palette rather than a neutral dark overlay, so the
-   transition is a dissolve into the same snowfield rather than a cut from black.
-   The fade only starts once the bar has filled — a bar that vanishes part-way
-   reads as a failure even when nothing failed.
-   */
+/* Loading screen overlay */
 .w-loader {
   position: fixed;
   inset: 0;
@@ -536,14 +470,7 @@
   }
 }
 
-/*
- * The sound control.
- *
- * Sits in the HUD's bottom row and borrows its typography rather than
- * introducing any: same size, same tracking, same uppercase as the act label
- * and the scroll hint, so it reads as one more line of chrome instead of as a
- * widget dropped on the scene.
- */
+/* Audio toggle button */
 .w-sound {
   display: inline-flex;
   align-items: center;
@@ -565,8 +492,7 @@
   opacity: 0.9;
 }
 
-/* Three bars that stand up when the sound is on. The animation is the state:
-   a label alone makes you read to find out, a moving glyph does not. */
+/* Animated audio level indicator */
 .w-sound-bars {
   display: inline-flex;
   align-items: flex-end;
@@ -593,9 +519,7 @@
   50% { height: 9px; }
 }
 
-/* The bars are the only thing on this page that loops visibly, so they are the
-   first thing to go when motion is not wanted. The label still carries the
-   state. */
+/* Reduced motion override */
 @media (prefers-reduced-motion: reduce) {
   .w-sound.is-on .w-sound-bars i {
     animation: none;

@@ -1,29 +1,10 @@
-/**
- * Admin API client.
- *
- * `credentials: 'include'` on every call — the session lives in an httpOnly
- * cookie, which is what keeps the token out of reach of any injected script.
- */
-// Same fallback as the website — see apps/web/src/lib/api.js for why an unset
-// VITE_API_URL fails so confusingly. Public endpoint, safe to default.
-
-/** See apps/web/src/lib/api.js — a scheme-less base silently goes relative. */
+// Admin API client
 function normaliseBase(value) {
   const raw = String(value || '').trim().replace(/\/+$/, '');
   if (!raw) return '';
   return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
 }
 
-/*
- * No fallback to a hardcoded URL on purpose.
- *
- * A default here would point every fork at the original author's Worker: it
- * would work locally (the preview port is on their allow-list) and then fail in
- * production with an opaque CORS error, showing someone else's content in the
- * one case it did connect. The build refuses to produce that bundle — see the
- * guard in vite.config.js — so this is only ever unset in development, where
- * requests are relative and the dev server proxies them.
- */
 const BASE = normaliseBase(import.meta.env.VITE_API_URL || '');
 
 export class ApiError extends Error {
@@ -61,12 +42,12 @@ function safeJson(text) {
 }
 
 export const api = {
-  // --- auth
+  // Auth
   login: (password) => request('/api/auth/login', { method: 'POST', body: { password } }),
   logout: () => request('/api/auth/logout', { method: 'POST' }),
   me: () => request('/api/auth/me'),
 
-  // --- content
+  // Content
   overview: () => request('/api/admin/overview'),
 
   getProfile: () => request('/api/admin/profile'),
@@ -107,14 +88,14 @@ export const api = {
   updateSocial: (id, body) => request(`/api/admin/socials/${id}`, { method: 'PATCH', body }),
   deleteSocial: (id) => request(`/api/admin/socials/${id}`, { method: 'DELETE' }),
 
-  // --- media
+  // Media
   upload: (file) => {
     const form = new FormData();
     form.append('file', file);
     return request('/api/admin/media', { method: 'POST', body: form, isForm: true });
   },
 
-  // --- github sync
+  // GitHub sync
   readmePreview: () => request('/api/admin/readme/preview'),
   sync: () => request('/api/admin/sync', { method: 'POST' }),
   syncLog: () => request('/api/admin/sync/log'),

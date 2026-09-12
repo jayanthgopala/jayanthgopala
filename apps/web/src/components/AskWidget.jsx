@@ -2,13 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { copy, askQuestion } from '../lib/api.js';
 import '../styles/ask.css';
 
-/**
- * Turns URLs and email addresses in the model's prose into real anchors.
- *
- * The prompt asks for plain URLs rather than markdown, so this is the only
- * place they become clickable — otherwise a visitor is left selecting text to
- * copy an address by hand.
- */
+/** Linkify URLs and email addresses in response text. */
 const LINK_RE = /(https?:\/\/[^\s<>()]+[^\s<>().,;:!?]|[\w.+-]+@[\w-]+\.[\w.-]+)/g;
 
 function linkify(text) {
@@ -38,14 +32,7 @@ const SparkIcon = (props) => (
   </svg>
 );
 
-/**
- * Floating "ask about me" assistant.
- *
- * Answers come from /api/ask, which is grounded in this site's own content and
- * refuses anything off-topic. The disclosure line under the header is not
- * decoration — a visitor should know they are reading a model's summary rather
- * than words the owner wrote.
- */
+/** Floating "ask about me" assistant widget. */
 export default function AskWidget({ content = {}, profile }) {
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState('');

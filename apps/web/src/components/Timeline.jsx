@@ -3,13 +3,7 @@ import { copy, externalUrl } from '../lib/api.js';
 import { ArrowUpRight } from './Icons.jsx';
 import '../styles/timeline.css';
 
-/**
- * Shared timeline used by both Education and Experience.
- *
- * They render identically — a rail, a marker per entry, and a card — and differ
- * only in which fields they surface. Two components would have been two sets of
- * the same CSS to keep in sync.
- */
+// Shared timeline list for education and experience entries
 function TimelineList({ items, renderItem }) {
   return (
     <ol className="timeline">
@@ -97,8 +91,7 @@ export function Experience({ experience = [], content = {} }) {
                 </p>
               )}
 
-              {/* Achievements read differently from roles, so they're flagged
-                  rather than silently mixed into the same list. */}
+              {/* Achievement badge */}
               {x.kind === 'achievement' && <span className="timeline-badge">Achievement</span>}
 
               {x.description && <p className="timeline-desc">{x.description}</p>}

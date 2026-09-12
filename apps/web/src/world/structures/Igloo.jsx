@@ -110,9 +110,7 @@ export default function Igloo({
 
   const { camera, size } = useThree();
 
-  /* Parameters in lib/ice-sets.js under 'igloo'. pebbles is 0 there for the
-     reason that file's own note gives: at this size discrete lumps read as
-     pimples on the surface. */
+  // Ice texture configuration for igloo blocks.
   const ice = useMemo(() => iceMapsFor('igloo'), []);
 
   const { courses, collider, total, bounds, origin, plan } = useMemo(() => {
@@ -148,7 +146,7 @@ export default function Igloo({
       return trimmed.get(key);
     };
 
-    // --- Courses -----------------------------------------------------------
+    // Courses
     for (let ring = 0; ring < COURSE_BLOCKS.length; ring += 1) {
       const u0 = ring / spans;
       const u1 = (ring + 1) / spans;
@@ -231,7 +229,7 @@ export default function Igloo({
       }
     }
 
-    // --- Crown -------------------------------------------------------------
+    // Crown cap
     {
       const u0 = COURSE_BLOCKS.length / spans;
       const dTheta = (Math.PI * 2) / CROWN_BLOCKS;
@@ -268,7 +266,7 @@ export default function Igloo({
       count += blocks.length;
     }
 
-    // --- Entrance piers and arch -------------------------------------------
+    // Entrance piers and arch
     {
       const {
         intrados,
@@ -433,7 +431,7 @@ export default function Igloo({
       mesh.instanceMatrix.needsUpdate = true;
     }
 
-    // --- 3D Polygon Tracking Network --------------------------------------
+    // 3D Polygon Tracking Network
     nodes.sort((a, b) => b.local - a.local);
     const selected = nodes.slice(0, MAX_NODES);
 
