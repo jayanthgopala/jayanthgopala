@@ -12,7 +12,6 @@ import { Environment, Lightformer } from '@react-three/drei';
 import { NoToneMapping, Vector2, Vector3 } from 'three';
 import Backdrop from './Backdrop.jsx';
 import GlyphWater, { PLANE } from './GlyphWater.jsx';
-import Droplets from './Droplets.jsx';
 import Bubbles from './Bubbles.jsx';
 import { RippleSim } from './ripples.js';
 import { glyphSdf } from './glyph.js';
@@ -39,7 +38,7 @@ function planeUv(origin, direction, offsetY, out) {
   return out.x >= 0 && out.x <= 1 && out.y >= 0 && out.y <= 1;
 }
 
-function Scene({ pointer, calm, burstApi, letters, index, slide }) {
+function Scene({ pointer, calm, letters, index, position }) {
   const { gl, camera, size } = useThree();
 
   const sim = useMemo(() => {
@@ -48,7 +47,21 @@ function Scene({ pointer, calm, burstApi, letters, index, slide }) {
     return s;
   }, []);
 
+  // A second field, this one covering the whole screen: the page itself is the
+  // surface of the water the letter floats in, so the pointer disturbs it
+  // everywhere rather than only where it crosses the letter.
+  const surface = useMemo(() => {
+    const s = new RippleSim(size.width < 760 ? SIM_SIZE.mobile : SIM_SIZE.desktop);
+    s.setAspect(Math.max(0.2, size.width / Math.max(1, size.height)));
+    return s;
+  }, []);
+
+  useEffect(() => {
+    surface.setAspect(Math.max(0.2, size.width / Math.max(1, size.height)));
+  }, [surface, size.width, size.height]);
+
   useEffect(() => () => sim.dispose(), [sim]);
+  useEffect(() => () => surface.dispose(), [surface]);
 
   // The letter under the camera and the one queued behind it. Only these two
   // are ever built, however long the project list is.
@@ -65,6 +78,8 @@ function Scene({ pointer, calm, burstApi, letters, index, slide }) {
   const hereFocus = useRef(1);
   const nextFocus = useRef(0);
 
+  const screen = useRef({ x: 0.5, y: 0.5, has: false });
+
   const ray = useRef({
     origin: new Vector3(),
     direction: new Vector3(),
@@ -78,12 +93,35 @@ function Scene({ pointer, calm, burstApi, letters, index, slide }) {
     const state = pointer.current;
     const r = ray.current;
 
-    // Scroll position within the current letter, 0 at rest, 1 at the next.
-    const t = Math.min(1, Math.max(0, slide.current));
+    // Measured against the index React has actually rendered, not against a
+    // fraction reset on crossing. Scroll advances the position ref immediately
+    // while `index` arrives a frame or more later; anchoring to the rendered
+    // index means that gap just reads as the slide continuing past 1, instead
+    // of the outgoing letter snapping back to centre for a frame.
+    const t = Math.max(0, position.current - index);
     if (hereGroup.current) hereGroup.current.position.y = t * SLIDE;
     if (nextGroup.current) nextGroup.current.position.y = (t - 1) * SLIDE;
-    hereFocus.current = 1 - t;
-    nextFocus.current = t;
+    const clamped = Math.min(1, t);
+    hereFocus.current = 1 - clamped;
+    nextFocus.current = clamped;
+
+    // Screen-space wake, independent of whether the letter was hit.
+    if (state.inside && !calm) {
+      const sx = state.ndc.x * 0.5 + 0.5;
+      const sy = state.ndc.y * 0.5 + 0.5;
+      const w = screen.current;
+      if (w.has) {
+        const moved = Math.hypot((sx - w.x) * surface.aspect, sy - w.y);
+        if (moved > 0.0015) {
+          surface.impulse(sx, sy, Math.min(0.5, moved * 7), 0.055);
+        }
+      }
+      w.x = sx;
+      w.y = sy;
+      w.has = true;
+    } else {
+      screen.current.has = false;
+    }
 
     if (state.inside && !calm) {
       r.origin.setFromMatrixPosition(camera.matrixWorld);
@@ -94,22 +132,18 @@ function Scene({ pointer, calm, burstApi, letters, index, slide }) {
         .normalize();
 
       // Whichever letter is nearer the centre owns the pointer.
-      const focused = t < 0.5 ? t * SLIDE : (t - 1) * SLIDE;
+      const focused = clamped < 0.5 ? t * SLIDE : (t - 1) * SLIDE;
       if (planeUv(r.origin, r.direction, focused, r.uv)) {
         if (state.press) {
           state.press = false;
+          // A push into the surface, with no spray thrown off it.
           sim.impulse(r.uv.x, r.uv.y, 0.9, 0.085);
-          if (burstApi.current) {
-            burstApi.current(
-              new Vector3(
-                (r.uv.x - 0.5) * PLANE,
-                (r.uv.y - 0.5) * PLANE + focused,
-                0.1
-              ),
-              new Vector3(0, 0, 1),
-              1
-            );
-          }
+          surface.impulse(
+            state.ndc.x * 0.5 + 0.5,
+            state.ndc.y * 0.5 + 0.5,
+            0.85,
+            0.1
+          );
         } else if (r.hasLast) {
           const speed = Math.hypot(r.uv.x - r.last.x, r.uv.y - r.last.y);
           if (speed > 0.0006) {
@@ -128,11 +162,12 @@ function Scene({ pointer, calm, burstApi, letters, index, slide }) {
     }
 
     sim.update(gl, dt);
+    surface.update(gl, dt);
   });
 
   return (
     <>
-      <Backdrop />
+      <Backdrop surface={surface} />
 
       {/* Studio glass lighting: bright narrow strips against a darker surround.
           The contrast is the point — an evenly lit environment reflects as a
@@ -203,14 +238,12 @@ function Scene({ pointer, calm, burstApi, letters, index, slide }) {
         </group>
       )}
       <Bubbles calm={calm} />
-      {!calm && <Droplets api={burstApi} />}
     </>
   );
 }
 
-export default function WaterStage({ active, calm = false, letters, index, slide, onOpen }) {
+export default function WaterStage({ active, calm = false, letters, index, position, onOpen }) {
   const wrap = useRef(null);
-  const burstApi = useRef(null);
   const pointer = useRef({ ndc: { x: 0, y: 0 }, inside: false, press: false });
   const [ring, setRing] = useState({ x: 0, y: 0, on: false });
 
@@ -274,10 +307,9 @@ export default function WaterStage({ active, calm = false, letters, index, slide
         <Scene
           pointer={pointer}
           calm={calm}
-          burstApi={burstApi}
           letters={letters}
           index={index}
-          slide={slide}
+          position={position}
         />
       </Canvas>
 

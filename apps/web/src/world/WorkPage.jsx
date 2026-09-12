@@ -3,7 +3,7 @@ import { useWorldScroll } from './scroll/ScrollProvider.jsx';
 import { scramble } from '../crystals/scramble.js';
 import { copy, externalUrl, mediaUrl } from '../lib/api.js';
 import WaterStage from './water/WaterStage.jsx';
-import { initialOf } from './water/glyph.js';
+import { labelsFor } from './water/glyph.js';
 
 // The project index, shown as water in the shape of each project's initial.
 // Scrolling moves between projects; clicking opens the one on screen.
@@ -199,7 +199,6 @@ export default function WorkPage({ projects = [], content = {} }) {
   // Continuous scroll position through the list. The integer part selects which
   // two letters exist; the fraction drives the slide, read every frame by the
   // stage so the motion tracks the wheel instead of replaying a fixed tween.
-  const slide = useRef(0);
   const position = useRef(0);
   const reduced = useReducedMotion();
 
@@ -212,7 +211,8 @@ export default function WorkPage({ projects = [], content = {} }) {
     return real;
   }, [projects]);
 
-  const letters = useMemo(() => list.map((p, i) => initialOf(p, i)), [list]);
+  // Shortest prefix that tells each project apart from the others.
+  const letters = useMemo(() => labelsFor(list), [list]);
 
   // One viewport of scroll per project, so the letters change at a readable
   // rate rather than flicking past.
@@ -236,16 +236,16 @@ export default function WorkPage({ projects = [], content = {} }) {
       const layer = layerRef.current;
 
       if (layer) {
-        layer.style.opacity = (reduced ? c : smoothstep(0.55, 0.95, c)).toFixed(3);
+        layer.style.opacity = (reduced ? c : smoothstep(0.22, 0.55, c)).toFixed(3);
       }
 
-      const nextLive = c >= 0.5;
+      const nextLive = c >= 0.3;
       if (nextLive !== isLive) {
         isLive = nextLive;
         setLive(nextLive);
       }
 
-      const nextStage = c >= 0.35;
+      const nextStage = c >= 0.15;
       if (nextStage !== hasStage) {
         hasStage = nextStage;
         setMounted(nextStage);
@@ -259,7 +259,6 @@ export default function WorkPage({ projects = [], content = {} }) {
       position.current = raw;
 
       const whole = Math.floor(raw);
-      slide.current = raw - whole;
       if (whole !== shown) {
         shown = whole;
         setIndex(whole);
@@ -294,7 +293,7 @@ export default function WorkPage({ projects = [], content = {} }) {
           calm={reduced}
           letters={letters}
           index={index}
-          slide={slide}
+          position={position}
           onOpen={onOpen}
         />
       )}

@@ -1,4 +1,4 @@
-// The page behind the jar.
+// The page behind the letter, and the surface of the water it sits in.
 //
 // This is what the glass and the liquid actually refract, so it cannot be an
 // approximation of the ice page — any drift in the dot grid or the wash would
@@ -23,6 +23,9 @@ void main() {
 const FRAG = /* glsl */ `
 uniform vec2 uViewport;
 uniform float uDpr;
+uniform sampler2D uSurface;
+uniform float uRefract;
+uniform float uGlint;
 uniform vec3 uIceBase;
 uniform vec4 uIceDot;
 uniform vec2 uIceDotSize;
@@ -50,6 +53,19 @@ void main() {
   vec2 css = gl_FragCoord.xy / max(uDpr, 0.0001);
   vec2 px = vec2(css.x, uViewport.y - css.y);
 
+  // The page is the surface of the water, not a picture behind it. Sampling the
+  // height field's slope and displacing where we read the page from is what
+  // bends the dot lattice: a wave crossing the screen drags the dots with it,
+  // the way looking through moving water does.
+  vec2 screen = clamp(css / max(uViewport, vec2(1.0)), 0.0, 1.0);
+  const float STEP = 1.0 / 256.0;
+  float h = texture2D(uSurface, screen).r;
+  vec2 slope = vec2(
+    texture2D(uSurface, screen + vec2(STEP, 0.0)).r - h,
+    texture2D(uSurface, screen + vec2(0.0, STEP)).r - h
+  );
+  px += vec2(slope.x, -slope.y) * uRefract;
+
   vec3 c = uIceBase;
 
   vec2 cell = px - uIceDotSize.y * floor(px / uIceDotSize.y + 0.5);
@@ -65,7 +81,11 @@ void main() {
     ? overGradient(uWashTop, vec4(0.0), y / uWashClear, c)
     : overGradient(vec4(0.0), uWashBottom, (y - uWashClear) / (1.0 - uWashClear), c);
 
-  gl_FragColor = vec4(toLinear(c), 1.0);
+  // Light catching the slope. Clamped hard on both sides: an unbounded additive
+  // term here is exactly what blew the page out to white before.
+  c += clamp((slope.x - slope.y) * uGlint, -0.1, 0.1);
+
+  gl_FragColor = vec4(toLinear(clamp(c, 0.0, 1.0)), 1.0);
 
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -75,7 +95,7 @@ void main() {
 /** Distance behind the jar, far enough that refraction has something to bend. */
 const DEPTH = 9;
 
-export default function Backdrop() {
+export default function Backdrop({ surface }) {
   const { size, camera, viewport } = useThree();
 
   const material = useMemo(
@@ -87,6 +107,10 @@ export default function Backdrop() {
         uniforms: {
           uViewport: { value: new Vector2(1, 1) },
           uDpr: { value: 1 },
+          uSurface: { value: null },
+          // How far, in CSS pixels, a full-slope wave drags the page.
+          uRefract: { value: 210 },
+          uGlint: { value: 0.9 },
           uIceBase: { value: rgb(ICE_PAGE.base) },
           uIceDot: { value: rgba([...ICE_PAGE.dot.color, ICE_PAGE.dot.alpha]) },
           uIceDotSize: {
@@ -107,6 +131,7 @@ export default function Backdrop() {
   useFrame(() => {
     material.uniforms.uViewport.value.set(size.width, size.height);
     material.uniforms.uDpr.value = viewport.dpr;
+    if (surface) material.uniforms.uSurface.value = surface.texture;
   });
 
   // Sized to cover the frustum at its depth, with margin for refraction pulling

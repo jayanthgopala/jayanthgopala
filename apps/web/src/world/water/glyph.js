@@ -175,9 +175,45 @@ export function glyphSdf(character) {
 /** How far one SDF unit reaches, for turning the field back into a thickness. */
 export const SDF_SPREAD = SPREAD / SIZE;
 
+/** Letters and digits of a title, run together and upper-cased. */
+function alphanumeric(project) {
+  const source = String(project?.title || project?.slug || '');
+  return (source.match(/[\p{L}\p{N}]+/gu) || []).join('').toUpperCase();
+}
+
+/**
+ * A label per project: the shortest leading run of characters that no other
+ * project shares.
+ *
+ * One letter becomes ambiguous the moment two projects start alike — two
+ * identical blobs of water, with nothing to tell the reader which is which and
+ * no way to notice the clash except by opening one. Growing only the labels
+ * that actually collide keeps every other project at a single letter, so the
+ * page stays as spare as it was while still naming everything uniquely.
+ */
+export function labelsFor(projects = []) {
+  const names = projects.map(alphanumeric);
+
+  return names.map((name, i) => {
+    if (!name) return String((i % 9) + 1);
+
+    const limit = Math.min(3, name.length);
+    for (let length = 1; length <= limit; length += 1) {
+      const prefix = name.slice(0, length);
+      const shared = names.some(
+        (other, j) => j !== i && other && other.slice(0, length) === prefix
+      );
+      if (!shared) return prefix;
+    }
+
+    // Still identical three characters in: fall back to position, which cannot
+    // collide, rather than drawing two labels the reader cannot tell apart.
+    return name.slice(0, 2) + String((i % 9) + 1);
+  });
+}
+
 /** First letter of a project title, falling back to something drawable. */
 export function initialOf(project, index = 0) {
-  const source = String(project?.title || project?.slug || '').trim();
-  const letter = source.match(/[\p{L}\p{N}]/u)?.[0];
-  return (letter || String((index % 9) + 1)).toUpperCase();
+  const name = alphanumeric(project);
+  return name ? name.slice(0, 1) : String((index % 9) + 1);
 }

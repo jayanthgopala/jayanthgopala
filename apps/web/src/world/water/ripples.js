@@ -1,8 +1,7 @@
 // Damped wave equation on a ping-pong pair of render targets.
 //
-// The field is the water column's surface unwrapped to UV: u runs around the
-// cylinder (wrapping), v runs up it (clamped). Heights live in the red channel
-// and the previous step's heights in green, which is all the integrator needs:
+// The field is a flat sheet of water in UV. Heights live in the red channel and
+// the previous step's heights in green, which is all the integrator needs:
 //
 //   next = (2h - h_prev) + c * laplacian(h),  damped
 //
@@ -16,7 +15,6 @@ import {
   Mesh,
   OrthographicCamera,
   PlaneGeometry,
-  RepeatWrapping,
   Scene,
   ShaderMaterial,
   Vector2,
@@ -44,6 +42,7 @@ uniform vec2 uTexel;
 uniform float uDamp;
 uniform float uSpeed;
 uniform float uAspect;
+uniform float uWrap;
 uniform int uCount;
 uniform vec4 uImpulse[${MAX_IMPULSES}]; // xy = uv, z = strength, w = radius
 
@@ -68,8 +67,9 @@ void main() {
     if (i >= uCount) break;
     vec4 imp = uImpulse[i];
     vec2 delta = vUv - imp.xy;
-    // Shortest path around the cylinder rather than across the seam.
-    delta.x -= floor(delta.x + 0.5);
+    // On a wrapping field, take the shortest way round rather than across the
+    // seam. On a flat one that fold would pull in a phantom from the far edge.
+    delta.x -= uWrap * floor(delta.x + 0.5);
     delta.x *= uAspect;
     float radius = max(imp.w, 1e-4);
     next += imp.z * exp(-dot(delta, delta) / (radius * radius));
@@ -91,8 +91,10 @@ function makeTarget(size) {
     stencilBuffer: false,
     generateMipmaps: false,
   });
-  target.texture.wrapS = RepeatWrapping; // Around the column.
-  target.texture.wrapT = ClampToEdgeWrapping; // Along it.
+  // Clamped both ways: a wave reaching an edge should stop there, not reappear
+  // on the opposite side of the screen.
+  target.texture.wrapS = ClampToEdgeWrapping;
+  target.texture.wrapT = ClampToEdgeWrapping;
   return target;
 }
 
@@ -118,9 +120,10 @@ export class RippleSim {
         uTexel: { value: new Vector2(1 / size, 1 / size) },
         uDamp: { value: 0.994 },
         uSpeed: { value: 0.22 },
-        // The unwrapped sheet is wider than it is tall; without this, impulses
-        // land as ellipses rather than circles.
+        // A field wider than it is tall would otherwise take impulses as
+        // ellipses rather than circles.
         uAspect: { value: 1 },
+        uWrap: { value: 0 },
         uCount: { value: 0 },
         uImpulse: {
           value: Array.from({ length: MAX_IMPULSES }, () => new Vector4()),
@@ -133,19 +136,28 @@ export class RippleSim {
     this.scene.add(this.quad);
   }
 
-  /** Circumference / height of the surface being simulated. */
+  /** Width / height of the surface being simulated. */
   setAspect(aspect) {
     this.material.uniforms.uAspect.value = aspect;
   }
 
+  get aspect() {
+    return this.material.uniforms.uAspect.value;
+  }
+
   /**
-   * Queues a displacement. `u` wraps, `v` is clamped to the column.
+   * Queues a displacement at a point on the sheet.
    * Drained at up to MAX_IMPULSES per fixed step.
    */
   impulse(u, v, strength, radius = 0.045) {
     if (!Number.isFinite(u) || !Number.isFinite(v)) return;
     if (this.queue.length > 64) return; // A stalled frame should not bank a flood.
-    this.queue.push({ u: u - Math.floor(u), v: Math.min(1, Math.max(0, v)), strength, radius });
+    this.queue.push({
+      u: Math.min(1, Math.max(0, u)),
+      v: Math.min(1, Math.max(0, v)),
+      strength,
+      radius,
+    });
   }
 
   swap() {
