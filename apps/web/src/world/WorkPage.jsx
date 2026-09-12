@@ -15,9 +15,13 @@ const smoothstep = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 
-// Local dev mock data fallback
-const DEMO =
-  import.meta.env.DEV &&
+// Local dev mock data. Never reaches a production build.
+const DEV = import.meta.env.DEV;
+
+// ?demo forces the stand-ins even when real projects exist, for comparing the
+// two. Without it they are only a fallback — see below.
+const FORCE_DEMO =
+  DEV &&
   typeof window !== 'undefined' &&
   new URLSearchParams(window.location.search).has('demo');
 
@@ -29,44 +33,8 @@ const DEMO_PROJECTS = [
     description:
       'Jobs are delivered exactly once across restarts and partitions, with backoff and dead-lettering. A lease table in Postgres does the arbitration, so there is no separate coordinator to lose.',
     tech: ['Go', 'Postgres', 'gRPC'],
+    liveUrl: 'example.com',
     repoUrl: 'github.com/example/orbit',
-  },
-  {
-    slug: 'glacier-cms',
-    title: 'Glacier CMS',
-    summary: 'Headless CMS on the edge, one binary, zero cold starts.',
-    description:
-      'Content is compiled to immutable bundles at publish time, so a read is a cache hit and nothing touches the database on the request path.',
-    tech: ['TypeScript', 'Cloudflare', 'D1'],
-    liveUrl: 'example.com',
-  },
-  {
-    slug: 'signal-lens',
-    title: 'Signal Lens',
-    summary: 'Realtime log search over millions of lines a second.',
-    description:
-      'An inverted index kept in memory per shard, with a bloom filter in front so a miss costs nothing. Queries stream results as they land rather than waiting for the slowest shard.',
-    tech: ['Rust', 'Kafka', 'React'],
-    liveUrl: 'example.com',
-    repoUrl: 'github.com/example/signal-lens',
-  },
-  {
-    slug: 'meridian',
-    title: 'Meridian',
-    summary: 'Timezone-aware scheduling that survives DST.',
-    description:
-      'Stores intent rather than instants, so a 09:00 standup stays at 09:00 when the clocks move. Every recurrence is re-resolved against the current tz database.',
-    tech: ['TypeScript', 'Temporal API', 'SQLite'],
-    repoUrl: 'github.com/example/meridian',
-  },
-  {
-    slug: 'whiteout',
-    title: 'Whiteout',
-    summary: 'Chaos testing for edge workers.',
-    description:
-      'Injects latency, partitions and cold starts into a staging deployment, then asserts the SLO held. Failures replay deterministically from the recorded seed.',
-    tech: ['Go', 'Workers', 'OpenTelemetry'],
-    liveUrl: 'example.com',
   },
   {
     slug: 'bedrock',
@@ -78,30 +46,20 @@ const DEMO_PROJECTS = [
     repoUrl: 'github.com/example/bedrock',
   },
   {
+    slug: 'whiteout',
+    title: 'Whiteout',
+    summary: 'Chaos testing for edge workers.',
+    description:
+      'Injects latency, partitions and cold starts into a staging deployment, then asserts the SLO held. Failures replay deterministically from the recorded seed.',
+    tech: ['Go', 'Workers', 'OpenTelemetry'],
+    liveUrl: 'example.com',
+  },
+  {
     slug: 'ilium',
     title: 'Ilium',
     summary: 'A tiny dependency-free plotting library.',
     tech: ['TypeScript', 'Canvas'],
     repoUrl: 'github.com/example/ilium',
-  },
-  {
-    slug: 'drift-detector',
-    title: 'Drift Detector',
-    summary: 'Catches infrastructure that no longer matches its definition.',
-    description:
-      'Walks the live cloud account nightly and diffs it against the committed Terraform state, opening one pull request per divergence instead of a wall of alerts.',
-    tech: ['Go', 'Terraform', 'AWS'],
-    liveUrl: 'example.com',
-    repoUrl: 'github.com/example/drift',
-  },
-  {
-    slug: 'katabatic',
-    title: 'Katabatic',
-    summary: 'Backpressure-aware queue for slow consumers.',
-    description:
-      'Producers are slowed at the source rather than buffered into oblivion, so a stalled consumer degrades throughput instead of exhausting memory.',
-    tech: ['Rust', 'Redis'],
-    repoUrl: 'github.com/example/katabatic',
   },
 ];
 
@@ -238,17 +196,21 @@ export default function WorkPage({ projects = [], content = {} }) {
   const [mounted, setMounted] = useState(false);
   const [index, setIndex] = useState(0);
   const [open, setOpen] = useState(null);
+  // Continuous scroll position through the list. The integer part selects which
+  // two letters exist; the fraction drives the slide, read every frame by the
+  // stage so the motion tracks the wheel instead of replaying a fixed tween.
+  const slide = useRef(0);
+  const position = useRef(0);
   const reduced = useReducedMotion();
 
-  const list = useMemo(
-    () =>
-      // ?demo wins outright rather than only filling an empty list, so the
-      // stand-ins are reachable while there is real content too. Dev only.
-      (DEMO ? DEMO_PROJECTS : projects).filter(
-        (p) => p.published !== false
-      ),
-    [projects]
-  );
+  const list = useMemo(() => {
+    const real = projects.filter((p) => p.published !== false);
+    // In development an empty list means the API is not running or the database
+    // is bare, and an empty page teaches nothing about how this looks. Standing
+    // in automatically is more useful than an instruction to add ?demo.
+    if (DEV && (FORCE_DEMO || real.length === 0)) return DEMO_PROJECTS;
+    return real;
+  }, [projects]);
 
   const letters = useMemo(() => list.map((p, i) => initialOf(p, i)), [list]);
 
@@ -290,13 +252,17 @@ export default function WorkPage({ projects = [], content = {} }) {
       }
 
       const step = Math.max(1, window.innerHeight);
-      const next = Math.min(
+      const raw = Math.min(
         Math.max(list.length - 1, 0),
-        Math.max(0, Math.round(page.current / step))
+        Math.max(0, page.current / step)
       );
-      if (next !== shown) {
-        shown = next;
-        setIndex(next);
+      position.current = raw;
+
+      const whole = Math.floor(raw);
+      slide.current = raw - whole;
+      if (whole !== shown) {
+        shown = whole;
+        setIndex(whole);
       }
 
       frame = requestAnimationFrame(tick);
@@ -307,8 +273,11 @@ export default function WorkPage({ projects = [], content = {} }) {
   }, [cut, page, reduced, list.length]);
 
   const onOpen = useCallback(() => {
-    setOpen((current) => (current ? current : list[index] ?? null));
-  }, [list, index]);
+    // Mid-slide the letter on screen is the nearer of the two, not the one the
+    // integer index happens to name.
+    const focused = Math.round(position.current);
+    setOpen((current) => (current ? current : list[focused] ?? null));
+  }, [list]);
 
   const onClose = useCallback(() => setOpen(null), []);
 
@@ -325,6 +294,7 @@ export default function WorkPage({ projects = [], content = {} }) {
           calm={reduced}
           letters={letters}
           index={index}
+          slide={slide}
           onOpen={onOpen}
         />
       )}

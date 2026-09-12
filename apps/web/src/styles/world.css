@@ -601,7 +601,7 @@
   display: grid;
   place-items: center;
   padding: clamp(16px, 4vw, 48px);
-  background: rgba(203, 215, 228, 0.72);
+  background: rgba(203, 215, 228, 0.74);
   backdrop-filter: blur(14px) saturate(1.1);
   animation: w-detail-in 320ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
@@ -621,7 +621,7 @@
   box-sizing: border-box;
   padding: clamp(20px, 3vw, 34px);
   border: 1px solid rgba(63, 72, 85, 0.25);
-  background: rgba(233, 240, 248, 0.9);
+  background: rgba(233, 240, 248, 0.93);
   font-size: 0.8rem;
   line-height: 1.65;
 }

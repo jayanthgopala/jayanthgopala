@@ -19,26 +19,27 @@ import { glyphSdf } from './glyph.js';
 
 const SIM_SIZE = { desktop: 256, mobile: 128 };
 
-/** Seconds a letter takes to melt into the next one. */
-const MORPH_SECONDS = 0.55;
+/** How far a letter travels to leave the frame, in world units. */
+const SLIDE = PLANE * 1.4;
 
 /**
  * Where the ray crosses the plane the letter is drawn on, as a UV.
  * The letter has depth, but picking against its front face would make the
  * hit point jump around as the surface moves; the flat plane is steadier.
  */
-function planeUv(origin, direction, out) {
+function planeUv(origin, direction, offsetY, out) {
   if (Math.abs(direction.z) < 1e-6) return false;
   const t = -origin.z / direction.z;
   if (t <= 0) return false;
 
   const x = origin.x + direction.x * t;
-  const y = origin.y + direction.y * t;
+  // Into the letter's own frame: it may be part way through sliding past.
+  const y = origin.y + direction.y * t - offsetY;
   out.set(x / PLANE + 0.5, y / PLANE + 0.5);
   return out.x >= 0 && out.x <= 1 && out.y >= 0 && out.y <= 1;
 }
 
-function Scene({ pointer, calm, burstApi, letters, index }) {
+function Scene({ pointer, calm, burstApi, letters, index, slide }) {
   const { gl, camera, size } = useThree();
 
   const sim = useMemo(() => {
@@ -49,27 +50,20 @@ function Scene({ pointer, calm, burstApi, letters, index }) {
 
   useEffect(() => () => sim.dispose(), [sim]);
 
-  // Two glyphs and a blend, so changing project melts one letter into the next
-  // rather than cutting.
-  const morph = useRef(1);
-  const [pair, setPair] = useState(() => ({
-    a: glyphSdf(letters[0] ?? '·'),
-    b: glyphSdf(letters[0] ?? '·'),
-  }));
-  const shown = useRef(0);
+  // The letter under the camera and the one queued behind it. Only these two
+  // are ever built, however long the project list is.
+  const here = useMemo(() => glyphSdf(letters[index] ?? '·'), [letters, index]);
+  const next = useMemo(
+    () => (letters[index + 1] != null ? glyphSdf(letters[index + 1]) : null),
+    [letters, index]
+  );
 
-  useEffect(() => {
-    if (index === shown.current) return;
-    const next = letters[index] ?? '·';
-    setPair((prev) => ({ a: prev.b, b: glyphSdf(next) }));
-    morph.current = 0;
-    shown.current = index;
-
-    // A change of letter is a disturbance, so the surface should react to it.
-    for (let i = 0; i < 5; i += 1) {
-      sim.impulse(0.2 + Math.random() * 0.6, 0.2 + Math.random() * 0.6, 0.5, 0.11);
-    }
-  }, [index, letters, sim]);
+  // Driven straight from scroll every frame, so the slide tracks the wheel
+  // rather than playing a fixed animation once a threshold is crossed.
+  const hereGroup = useRef(null);
+  const nextGroup = useRef(null);
+  const hereFocus = useRef(1);
+  const nextFocus = useRef(0);
 
   const ray = useRef({
     origin: new Vector3(),
@@ -84,10 +78,12 @@ function Scene({ pointer, calm, burstApi, letters, index }) {
     const state = pointer.current;
     const r = ray.current;
 
-    // Parks at 1, meaning "showing b". The next change re-seeds a from it.
-    if (morph.current < 1) {
-      morph.current = Math.min(1, morph.current + dt / MORPH_SECONDS);
-    }
+    // Scroll position within the current letter, 0 at rest, 1 at the next.
+    const t = Math.min(1, Math.max(0, slide.current));
+    if (hereGroup.current) hereGroup.current.position.y = t * SLIDE;
+    if (nextGroup.current) nextGroup.current.position.y = (t - 1) * SLIDE;
+    hereFocus.current = 1 - t;
+    nextFocus.current = t;
 
     if (state.inside && !calm) {
       r.origin.setFromMatrixPosition(camera.matrixWorld);
@@ -97,13 +93,19 @@ function Scene({ pointer, calm, burstApi, letters, index }) {
         .sub(r.origin)
         .normalize();
 
-      if (planeUv(r.origin, r.direction, r.uv)) {
+      // Whichever letter is nearer the centre owns the pointer.
+      const focused = t < 0.5 ? t * SLIDE : (t - 1) * SLIDE;
+      if (planeUv(r.origin, r.direction, focused, r.uv)) {
         if (state.press) {
           state.press = false;
           sim.impulse(r.uv.x, r.uv.y, 0.9, 0.085);
           if (burstApi.current) {
             burstApi.current(
-              new Vector3((r.uv.x - 0.5) * PLANE, (r.uv.y - 0.5) * PLANE, 0.1),
+              new Vector3(
+                (r.uv.x - 0.5) * PLANE,
+                (r.uv.y - 0.5) * PLANE + focused,
+                0.1
+              ),
               new Vector3(0, 0, 1),
               1
             );
@@ -132,45 +134,81 @@ function Scene({ pointer, calm, burstApi, letters, index }) {
     <>
       <Backdrop />
 
-      {/* Broad soft panels rather than point lights: water needs something with
-          area to reflect or its rim reads as plastic. */}
-      <Environment resolution={256} frames={1}>
-        <color attach="background" args={['#b9c6d6']} />
+      {/* Studio glass lighting: bright narrow strips against a darker surround.
+          The contrast is the point — an evenly lit environment reflects as a
+          flat sheen and the letter loses its edges, which is exactly how it was
+          reading before. */}
+      <Environment resolution={512} frames={1}>
+        <color attach="background" args={['#8ea2b8']} />
+
+        {/* The two key strips, running the height of the letter. These are what
+            draw the long vertical highlights down its edges. */}
         <Lightformer
           form="rect"
-          intensity={4.2}
+          intensity={7.5}
           color="#ffffff"
-          scale={[0.7, 12, 1]}
-          position={[-3.4, 0, 2.6]}
+          scale={[0.42, 14, 1]}
+          position={[-3.1, 0, 2.8]}
           rotation-y={Math.PI / 2}
         />
         <Lightformer
           form="rect"
-          intensity={3.1}
-          color="#eaf3ff"
-          scale={[0.55, 12, 1]}
-          position={[3.4, 0, 2.0]}
+          intensity={5.2}
+          color="#eaf4ff"
+          scale={[0.32, 14, 1]}
+          position={[3.1, 0.4, 2.2]}
           rotation-y={-Math.PI / 2}
+        />
+
+        {/* A narrow second pair, offset, so curved sections catch more than one
+            line and read as round rather than as a flat bevel. */}
+        <Lightformer
+          form="rect"
+          intensity={3.4}
+          color="#ffffff"
+          scale={[0.18, 9, 1]}
+          position={[-1.5, -0.6, 3.4]}
+          rotation-y={Math.PI / 2}
         />
         <Lightformer
           form="rect"
-          intensity={2.4}
+          intensity={2.8}
+          color="#f2f8ff"
+          scale={[0.16, 9, 1]}
+          position={[1.9, 0.8, 3.2]}
+          rotation-y={-Math.PI / 2}
+        />
+
+        {/* Overhead sheet for the top surfaces. */}
+        <Lightformer
+          form="rect"
+          intensity={3.2}
           color="#ffffff"
-          scale={[10, 5, 1]}
-          position={[0, 5, 1]}
+          scale={[9, 3.5, 1]}
+          position={[0, 4.5, 1.5]}
           rotation-x={Math.PI / 2}
         />
-        <Lightformer form="ring" intensity={1.1} color="#dce8f6" scale={6} position={[0, -2, -6]} />
+
+        {/* Cool fill from behind, so the back wall of the body is not black. */}
+        <Lightformer form="ring" intensity={1.6} color="#cfe0f2" scale={7} position={[0, -1.5, -6]} />
       </Environment>
 
-      <GlyphWater sim={sim} glyphA={pair.a} glyphB={pair.b} morph={morph} calm={calm} />
+      <group ref={hereGroup}>
+        <GlyphWater sim={sim} glyph={here} focus={hereFocus} calm={calm} />
+      </group>
+
+      {next && (
+        <group ref={nextGroup} position={[0, -SLIDE, 0]}>
+          <GlyphWater sim={sim} glyph={next} focus={nextFocus} calm={calm} />
+        </group>
+      )}
       <Bubbles calm={calm} />
       {!calm && <Droplets api={burstApi} />}
     </>
   );
 }
 
-export default function WaterStage({ active, calm = false, letters, index, onOpen }) {
+export default function WaterStage({ active, calm = false, letters, index, slide, onOpen }) {
   const wrap = useRef(null);
   const burstApi = useRef(null);
   const pointer = useRef({ ndc: { x: 0, y: 0 }, inside: false, press: false });
@@ -239,6 +277,7 @@ export default function WaterStage({ active, calm = false, letters, index, onOpe
           burstApi={burstApi}
           letters={letters}
           index={index}
+          slide={slide}
         />
       </Canvas>
 
