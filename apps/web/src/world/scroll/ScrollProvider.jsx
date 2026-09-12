@@ -59,7 +59,7 @@ export default function ScrollProvider({ children, locked = false }) {
 
     const IDLE_MS = 1200;
     const COMMIT = 0.5;
-    const CUT_MIN_SECONDS = 1.8;
+    const CUT_MIN_SECONDS = 1.2;
     const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
     let settling = false;
     let lastInput = performance.now();

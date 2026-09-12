@@ -321,7 +321,7 @@ function Detail({ project, number, onClose }) {
 }
 
 export default function WorkPage({ projects = [], content = {}, profile = {} }) {
-  const { cut, page, setPageHeight } = useWorldScroll();
+  const { cut, page, setPageHeight, lenis } = useWorldScroll();
   const layerRef = useRef(null);
   const [live, setLive] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -335,6 +335,15 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
   // drawn on arrival rather than dragged along for the ride.
   const [arrived, setArrived] = useState(null);
   const [open, setOpen] = useState(null);
+
+  // Pause world scroll when project detail is open
+  useEffect(() => {
+    if (!open) return undefined;
+    lenis.current?.stop();
+    return () => {
+      lenis.current?.start();
+    };
+  }, [open, lenis]);
   // Continuous scroll position through the list. The integer part selects which
   // two objects exist; the fraction drives the slide, read every frame by the
   // stage so the motion tracks the wheel instead of replaying a fixed tween.
@@ -404,17 +413,18 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
         setMounted(nextStage);
       }
 
-      const nextOpened = c >= 0.95;
+      const nextOpened = c >= 0.65;
       if (nextOpened !== hasOpened) {
         hasOpened = nextOpened;
         setOpened(nextOpened);
       }
 
       const step = Math.max(1, window.innerHeight);
-      const target = Math.min(
-        Math.max(list.length - 1, 0),
-        page.current / step - ABOUT_SPAN
-      );
+      // Keep scroll anchored at introduction until cut has finished opening
+      const scrolled = nextOpened
+        ? Math.min(Math.max(list.length - 1, 0), page.current / step - ABOUT_SPAN)
+        : -ABOUT_SPAN;
+      const target = scrolled;
 
       // Exponential follow, framed in dt so the glide is the same length at any
       // refresh rate. It always starts at the introduction rather than at
@@ -428,11 +438,11 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
       const raw = eased;
       position.current = raw;
 
-      // Reveal introduction only after the page transition has finished
+      // Reveal introduction promptly once the page finishes opening
       const about = aboutRef.current;
       if (about) {
         const gone = smoothstep(-ABOUT_SPAN + 0.1, -0.15, raw);
-        const arriving = smoothstep(0.92, 0.98, c);
+        const arriving = smoothstep(0.55, 0.72, c);
         about.style.opacity = ((1 - gone) * arriving).toFixed(3);
         about.style.transform =
           `translate(-50%, -50%) translateY(${(-gone * 12).toFixed(2)}vh)`;
