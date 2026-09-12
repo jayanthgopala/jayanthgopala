@@ -825,8 +825,8 @@
   .w-about { transition: none; }
 }
 
-/* The introduction arrives after the background has established itself */
-.w-about > * { opacity: 1; }
+/* The introduction arrives after the page has finished opening */
+.w-about > * { opacity: 0; }
 
 /* Runs when the page has finished opening, not when the section is created —
    mounting it early is what lets it be there before it is needed. */

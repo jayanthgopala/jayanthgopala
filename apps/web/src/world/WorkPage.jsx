@@ -502,7 +502,7 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
           profile={profile}
           content={content}
           boxRef={aboutRef}
-          shown={opened || live}
+          shown={opened}
         />
       )}
 
