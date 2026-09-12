@@ -691,11 +691,11 @@
   /* Normalised by pathLength=1, so every leader draws at the same rate. */
   stroke-dasharray: 1 2;
   stroke-dashoffset: 1;
-  animation: w-leader-draw 620ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  animation: w-leader-draw 360ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
-.w-readout-lines path:nth-child(2) { animation-delay: 90ms; }
-.w-readout-lines path:nth-child(3) { animation-delay: 170ms; }
+.w-readout-lines path:nth-child(2) { animation-delay: 40ms; }
+.w-readout-lines path:nth-child(3) { animation-delay: 80ms; }
 
 @keyframes w-leader-draw {
   to { stroke-dashoffset: 0; }
@@ -825,10 +825,8 @@
   .w-about { transition: none; }
 }
 
-/* The introduction arrives after the background has established itself, rather
-   than landing with it — the smear needs a moment to read as a place before
-   there is anything to read in it. */
-.w-about > * { opacity: 0; }
+/* The introduction arrives after the background has established itself */
+.w-about > * { opacity: 1; }
 
 /* Runs when the page has finished opening, not when the section is created —
    mounting it early is what lets it be there before it is needed. */
@@ -851,17 +849,16 @@
   .w-about > * { animation: none; opacity: 1; }
 }
 
-/* Each label waits for its own leader to reach it. The line is drawn from the
-   object outward, so the text arriving first would be the effect backwards. */
+/* Each label waits for its own leader to reach it */
 .w-readout-code,
 .w-readout-stat,
 .w-readout-cta {
-  animation: w-readout-label 420ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  animation: w-readout-label 340ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
-.w-readout-code { animation-delay: 540ms; }
-.w-readout-stat { animation-delay: 640ms; }
-.w-readout-cta  { animation-delay: 740ms; }
+.w-readout-code { animation-delay: 80ms; }
+.w-readout-stat { animation-delay: 140ms; }
+.w-readout-cta  { animation-delay: 200ms; }
 
 @keyframes w-readout-label {
   from { opacity: 0; transform: translateY(0.5em); }
@@ -876,7 +873,7 @@
   background-position: 0 100%;
   background-size: 0% 1px;
   border-bottom: 0;
-  animation: w-readout-rule 460ms cubic-bezier(0.22, 0.61, 0.36, 1) 900ms both;
+  animation: w-readout-rule 360ms cubic-bezier(0.22, 0.61, 0.36, 1) 240ms both;
 }
 
 @keyframes w-readout-rule {

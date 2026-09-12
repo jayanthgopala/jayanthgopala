@@ -180,14 +180,14 @@ function Readout({ project, number, total, hint, boxRef }) {
         <Decoded
           text={`PORTFOLIO_CO_${pad(number)}`}
           arrival={arrival}
-          delay={560}
+          delay={80}
         />
         <Decoded
           as="span"
           className="w-readout-name"
           text={(project.title || 'Untitled').toUpperCase()}
           arrival={arrival}
-          delay={660}
+          delay={140}
         />
       </p>
 
@@ -205,25 +205,22 @@ function Readout({ project, number, total, hint, boxRef }) {
   );
 }
 
-/**
- * The written opening. Text only, deliberately — it is the one place on this
- * page that is read rather than looked at, and giving it an object of its own
- * would make it compete with the work it introduces.
- */
-function About({ profile, content, boxRef }) {
-  const name = profile.name || '';
-  const role = profile.role || '';
-  const body = profile.description || profile.headline || '';
+// Introductory about section displayed before project list
+function About({ profile, content, boxRef, shown = true }) {
+  const p = profile?.name ? profile : DEMO_PROFILE;
+  const name = p.name || '';
+  const role = p.role || '';
+  const body = p.description || p.headline || '';
 
   return (
-    <section className="w-about" ref={boxRef} aria-label="About">
+    <section className={`w-about${shown ? ' is-in' : ''}`} ref={boxRef} aria-label="About">
       <p className="w-about-rule">////// {copy(content, 'world.aboutEyebrow', 'About')}</p>
       {name && <h2 className="w-about-name">{name}</h2>}
       {role && <p className="w-about-role">{role}</p>}
       {body && <p className="w-about-body">{body}</p>}
 
       <p className="w-about-meta">
-        {profile.location && <span>{profile.location}</span>}
+        {p.location && <span>{p.location}</span>}
         <span>{copy(content, 'world.aboutNext', 'Scroll for selected work')}</span>
       </p>
     </section>
@@ -344,7 +341,7 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
   const position = useRef(0);
   // Where the object sits on screen, in 0..1, written by the stage each frame
   // and read back here to place the labels on it.
-  const anchor = useRef({ x: 0.5, y: 1.6 });
+  const anchor = useRef({ x: 0.5, y: 0.5, whole: true });
   const readoutRef = useRef(null);
   const aboutRef = useRef(null);
   const reduced = useReducedMotion();
@@ -407,7 +404,7 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
         setMounted(nextStage);
       }
 
-      const nextOpened = c >= 0.92;
+      const nextOpened = c >= 0.95;
       if (nextOpened !== hasOpened) {
         hasOpened = nextOpened;
         setOpened(nextOpened);
@@ -431,17 +428,15 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
       const raw = eased;
       position.current = raw;
 
-      // The introduction reads off the damped position too, so it cannot be
-      // skipped by a flick the objects are still gliding through.
+      // Reveal introduction only after the page transition has finished
       const about = aboutRef.current;
       if (about) {
         const gone = smoothstep(-ABOUT_SPAN + 0.1, -0.15, raw);
-        about.style.opacity = (1 - gone).toFixed(3);
-        // Keeps the centring the stylesheet set. Writing a bare translate here
-        // replaced it, which is what pushed the introduction off its middle.
+        const arriving = smoothstep(0.92, 0.98, c);
+        about.style.opacity = ((1 - gone) * arriving).toFixed(3);
         about.style.transform =
           `translate(-50%, -50%) translateY(${(-gone * 12).toFixed(2)}vh)`;
-        about.style.visibility = gone >= 1 ? 'hidden' : 'visible';
+        about.style.visibility = gone >= 1 || arriving <= 0 ? 'hidden' : 'visible';
       }
 
       // Labels ride the object rather than the viewport.
@@ -452,12 +447,10 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
         labels.style.setProperty('--ay', `${(y * 100).toFixed(2)}%`);
       }
 
-      // Arrival, rather than "the index changed": the object has stopped within
-      // a hair of a whole position and is past the introduction. Mounting the
-      // labels on that moment is what lets them draw themselves in.
+      // Display instrument readout when an object is in view and past intro
       const nearest = Math.round(raw);
-      const atRest = raw > -0.25 && Math.abs(raw - nearest) < 0.05;
-      const nextSettled = atRest ? Math.min(Math.max(nearest, 0), Math.max(list.length - 1, 0)) : null;
+      const isAtProject = raw > -0.45 && (anchor.current?.whole || Math.abs(raw - nearest) < 0.45);
+      const nextSettled = isAtProject ? Math.min(Math.max(nearest, 0), Math.max(list.length - 1, 0)) : null;
       if (nextSettled !== settledAt) {
         settledAt = nextSettled;
         setArrived(nextSettled);
@@ -504,11 +497,12 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
         />
       )}
 
-      {opened && (
+      {mounted && (
         <About
-          profile={DEV && !profile.name ? DEMO_PROFILE : profile}
+          profile={profile}
           content={content}
           boxRef={aboutRef}
+          shown={opened || live}
         />
       )}
 
