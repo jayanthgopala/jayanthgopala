@@ -3,65 +3,25 @@ import { applyIceSettings, tagIceMaps, makeIceMaps } from './ice-texture.js';
 import { ICE_SETS, ICE_MAPS } from './ice-sets.js';
 import { setBakedField } from './terrain.js';
 
-/**
- * The baked world, fetched once before anything is built from it.
- *
- * WHY THIS EXISTS AT ALL is argued in scripts/bake-world.mjs: starting this
- * scene cost 16.9 seconds of blocked main thread, all of it recomputing a
- * result that a fixed seed and a pile of position functions had already
- * determined. This is the other half — the side that reads what that script
- * wrote.
- *
- * THE SHAPE OF IT IS DECIDED BY THE CALL SITES, and they are all synchronous.
- * The terrain's vertex loop, the scree scatter, the igloo's footing and the
- * camera rig's ground clearance all ask for heights and maps from inside
- * useMemo and useFrame, where there is nowhere to await. Rewriting them to
- * suspend would push async through the entire scene graph to save a single
- * fetch, so instead the fetch happens strictly BEFORE any of them exist:
- * loadBakedWorld() runs while the loading screen is up, fills the cache below,
- * and only then does the Stage mount. Every existing call site is unchanged.
- *
- * EVERY PART OF IT DEGRADES ON ITS OWN. A missing manifest, a failed image, a
- * truncated heightfield — each falls back to generating that piece the old way.
- * A half-baked deploy is then slow, which is what it was before, rather than
- * broken.
- */
+// The baked world, fetched once before anything is built from it. scripts/bake-world.mjs is the other half.
+// Starting this scene cost 16.9s of blocked main thread recomputing what a fixed seed had already determined.
+// The call sites are all synchronous, terrain vertices, scree scatter, igloo footing and camera clearance all ask from inside
+// useMemo and useFrame where there's nowhere to await, so the fetch happens strictly before any of them exist.
+// Every part degrades on its own, a missing manifest or a failed image falls back to generating that piece the old way.
 
 const BASE = '/baked';
 
-/** name -> { roughnessMap, normalMap, colorMap, aoMap, reliefStops, patchStops } */
+// name -> { roughnessMap, normalMap, colorMap, aoMap, reliefStops, patchStops }
 const cache = new Map();
 let loaded = false;
-/*
- * THE IN-FLIGHT PROMISE, AND A BOOLEAN ALONE IS NOT ENOUGH.
- *
- * `loaded` is only set once everything has arrived, so two callers that start
- * before the first finishes both see false and both fetch the whole set.
- * That is not hypothetical: React's StrictMode deliberately mounts effects
- * twice in development, and it was measured doing exactly this — 36 requests
- * for 18 files. Holding the promise means the second caller waits on the first
- * request rather than starting a second one.
- */
+// A boolean alone isn't enough, loaded is only set once everything arrives so two callers would both fetch the whole set.
+// StrictMode mounts effects twice in dev and was measured doing exactly that, 36 requests for 18 files.
 let inFlight = null;
 
-/**
- * DECODED OFF THE MAIN THREAD, and this is the entire performance argument.
- *
- * createImageBitmap hands the bytes to the browser's native image pipeline,
- * which decodes on its own thread — so four sets of maps decode in parallel
- * with each other and with everything else, in compiled code, at a speed that
- * barely depends on how weak the device's single-core JavaScript performance
- * is. That is precisely the axis on which the old generate-on-load path failed:
- * a slow phone is several times worse at running a noise loop and only slightly
- * worse at decoding a PNG.
- *
- * The two options are not defaults and both matter. premultiplyAlpha would
- * scale the colour channels by an alpha that is a constant 255 here — a no-op
- * in principle, and not worth trusting for maps whose channels carry roughness
- * and surface normals rather than a picture. colorSpaceConversion would let the
- * browser apply a profile transform; these files carry no profile, so it should
- * do nothing, and 'none' means it cannot.
- */
+// createImageBitmap decodes off the main thread in compiled code, so four sets decode in parallel.
+// That's the axis the generate-on-load path failed on, a slow phone is much worse at a noise loop and barely worse at a PNG.
+// premultiplyAlpha would scale colour by a constant 255 alpha, not worth trusting for maps carrying normals and roughness.
+// colorSpaceConversion none, these files carry no profile so a transform should do nothing and this means it can't.
 async function fetchBitmap(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url} -> ${res.status}`);
@@ -73,19 +33,12 @@ async function fetchBitmap(url) {
 
 function textureFrom(bitmap) {
   const tex = new Texture(bitmap);
-  /* A Texture built around an existing image never uploads without this — the
-     constructor cannot know the image is already complete. */
-  tex.needsUpdate = true;
+  tex.needsUpdate = true; // a Texture built round an existing image never uploads without this
   return tex;
 }
 
-/**
- * The heightfield, back from 16-bit and into the units the terrain thinks in.
- *
- * See the bake script for why this is a raw array rather than a PNG: canvas
- * silently truncates 16-bit PNGs to 8, which would halve the precision here
- * with nothing to show for it.
- */
+// The heightfield back from 16-bit into the units the terrain thinks in.
+// It's a raw array not a PNG because canvas silently truncates 16-bit PNGs to 8.
 async function loadHeightfield(meta) {
   const res = await fetch(`${BASE}/heightfield.bin`);
   if (!res.ok) throw new Error(`heightfield -> ${res.status}`);
@@ -104,13 +57,7 @@ async function loadHeightfield(meta) {
   setBakedField(data);
 }
 
-/**
- * Fetch everything, or report honestly that it could not.
- *
- * Resolves either way. A rejection here would have to be handled by the caller
- * into exactly the same fallback this already performs, and the site is not
- * broken by the bake being absent — only slower, in the way it always was.
- */
+// Resolves either way. A rejection would only be handled into the same fallback this already does.
 export async function loadBakedWorld() {
   if (loaded) return true;
   if (inFlight) return inFlight;
@@ -124,28 +71,14 @@ async function fetchEverything() {
     if (!res.ok) throw new Error(`manifest -> ${res.status}`);
     const manifest = await res.json();
 
-    /*
-     * A 200 IS NOT PROOF THE FILE IS THERE.
-     *
-     * Any single-page host — the dev server included — answers an unknown path
-     * with index.html and a 200, because that is how client-side routing has to
-     * work. So a missing bake does not arrive as a 404; it arrives as a
-     * perfectly successful response containing a web page. Observed exactly
-     * that while testing this path: `Unexpected token '<'`.
-     *
-     * The JSON parse above already throws on the HTML, so this is not load
-     * bearing for correctness — it is here so the NEXT failure of this shape
-     * reports what is actually wrong instead of a parser's opinion of it.
-     */
+    // A 200 is not proof the file is there, any SPA host answers an unknown path with index.html and a 200.
+    // So a missing bake arrives as a successful response containing a web page, seen here as Unexpected token '<'.
+    // The JSON parse above already throws on that, this is so the next failure of this shape says what's actually wrong.
     if (manifest?.version !== 1) {
-      throw new Error(`manifest is not a v1 bake (got ${JSON.stringify(manifest?.version)}) — run: npm run bake`);
+      throw new Error(`manifest is not a v1 bake (got ${JSON.stringify(manifest?.version)}), run: npm run bake`);
     }
 
-    /*
-     * ALL OF IT AT ONCE. Seventeen files fetched in sequence would serialise
-     * seventeen round trips; in parallel the browser pipelines them over one
-     * connection and the whole set costs about as long as the slowest of them.
-     */
+    // All of it at once, seventeen sequential fetches would serialise seventeen round trips.
     const sets = await Promise.all(
       Object.keys(ICE_SETS).map(async (name) => {
         const meta = manifest.sets[name];
@@ -165,27 +98,15 @@ async function fetchEverything() {
     loaded = true;
     return true;
   } catch (error) {
-    /* Deliberately a warning and not a throw: see the note on the return. */
     console.warn('[world] baked assets unavailable, generating at runtime:', error.message);
-    /* Cleared so a later mount can retry — a failure here is as likely to be a
-       flaky connection as a missing file, and the fallback is expensive. */
-    inFlight = null;
+    inFlight = null; // cleared so a later mount can retry, this is as likely to be a flaky connection as a missing file
     return false;
   }
 }
 
-/**
- * The maps for one surface — from the bake if it loaded, generated if not.
- *
- * `repeat` is applied here rather than baked because it is a property of how
- * the texture is mapped onto its surface, not of the texture: the ground's is
- * derived from the terrain's world size and the others are 1. See ice-sets.js.
- *
- * THE TEXTURES ARE SHARED, NOT COPIED. Two call sites asking for the same set
- * get the same GPU upload, which is the correct behaviour for every set here —
- * each is used once. If one is ever wanted at two different repeats, this has
- * to clone rather than mutate, because repeat lives on the texture.
- */
+// The maps for one surface, from the bake if it loaded and generated if not.
+// repeat is applied here rather than baked, it's how the texture maps onto its surface rather than part of the texture.
+// The textures are shared not copied, which is right while each set is used once. Two repeats would need a clone.
 export function iceMapsFor(name, repeat = 1) {
   const entry = cache.get(name);
   if (!entry) return makeIceMaps({ ...ICE_SETS[name], repeat });

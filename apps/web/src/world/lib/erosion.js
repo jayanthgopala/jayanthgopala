@@ -1,47 +1,33 @@
 /*
- * Droplet-based hydraulic erosion.
+ * Droplet-based hydraulic erosion. Vendored from https://github.com/ctkrug/erosion (src/erosion.js).
  *
- * Vendored from https://github.com/ctkrug/erosion (src/erosion.js).
+ * MIT License
+ * Copyright (c) 2026 Charlie Krug
  *
- *   MIT License
- *   Copyright (c) 2026 Charlie Krug
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- *   Permission is hereby granted, free of charge, to any person obtaining a copy
- *   of this software and associated documentation files (the "Software"), to deal
- *   in the Software without restriction, including without limitation the rights
- *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- *   copies of the Software, and to permit persons to whom the Software is
- *   furnished to do so, subject to the following conditions:
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
  *
- *   The above copyright notice and this permission notice shall be included in
- *   all copies or substantial portions of the Software.
- *
- *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- *   SOFTWARE.
- *
- * WHY THIS AND NOT MORE NOISE. Every layer already in terrain.js is a function
- * of position alone: whatever it produces at a point, it produces without
- * reference to anything around it. Real ground is the opposite — a valley is
- * where material WENT somewhere, and that somewhere is downhill from here. No
- * amount of stacked octaves can express that, which is why summed noise always
- * reads as texture rather than landscape however well it is tuned.
- *
- * This traces water over the surface and moves material along with it, so the
- * result carries the one thing noise cannot fake: every hollow is connected to
- * the slope that drained into it.
- *
- * Their code is kept as it was, including their notes — the maxChangePerStep
- * comment in particular documents a failure mode worth not rediscovering.
- * Their noise.js and heightmap.js are not vendored; this terrain has its own
- * generator and only needed the simulation.
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
-/* Their seeded xorshift, so a given seed always yields the same landscape. */
+// Every noise layer in terrain.js is a function of position alone, but a valley is where material went somewhere downhill.
+// Stacked octaves can't express that, which is why summed noise reads as texture rather than landscape however well tuned.
+// This traces water over the surface and moves material with it, so every hollow connects to the slope that drained into it.
+
+// Their seeded xorshift, so a seed always yields the same landscape
 export function createRng(seed) {
   let state = seed | 0 || 1;
   return () => {
@@ -64,12 +50,8 @@ export const DEFAULT_EROSION_PARAMS = {
   initialWater: 1,
   initialSpeed: 1,
   maxSpeed: 5,
-  // Hard cap on how much a single step can change one cell. Without this, a
-  // cell that's randomly eroded slightly deeper than its neighbor presents a
-  // larger local slope to the next droplet that crosses it, which erodes it
-  // deeper still — an unbounded feedback loop that blows the heightmap up to
-  // extreme values within a few hundred droplets. Capping the per-step delta
-  // breaks that feedback while still allowing visible carving over many steps.
+  // Cap on how much one step can change a cell. Without it a slightly deeper cell presents a larger slope to the next
+  // droplet and erodes deeper still, an unbounded loop that blows the heightmap up within a few hundred droplets.
   maxChangePerStep: 0.015,
 };
 
@@ -77,7 +59,7 @@ function clampIndex(v, size) {
   return Math.min(Math.max(v, 0), size - 1);
 }
 
-// Bilinear height + gradient sample at a fractional grid position.
+// bilinear height and gradient at a fractional grid position
 function heightAndGradient(data, size, x, y) {
   const x0 = Math.floor(x);
   const y0 = Math.floor(y);
@@ -102,9 +84,7 @@ function heightAndGradient(data, size, x, y) {
   return { height, gx, gy };
 }
 
-// Distributes `amount` across the 4 cells surrounding (x, y) using the same
-// bilinear weights heightAndGradient reads from, so erode (negative amount)
-// and deposit (positive amount) touch the field symmetrically.
+// Spreads amount across the 4 cells using the same weights heightAndGradient reads, so erode and deposit are symmetric.
 function applyDelta(data, size, x, y, amount) {
   const x0 = Math.floor(x);
   const y0 = Math.floor(y);
@@ -122,9 +102,7 @@ function applyDelta(data, size, x, y, amount) {
   data[cy1 * size + cx1] += amount * fx * fy;
 }
 
-// Simulates one droplet's full lifetime and mutates `heightmap` in place.
-// `rng` is called to pick the spawn point, so passing a seeded PRNG keeps
-// the whole simulation reproducible. Returns the number of steps taken.
+// One droplet's whole lifetime, mutating heightmap in place. rng picks the spawn so a seeded PRNG keeps it reproducible.
 export function erodeStep(heightmap, size, rng, params = {}) {
   const p = { ...DEFAULT_EROSION_PARAMS, ...params };
 
@@ -180,27 +158,9 @@ export function erodeStep(heightmap, size, rng, params = {}) {
   }
 
   if (sediment > 0) {
-    /*
-     * LOCAL MODIFICATION to the vendored code — the one change made to it.
-     *
-     * Upstream deposits the whole remaining load in one go, which is what makes
-     * their mass conservation exact. Every other path through this function is
-     * capped by maxChangePerStep; this one is not, and it is the only place a
-     * single cell can take a large change in a single event.
-     *
-     * A droplet that dies at maxLifetime rather than by running off the map is
-     * still carrying close to its capacity, so it drops it all on one cell.
-     * Once, that is a bump. Across the droplet count this terrain needs it is a
-     * field of spikes taller than the igloo — which is exactly what the first
-     * run produced. Their demo hides it because its heightmap spans [0, 1],
-     * where the same dump is a fraction of the total relief; scaled to a
-     * landscape in world units it is catastrophic.
-     *
-     * Capping it costs their exact-conservation property: sediment still in
-     * transit when a droplet times out is now discarded rather than banked. It
-     * is a real trade and worth stating plainly — but the alternative is a
-     * conserved landscape that cannot be looked at.
-     */
+    // The one local change to the vendored code. Upstream dumps the whole load on one cell, which is what makes its mass
+    // conservation exact, and across this many droplets it produced a field of spikes taller than the igloo.
+    // Their demo hides it because its heightmap spans [0,1]. Capping costs exact conservation, timed-out sediment is discarded.
     const p2 = { ...DEFAULT_EROSION_PARAMS, ...params };
     applyDelta(heightmap, size, x, y, Math.min(sediment, p2.maxChangePerStep));
   }

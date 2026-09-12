@@ -1,33 +1,11 @@
 import { DataTexture, LinearFilter, RepeatWrapping, RGBAFormat, UnsignedByteType } from 'three';
 import { makeFbm, makeNoise2D } from './noise.js';
 
-/**
- * The block texture that breaks the cut into chunks.
- *
- * The reference ships this as a baked KTX2; ours is generated, once, from a
- * seed — nothing is downloaded and nothing is borrowed. Three fields in three
- * channels, each read by a different part of IceCut:
- *
- *   r  WHERE THE CUT ARRIVES FIRST. Rectangles from a recursive split, biased
- *      wide, each holding one value — so the wipe crosses a block all at once
- *      and the front reads as fragments rather than as a soft line. The shader
- *      drags this channel along the smear, so the fragments trail.
- *      Neighbouring blocks share a coarse noise term, so they cluster instead
- *      of flickering as salt and pepper.
- *   g  THE SEAM PUSH. Soft horizontal streaks: long along x, thin along y, and
- *      smooth in both. This used to be hard-edged bands constant along whole
- *      rows, and every one of them showed up on screen as a dead-straight
- *      horizontal line wherever the push changed from one band to the next.
- *   b  THE FRONT'S RAGGEDNESS. Smooth low-frequency noise.
- *
- * g and b are made to tile seamlessly, because a jump in either is a jump in
- * the seam itself and would draw a vertical line down the wipe at every repeat.
- *
- * LINEAR FILTERING. It was nearest, to keep every block edge razor sharp, and
- * razor sharp is exactly what read as a straight line. Linear keeps the blocks'
- * shapes and softens their edges to a couple of pixels, which is what lets the
- * shader's smear pull them into streaks rather than slide hard rectangles.
- */
+// The block texture that breaks the cut into chunks. Generated from a seed, nothing downloaded.
+// r: where the cut arrives first. One value per rectangle so the wipe crosses a block at once and reads as fragments.
+// g: the seam push. Soft horizontal streaks, hard-edged bands here showed as dead straight lines on screen.
+// b: the front's raggedness, smooth low frequency noise.
+// g and b tile seamlessly, a jump in either draws a vertical line down the wipe at every repeat.
 
 const SIZE = 256;
 
@@ -42,7 +20,7 @@ function mulberry32(seed) {
   };
 }
 
-/** Stretch a field so its values span the whole 0..1 range the shader sweeps. */
+// Stretch a field so its values span the whole 0..1 range the shader sweeps
 function normalise(field) {
   let min = Infinity;
   let max = -Infinity;
@@ -54,11 +32,11 @@ function normalise(field) {
   for (let i = 0; i < field.length; i += 1) field[i] = (field[i] - min) / span;
 }
 
-/** r: the blocks. */
 function blockField(rand, noise) {
   const field = new Float32Array(SIZE * SIZE);
 
   const fill = (x, y, w, h) => {
+    // neighbours share a coarse noise term so blocks cluster instead of flickering as salt and pepper
     const cluster = noise((x + w / 2) / 72, (y + h / 2) / 72);
     const value = 0.5 + 0.34 * cluster + 0.32 * (rand() - 0.5);
     for (let j = y; j < y + h; j += 1) {
@@ -68,8 +46,7 @@ function blockField(rand, noise) {
 
   const split = (x, y, w, h) => {
     const area = w * h;
-    /* A random floor on block size, so the texture has large slabs and small
-       chips rather than one uniform grain. */
+    // random floor on block size, so there are large slabs and small chips rather than one uniform grain
     const floor = 24 + rand() * 1800;
     const canW = w >= 12;
     const canH = h >= 3;
@@ -78,8 +55,7 @@ function blockField(rand, noise) {
       return;
     }
 
-    /* Wide-and-flat is the look: cut across when a block is too square, cut
-       down when it has become a sliver, otherwise lean toward cutting across. */
+    // wide and flat is the look, cut across when a block is too square and down when it's become a sliver
     const aspect = w / h;
     let across;
     if (!canW) across = true;
@@ -104,10 +80,7 @@ function blockField(rand, noise) {
   return field;
 }
 
-/**
- * A field that tiles: blended with copies of itself shifted by one tile, so at
- * every edge the blend is entirely the copy that continues on the far side.
- */
+// Blended with copies of itself shifted by one tile, so at every edge the blend is the copy continuing on the far side.
 function seamless(at) {
   const field = new Float32Array(SIZE * SIZE);
   for (let y = 0; y < SIZE; y += 1) {
@@ -128,8 +101,7 @@ function seamless(at) {
 export function createCutTexture(seed = 4051) {
   const rand = mulberry32(seed);
   const r = blockField(rand, makeNoise2D(seed + 1));
-  /* Stretched about fourteen to one: streaks, not blobs. */
-  const streaks = makeFbm(makeNoise2D(seed + 3), { octaves: 3 });
+  const streaks = makeFbm(makeNoise2D(seed + 3), { octaves: 3 }); // stretched about 14:1, streaks not blobs
   const g = seamless((x, y) => streaks(x / 70, y / 5));
   const slope = makeFbm(makeNoise2D(seed + 2), { octaves: 3 });
   const b = seamless((x, y) => slope(x / 88, y / 88));
@@ -145,6 +117,7 @@ export function createCutTexture(seed = 4051) {
   const texture = new DataTexture(data, SIZE, SIZE, RGBAFormat, UnsignedByteType);
   texture.wrapS = RepeatWrapping;
   texture.wrapT = RepeatWrapping;
+  // Linear, not nearest. Razor sharp block edges are exactly what read as a straight line across the wipe.
   texture.magFilter = LinearFilter;
   texture.minFilter = LinearFilter;
   texture.generateMipmaps = false;

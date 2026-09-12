@@ -6,7 +6,6 @@ import Stage from './Stage.jsx';
 import WorkPage from './WorkPage.jsx';
 import WorldLoader from './WorldLoader.jsx';
 import MinimalLink from './MinimalLink.jsx';
-import WorldDiag from './WorldDiag.jsx';
 import { loadBakedWorld } from './lib/baked.js';
 import { ACTS, actAt } from './chapters.js';
 import { copy } from '../lib/api.js';
@@ -373,8 +372,6 @@ export default function WorldSite({ site = {} }) {
       <WorkPage projects={site.projects} />
       <Hud profile={site.profile} content={site.content} />
       <WorldLoader ready={ready} steps={loadSteps} name={site.profile?.name} />
-      {/* Dev only: the live health readout. See WorldDiag. */}
-      {import.meta.env.DEV && <WorldDiag />}
     </ScrollProvider>
   );
 }

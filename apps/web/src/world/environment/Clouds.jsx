@@ -3,50 +3,13 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { BackSide, Color, ShaderMaterial, SphereGeometry, Vector3 } from 'three';
 import { LOOK } from '../lib/lighting.js';
 
-/**
- * Cloud that actually moves.
- *
- * WHY THIS IS NOT IN Sky.jsx, WHICH ALREADY DRAWS CLOUD. That file paints a
- * 1024x512 canvas once, on the CPU, and uploads it as an equirectangular
- * background. For a gradient that is exactly right — it is evaluated a
- * half-million times at startup and never again. For WEATHER it is exactly
- * wrong: moving the field by a few pixels would mean re-running the whole noise
- * stack and re-uploading the texture every frame, on the main thread, which is
- * several milliseconds of blocking work per frame to animate something the eye
- * can barely see move.
- *
- * The same field evaluated per-fragment on the GPU costs nothing measurable and
- * can be moved by adding a clock to its input. So the painted field is switched
- * off (LOOK.paintedCloud.enabled) and this draws over the gradient instead.
- *
- * IT IS STILL IN THE ENVIRONMENT MAP AS A STATIC APPROXIMATION, and that is
- * deliberate rather than an inconsistency. The IBL is a very broad irradiance —
- * it is the average of a whole hemisphere of sky per lookup — and no amount of
- * cloud movement changes that average in a way any surface could show. Baking
- * the cover into the map once and animating only what the camera sees directly
- * is the right split.
- */
+// Cloud that actually moves. Sky.jsx paints its field once on the CPU, which is right for a gradient and wrong for
+// weather, moving it would mean re-running the noise stack and re-uploading the texture every frame on the main thread.
+// The env map keeps the static approximation on purpose, an IBL lookup is a hemisphere average that cloud movement can't change.
 
-/*
- * THE SKY-PLANE PROJECTION, AND IT IS THE ONE THING THAT MAKES THIS READ AS
- * CLOUD RATHER THAN AS A TEXTURED BALL.
- *
- * The obvious mapping for a dome is spherical: turn the view direction into a
- * latitude and longitude and sample the noise there. It looks wrong immediately
- * and the reason is worth stating, because it is the same mistake as sampling
- * terrain fbm on the plain world axes. Real cloud is a LAYER — a roughly flat
- * sheet at a fixed altitude — so its features get smaller and closer together
- * toward the horizon, converging on the skyline in a way that is pure
- * perspective. A spherical mapping gives features of constant angular size all
- * the way down, which reads as a painted dome because that is what it is.
- *
- * Dividing the horizontal direction by the vertical one intersects the view ray
- * with a flat plane overhead, so the noise is sampled where the ray actually
- * crosses the cloud deck. Everything else follows from that for free: the
- * convergence at the horizon, the way movement slows as features recede, and
- * the fact that a scroll in the plane looks like wind rather than like a
- * texture being dragged.
- */
+// Sampled on a flat plane overhead, not spherically, and that's what makes it read as cloud instead of a textured ball.
+// Real cloud is a layer, so features converge on the skyline by perspective. A spherical mapping gives constant angular
+// size all the way down, which reads as a painted dome. Dividing the horizontal direction by the vertical is the intersection.
 const CLOUD_SHADER = /* glsl */ `
   varying vec3 vDir;
   uniform float uTime;
@@ -75,7 +38,7 @@ const CLOUD_SHADER = /* glsl */ `
     );
   }
 
-  /* Four octaves, normalised so the result genuinely spans 0..1 */
+  // four octaves, normalised so the result genuinely spans 0..1
   float fbm( vec2 p ) {
     float v = 0.0;
     float a = 0.5;
@@ -109,7 +72,7 @@ const CLOUD_SHADER = /* glsl */ `
     vec3 sunRimCol = vec3( 1.0, 0.97, 0.90 );
     col = mix( col, sunRimCol, ( sunAura * 0.40 + sunCore * 0.25 ) * ( 1.0 - a * 0.40 ) );
 
-    /* Cloud gently veils the sun so it is a soft atmospheric glow */
+    // cloud gently veils the sun so it stays a soft atmospheric glow
     a *= mix( 1.0, 0.55, sunCore );
 
     a *= smoothstep( 0.0, uHorizonFade, d.y );
@@ -121,12 +84,8 @@ const CLOUD_SHADER = /* glsl */ `
 const CLOUD_VERT = /* glsl */ `
   varying vec3 vDir;
   void main() {
-    /*
-     * The direction is taken in LOCAL space, and that is what lets the dome be
-     * parented to the camera below without the sky spinning with it. position on
-     * a unit-ish sphere is already the outward direction; running it through the
-     * model matrix would fold the dome's own translation into it.
-     */
+    // Local space, which is what lets the dome be parented to the camera without the sky moving with it.
+    // Running it through the model matrix would fold the dome's own translation into the direction.
     vDir = position;
     gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
   }
@@ -164,21 +123,11 @@ export default function Clouds() {
         uHorizonFade: { value: C.horizonFade },
         uSunDir: { value: sunDir },
       },
-      /* Seen from the inside. */
-      side: BackSide,
+      side: BackSide, // seen from the inside
       transparent: true,
-      /*
-       * NO DEPTH WRITE, AND FOG EXPLICITLY OFF.
-       *
-       * The fog is the one that would have been a long debugging session. The
-       * scene runs fogExp2 at 0.00115, and this dome sits 2400 units out — which
-       * evaluates to about five ten-thousandths of a per cent transmission. Left
-       * on, the clouds would have been rendered perfectly and then replaced,
-       * pixel for pixel, with the fog colour. A ShaderMaterial does not take the
-       * fog chunks unless asked, but the flag is set explicitly because the
-       * failure is silent and looks exactly like the shader not working.
-       */
       depthWrite: false,
+      // Fog off explicitly. The scene runs fogExp2 and this dome sits 2400 units out, so left on the clouds would be
+      // rendered perfectly then replaced pixel for pixel with the fog colour, which looks exactly like a broken shader.
       fog: false,
     });
   }, [C]);
@@ -187,14 +136,8 @@ export default function Clouds() {
 
   useFrame((state) => {
     material.uniforms.uTime.value = state.clock.elapsedTime;
-    /*
-     * PARENTED TO THE LENS, so the dome is a sky rather than an object in the
-     * world. The camera travels a few hundred units over the scroll; a fixed
-     * dome would show that as parallax against the cloud, which is wrong by
-     * three orders of magnitude — real cloud is kilometres up and does not shift
-     * because you walked backwards. Copying the position each frame is the
-     * cheapest way to say "infinitely far away".
-     */
+    // Parented to the lens, so the dome is a sky rather than an object. A fixed dome would parallax against the cloud
+    // as the camera travels, and real cloud doesn't shift because you walked backwards.
     if (ref.current) ref.current.position.copy(camera.position);
   });
 
@@ -204,8 +147,7 @@ export default function Clouds() {
       geometry={geometry}
       material={material}
       frustumCulled={false}
-      /* Drawn before the terrain, which then depth-tests over it normally. */
-      renderOrder={-1}
+      renderOrder={-1} // drawn before the terrain, which depth-tests over it normally
     />
   );
 }

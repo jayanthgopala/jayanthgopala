@@ -346,15 +346,9 @@ export default function IceCut() {
   useEffect(() => () => pass.dispose(), [pass]);
   useEffect(() => () => texture.dispose(), [texture]);
 
-  /* Dev only: the cut is a scroll position, which makes a single frame of it
-     hard to hold still and look at. window.__cutHold = 0.5 pins the shader
-     there; null hands it back to the scroll. Same channel as __glitchHold. */
-  if (import.meta.env.DEV) window.__iceCut = effect;
-
   useFrame((state) => {
     const u = effect.uniforms;
-    const hold = import.meta.env.DEV ? window.__cutHold : null;
-    u.get('uCut').value = typeof hold === 'number' ? hold : cut.current;
+    u.get('uCut').value = cut.current;
     u.get('uAspect').value = state.size.width / Math.max(1, state.size.height);
     u.get('uViewport').value.set(state.size.width, state.size.height);
     u.get('uReduced').value = reduced ? 1 : 0;

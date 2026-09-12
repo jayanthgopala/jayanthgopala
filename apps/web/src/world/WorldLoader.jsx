@@ -1,49 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
 
-/**
- * The loading screen for the world.
- *
- * IT STAYS UP UNTIL THE WORLD IS ACTUALLY READY, and "ready" is a list of real
- * events rather than a timer. WorldSite hands in the steps it can observe —
- * the baked terrain fetched, the scene built and painted, the igloo in, the
- * shaders compiled and the frames running smoothly — and the screen lifts only
- * when every one has happened. Lifting earlier is what made the opening
- * descent stutter: it played while all of that was still going on underneath.
- *
- * WHY NOT drei's useProgress. That hook reads three's loading manager, which
- * counts network fetches through three's loaders — and almost nothing here goes
- * through them. The terrain and textures are baked files fetched by hand, and
- * the most expensive work of all (building the scene, compiling its shaders) is
- * not a download. A bar wired to it sat at 100% while the browser was frozen.
- *
- * THE BAR IS HONEST ABOUT WHAT IT KNOWS. Each finished step moves it to that
- * step's mark. Within a step it creeps toward the next mark but never reaches
- * it, because nothing inside a step can be measured — a blocking build does not
- * yield to report its progress. So it can slow, but it cannot lie: it will not
- * show a step as done before it is.
- *
- * Nothing that changes per frame goes through React state; the bar and the
- * percentage are written straight to their nodes.
- */
+// Stays up until the world is actually ready, and ready is a list of real events rather than a timer.
+// Lifting earlier is what made the opening descent stutter, it played while the build was still going on underneath.
+// Not drei's useProgress, that reads three's loading manager and almost nothing here goes through three's loaders.
+// The baked files are fetched by hand and the expensive part, building the scene and compiling shaders, isn't a download.
+// Within a step the bar creeps toward the next mark but never reaches it, since a blocking build can't report progress.
 export default function WorldLoader({ ready, steps = [], name = '' }) {
   const [opening, setOpening] = useState(false);
   const [gone, setGone] = useState(false);
   const barRef = useRef(null);
   const pctRef = useRef(null);
-  /* The furthest the bar has been, so it never moves backwards. */
-  const shown = useRef(0);
+  const shown = useRef(0); // furthest the bar has been, so it never moves backwards
 
   const total = Math.max(1, steps.length);
   const doneCount = steps.filter((s) => s.done).length;
   const current = steps.find((s) => !s.done);
 
+  // written straight to the nodes, nothing that changes per frame goes through React state
   const write = (value) => {
     if (barRef.current) barRef.current.style.transform = `scaleX(${value.toFixed(4)})`;
     if (pctRef.current) pctRef.current.textContent = `${Math.round(value * 100)}%`;
   };
 
-  /* Restarted on every finished step, so the creep measures time spent in THIS
-     step and starts again from the new mark. */
+  // restarted on every finished step, so the creep measures time spent in this step and starts again from the new mark
   useEffect(() => {
     if (ready) return undefined;
     const since = performance.now();
@@ -61,7 +40,7 @@ export default function WorldLoader({ ready, steps = [], name = '' }) {
     return () => cancelAnimationFrame(frame);
   }, [ready, doneCount, total]);
 
-  /* Fill, then open with the iris, then unmount. */
+  // fill, then open with the iris, then unmount
   useEffect(() => {
     if (!ready) return undefined;
     shown.current = 1;

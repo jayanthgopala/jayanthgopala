@@ -154,30 +154,14 @@
    you to travel somewhere you have already arrived. */
 .w-hint.is-away { visibility: hidden; }
 
-/* Dev only (WorldDiag): the live health readout. Above the loader, so it is
-   there for the whole opening. */
-.w-diag {
-  position: fixed;
-  left: 12px;
-  bottom: 44px;
-  z-index: 50;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.78);
-  color: #102030;
-  font: 11px/1.4 var(--w-mono);
-  white-space: pre;
-  pointer-events: none;
-}
-
-/* --- The canvas ------------------------------------------------------------
+/* The canvas 
    Fixed, full-viewport, and behind everything. It is not in the scroll flow at
    all: the spacer scrolls, the world responds. */
 
 /*
- * The positioned layer is ours. R3F sets position/width/height inline on the
- * element carrying `.w-canvas`, and inline styles win — so all the layout lives
- * on this wrapper, and R3F is simply given a full-viewport box to fill.
+ The positioned layer is ours. R3F sets position/width/height inline on the
+ element carrying `.w-canvas`, and inline styles win — so all the layout lives
+ on this wrapper, and R3F is simply given a full-viewport box to fill.
  */
 .w-stage {
   position: fixed;
@@ -194,28 +178,28 @@
   outline: none;
 }
 
-/* --- Annotations -----------------------------------------------------------
+/*  Annotations 
    Leader-line labels on the hero object, shown while it is held under the
    cursor. DOM rather than in-scene text: troika's MSDF renderer would need a
    font FILE shipped and fetched, and these are chrome pointing AT the world
    rather than objects in it.
-   ========================================================================== */
+    */
 
 .w-annotation-wrap,
 .w-measure-wrap { pointer-events: none; }
 
 /*
- * The pixel readout on a lifted brick.
- *
- * Text content and opacity are written straight to this node from the frame
- * loop — it changes every frame, and putting it through React state would
- * re-render the tree sixty times a second to change a number.
+ The pixel readout on a lifted brick.
+
+ Text content and opacity are written straight to this node from the frame
+ loop — it changes every frame, and putting it through React state would
+ re-render the tree sixty times a second to change a number.
  */
 /*
- * A node on the measurement chain: a small crosshair with a number beside it,
- * drawn the way a survey drawing marks a point. Text and opacity are written
- * straight to the node from the frame loop, because both change every frame and
- * routing them through React state would re-render the tree at 60Hz.
+ A node on the measurement chain: a small crosshair with a number beside it,
+ drawn the way a survey drawing marks a point. Text and opacity are written
+ straight to the node from the frame loop, because both change every frame and
+ routing them through React state would re-render the tree at 60Hz.
  */
 .w-node {
   display: inline-flex;
@@ -294,10 +278,10 @@
   .w-annotation { animation: none; }
 }
 
-/* --- HUD -------------------------------------------------------------------
+/*  HUD 
    Fixed over the canvas. pointer-events are off on the container so the whole
    overlay never intercepts a scroll or a drag; individual controls opt back in.
-   ========================================================================== */
+   */
 
 .w-hud {
   position: fixed;
@@ -416,8 +400,7 @@
 
 .w-role { margin: 0; opacity: 0.6; }
 
-/* --- Bottom bar ------------------------------------------------------------ */
-
+/*  Bottom bar */
 /* Three columns with the hint in the middle one, so it stays centred now that
    nothing sits on the right to balance the sound control. */
 .w-hud-bottom {
@@ -436,14 +419,14 @@
 }
 
 
-/* ---------------------------------------------------------------------------
+/* 
    Loading screen.
 
    Painted in the world's own palette rather than a neutral dark overlay, so the
    transition is a dissolve into the same snowfield rather than a cut from black.
    The fade only starts once the bar has filled — a bar that vanishes part-way
    reads as a failure even when nothing failed.
-   --------------------------------------------------------------------------*/
+   */
 .w-loader {
   position: fixed;
   inset: 0;

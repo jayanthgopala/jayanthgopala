@@ -272,19 +272,10 @@ export default function TravelGlitch() {
   const pass = useMemo(() => new EffectPass(camera, effect), [camera, effect]);
   useEffect(() => () => pass.dispose(), [pass]);
 
-  /* Dev only: this pass is only ever on WHILE the page is scrolling, which
-     makes it the one effect in the chain that cannot be held still and looked
-     at. Pinning the amount from the console is the difference between reading
-     a number and checking one — same channel and same reason as __worldGl in
-     Stage.jsx. Set window.__glitchHold to a 0-1 value to freeze it there, or
-     null to hand it back to the scroll. */
-  if (import.meta.env.DEV) window.__travelGlitch = effect;
-
   useFrame((state) => {
     const u = uniforms.current;
     const t = flight.current;
-    const hold = import.meta.env.DEV ? window.__glitchHold : null;
-    // Nearest act boundary, in progress units
+    // nearest act boundary, in progress units
     const p = progress.current;
     let nearest = Infinity;
     for (let i = 0; i < BOUNDARIES.length; i += 1) {
@@ -299,7 +290,7 @@ export default function TravelGlitch() {
     // Secondary gate: a stationary page is clean wherever it is parked
     const motion = Math.min(1, t * MOTION_GAIN);
 
-    u.get('uAmount').value = typeof hold === 'number' ? hold : bump * motion;
+    u.get('uAmount').value = bump * motion;
     u.get('uTime').value = state.clock.elapsedTime;
     u.get('uAspect').value = state.size.width / Math.max(1, state.size.height);
   });

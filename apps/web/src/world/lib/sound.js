@@ -1,42 +1,33 @@
 /**
  * THE WORLD'S SOUND, SYNTHESIZED.
  *
- * Six voices, all made in the browser out of noise and sine waves. Nothing is
+ * Five voices, all made in the browser out of noise and sine waves. Nothing is
  * downloaded and nothing is sampled, for the same reason the textures and the
  * geometry are generated: the assets in this scene are original.
  *
  *   air    a calm breeze. Pink noise through a dark bandpass that wanders on
  *          two slow oscillators, with a third, slower still, swelling the
  *          whole thing in and out over about twenty seconds.
- *   pad    the score, and it plays in both rooms. Pairs of slightly detuned
- *          voices drifting against each other behind a filter that opens and
- *          closes, over a sub that breathes every seven seconds. It swells and
- *          falls but never to nothing, and it steps back rather than stopping
- *          when the work page arrives.
- *   notes  single soft notes off the same scale, through the delay, seconds
- *          apart: further apart and quieter out in the world, closer and
- *          fuller on the page.
- *   link   the igloo's answer: DATA. A burst of ten to sixteen grains a
- *          hundredth of a second long, each one either a noise tick or a
- *          digital blip, jumping about with no ladder and no tail.
+ *   hit    the igloo, taken hold of: one short sci-fi hit, over inside a fifth
+ *          of a second.
+ *   link   a measurement line reaching a node: a burst of data grains, at most
+ *          one burst every 0.4 s.
  *   glass  the Minimal button: two detuned sines with a slow vibrato — a wet
  *          finger on a rim — and a liquid bloop when pressed.
  *   cut    the scroll: a whoosh whose band sweeps up as the wipe crosses, and
  *          a low swell as the page lands.
- *   music  the work page: single soft notes from the same pentatonic, seconds
- *          apart, with long tails. Sparse on purpose.
  *
- * WHY THE IGLOO IS NOT A TONE, AND THIS IS THE THIRD ATTEMPT. It was grinding
- * ice (removed: it doubled the pings), then a bright sine ping with a fifth
- * over it, then a square stepping a fixed ladder. Both of those read as
- * TOUCHING GLASS, because anything with a pitch you can hum is an instrument,
- * and a narrow band around a square is still a pitch. What reads as data is
- * switching: very short grains, half of them noise, pitches that jump without
- * a pattern, and NO reverb — a tail is what makes a sound musical. The room
- * send is deliberately absent from this voice alone.
+ *   pad    the music: an A major chord on seven plain sines, each breathing on
+ *          its own slow cycle, with a single pentatonic note drifting over it
+ *          every ten seconds or so into a small damped room. See the note on
+ *          PAD_VOICES for why it is built the way it is — the bed before it
+ *          detuned voices against each other over a sub and was reported as
+ *          causing a headache, and every choice in this one answers that.
  *
- * THE WORLD FALLS SILENT ON THE PAGE. Air, pad and data stop as the cut
- * completes; the page's notes take their place. Two rooms, one scale.
+ * WHY THE IGLOO IS NOT A TONE. It was grinding ice, then a chime, then a
+ * sustained texture. Everything with a pitch you can hum read as touching
+ * glass, and everything held open read as long and sharp. What it is now is an
+ * event with an end built into it.
  *
  * OFF UNTIL ASKED FOR, AND THAT IS NOT A PREFERENCE. Browsers block audio until
  * a gesture, so a page that claimed to be playing would be lying on first load,
@@ -68,12 +59,59 @@ const AIR_BREATH_HZ = 0.055;
 const BUFFER_SECONDS = 8;
 
 /*
+ * THE PAD: AN A MAJOR CHORD, AND EVERY CHOICE IN IT IS A SAFEGUARD.
+ *
+ * The bed this replaces was reported as causing a headache, and the reasons
+ * were in its construction rather than in its level:
+ *
+ *   it detuned pairs of voices against each other   -> beating, which IS a
+ *                                                      slow vibration
+ *   it held a sub tone under everything             -> sustained low energy
+ *   it swept a resonant filter across the chord     -> a wobble on top
+ *
+ * None of those is here. Every pitch is exact, so nothing beats. The lowest
+ * voice is A2, an octave and a half above where the sub sat. The filter is
+ * fixed and unresonant. What moves instead is each voice's own level, on its
+ * own slow cycle — five cycles that never line up, so the chord changes colour
+ * without anything oscillating against anything else.
+ */
+const PAD = 0.065;
+const PAD_CUTOFF = 1300;
+/*
+ * [frequency, level, seconds per breath] — A major: A, E, A, C#, E, and then
+ * A and E again an octave up for air.
+ *
+ * THE THIRD APPEARS ONCE, LOW, AND QUIETLY. It is what makes the chord major;
+ * it is also the note that tires an ear first, so the two voices above it are
+ * an octave and a fifth, which cannot grate however long they are held.
+ */
+const PAD_VOICES = [
+  [110.0, 0.9, 48],
+  [164.81, 0.7, 59],
+  [220.0, 0.6, 77],
+  [277.18, 0.4, 34],
+  [329.63, 0.35, 43],
+  [440.0, 0.22, 63],
+  [659.25, 0.14, 71],
+];
+
+/*
+ * Single notes over the chord, and they are the only thing in the music with
+ * a beginning. A major pentatonic — A, B, C#, E, F# — where no two notes can
+ * clash, so they may be chosen at random and still belong to the chord
+ * underneath. Sparse on purpose: a phrase you can follow becomes a tune, and a
+ * tune under a page you are reading is something to switch off.
+ */
+const NOTE = 0.038;
+const NOTE_HZ = [220.0, 246.94, 277.18, 329.63, 369.99, 440.0];
+const NOTE_GAP = [8, 16]; //  seconds of silence between them
+
+/*
  * The igloo, as data being read.
  *
  * GRAINS, AND HALF OF THEM NOISE. Anything with a steady pitch reads as an
- * instrument — that is what made the two earlier versions sound like glass.
- * Ten-millisecond switching, wide unpatterned jumps and a dry output are what
- * read as a machine.
+ * instrument. Short switching, wide unpatterned jumps and a dry output are
+ * what read as a machine.
  */
 const LINK = 0.022;
 const LINK_GRAIN = 0.018; //  seconds per grain, gate included
@@ -82,21 +120,16 @@ const LINK_HIGH = 2200; //    because everything above it is where "sharp" is
 /*
  * The least time between two bursts, borrowed from the reference's own rule
  * (its beeps carry minTimeBetweenPlays: 0.4). Five lines can join within a
- * frame of each other; without this they fire as one smear and the effect
- * reads as a malfunction rather than as a reading being taken.
+ * frame of each other; without this they fire as one smear.
  */
 const LINK_GAP = 0.4;
 
 /*
  * THE IGLOO: ONE SHORT SCI-FI HIT, AND IT IS OVER AT ONCE.
  *
- * The sustained version this replaces followed the hold — and a noise band
- * held open is exactly what sounded sharp, because hiss has no end to it. A
- * hit has an end built in. A triangle falling fast with a little metal on it,
- * behind a lowpass so nothing up top can bite, done inside a fifth of a
- * second: that is science fiction, and it finishes the moment it lands.
- *
- * Fired ONCE as the shell is taken hold of, not every frame it is held.
+ * A triangle falling fast with a little metal on it, behind a lowpass so
+ * nothing up top can bite, done inside a fifth of a second. Fired ONCE as the
+ * shell is taken hold of, not every frame it is held.
  */
 const HIT = 0.045;
 const HIT_FROM = 1100; //     where the glide starts…
@@ -104,34 +137,6 @@ const HIT_TO = 380; //        …and where it lands
 const HIT_GLIDE = 0.08;
 const HIT_TAIL = 0.19; //     silent by here
 const HIT_TONE = 2000; //     lowpass: the sharpness comes off above this
-
-/*
- * Calm music under the world.
- *
- * THE SWELL HAS A FLOOR, and it needs one. Taken all the way to silence
- * between phrases — and started at the bottom of its own cycle — the music
- * was inaudible for the first half minute after the sound was switched on,
- * which reads as no music at all rather than as a quiet passage. It now
- * breathes between a third and full, and starts part-way up.
- */
-const PAD = 0.05;
-const PAD_HZ = 0.024; //      one swell every ~40 s
-const PAD_FLOOR = 0.34;
-const PAD_PHASE = 0.3; //     where in the swell it begins
-const PAD_CUTOFF = [300, 1200];
-/*
- * The shimmer, and it is what makes the pad sound like a synthesiser rather
- * than like an organ: a second set of voices a few cents off the first, with
- * the offset itself drifting. Two nearly-identical pitches beat against each
- * other, and a beat that changes speed is the whole character of wide analogue
- * pad. Slow enough that no single sweep is ever audible as an event.
- */
-const PAD_DETUNE = 9; //      cents at the top of the drift
-const PAD_DRIFT_HZ = 0.043;
-
-/* The sub: one long breath under everything, felt more than heard. */
-const PULSE = 0.05;
-const PULSE_HZ = 0.14; //     about seven seconds a breath
 
 /* The glass button. */
 const GLASS_TONE = 0.035;
@@ -142,26 +147,21 @@ const BLOOP = 0.06;
 const CUT_WHOOSH = 0.07;
 const CUT_SWELL = 0.05;
 
-/* One scale for both rooms: a minor pentatonic on a low root. Cool, and no
-   interval in it can land wrong against another, so notes may be chosen at
-   random and the pad can hold any of them underneath. */
-const ROOT = 220;
-const STEPS = [0, 3, 5, 7, 10, 12, 15];
-const MUSIC = 0.05;
-const MUSIC_GAP = [3.5, 9]; //  seconds of silence between notes
-
 let ctx = null;
 let master = null;
 let voices = null;
 let noise = null;
 let on = false;
 let suspendTimer = 0;
-let musicTimer = 0;
 /** 0..1 — how far the world has given way to the work page. */
 let page = 0;
 /* Latches, so the one-shots fire on a crossing rather than every frame. */
 let landed = false;
 let holding = false;
+/** The pending note, if the music is running. */
+let noteTimer = 0;
+/** When the last data burst went out, for the gap rule. */
+let lastBurst = -1;
 
 /**
  * Pink noise via the Voss-McCartney style filter bank, with its own tail
@@ -252,6 +252,10 @@ function buildAir() {
    * THE BREATH. An oscillator wired into the gain's own parameter ADDS to
    * whatever target the frame loop has set, so the level swells and falls by
    * itself while still following the cursor and the scroll.
+   *
+   * This is the one slow modulation left in the scene, and it is on NOISE
+   * rather than on a pitch — which is the difference between air moving and
+   * the beating that made the old music bed unpleasant.
    */
   const breath = ctx.createOscillator();
   breath.frequency.value = AIR_BREATH_HZ;
@@ -265,93 +269,75 @@ function buildAir() {
 }
 
 /**
- * The world's music: a low chord that breathes.
+ * The pad: five sines holding an A major chord, each breathing on its own.
  *
- * Three sines — root, fifth, octave — under a lowpass that opens and closes on
- * its own slow oscillator, so the timbre moves without anything being played.
- * A second, slower oscillator on the gain takes it away to nothing between
- * swells: the silences are what keep it from becoming a bed you stop hearing.
+ * The breathing is done with an oscillator on each voice's GAIN, never on its
+ * pitch, and the five periods are deliberately awkward numbers (48, 59, 77,
+ * 34, 43 seconds) so they do not come back into step. The chord is therefore
+ * never quite the same twice, while no two pitches are ever close enough to
+ * beat.
  */
 function buildPad() {
   const gain = ctx.createGain();
   gain.gain.value = 0;
 
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'lowpass';
-  filter.frequency.value = PAD_CUTOFF[0];
-  filter.Q.value = 0.7;
+  /* Fixed, and no resonance. A sweeping filter is a wobble, which is the
+     third thing the old bed was doing wrong. */
+  const soft = ctx.createBiquadFilter();
+  soft.type = 'lowpass';
+  soft.frequency.value = PAD_CUTOFF;
+  soft.Q.value = 0.4;
+  soft.connect(gain).connect(master);
 
-  const sweep = ctx.createOscillator();
-  sweep.frequency.value = PAD_HZ * 1.7;
-  const sweepAmount = ctx.createGain();
-  sweepAmount.gain.value = (PAD_CUTOFF[1] - PAD_CUTOFF[0]) / 2;
-  sweep.connect(sweepAmount).connect(filter.frequency);
-  filter.frequency.value = (PAD_CUTOFF[0] + PAD_CUTOFF[1]) / 2;
-  sweep.start();
+  for (const [hz, level, period] of PAD_VOICES) {
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = hz;
 
-  /*
-   * A drift shared by every detuned voice: one slow oscillator on their detune
-   * parameter, so the beating between the pairs speeds up and slows down
-   * together instead of each wandering on its own.
-   */
-  const drift = ctx.createOscillator();
-  drift.frequency.value = PAD_DRIFT_HZ;
-  const driftAmount = ctx.createGain();
-  driftAmount.gain.value = PAD_DETUNE;
-  drift.start();
-
-  /* Root, fifth, octave — the pentatonic's own spine, half an octave below the
-     notes the page sings, so the two never crowd each other. Each is a PAIR:
-     one steady, one drifting against it. */
-  for (const [ratio, level] of [
-    [0.5, 1],
-    [0.75, 0.55],
-    [1, 0.4],
-  ]) {
     const voice = ctx.createGain();
-    voice.gain.value = level;
-    voice.connect(filter);
+    /* Half of the level is always there and half breathes, so a voice thins
+       out rather than dropping away — a note switching off is an event, and
+       there should be no events at all in this. */
+    voice.gain.value = level * 0.5;
 
-    const steady = ctx.createOscillator();
-    steady.type = 'sine';
-    steady.frequency.value = ROOT * ratio;
-    steady.connect(voice);
-    steady.start();
+    const breath = ctx.createOscillator();
+    breath.frequency.value = 1 / period;
+    const depth = ctx.createGain();
+    depth.gain.value = level * 0.5;
+    breath.connect(depth).connect(voice.gain);
+    breath.start();
 
-    const shimmer = ctx.createOscillator();
-    /* Triangle against the sine: a little more upper harmonic in the beating,
-       which is what carries across a noisy room. */
-    shimmer.type = 'triangle';
-    shimmer.frequency.value = ROOT * ratio;
-    const shimmerLevel = ctx.createGain();
-    shimmerLevel.gain.value = 0.5;
-    driftAmount.connect(shimmer.detune);
-    shimmer.connect(shimmerLevel).connect(voice);
-    shimmer.start();
+    osc.connect(voice).connect(soft);
+    osc.start();
   }
 
-  /*
-   * THE SUB, and it does not go through the filter. The pad's lowpass closes
-   * to 300 Hz at the bottom of its sweep, which would take the breath with it;
-   * this should be constant, because it is the floor everything else stands
-   * on. Its own slow oscillator shapes it, offset so it never reaches zero.
-   */
-  const sub = ctx.createOscillator();
-  sub.type = 'sine';
-  sub.frequency.value = ROOT / 4;
-  const subGain = ctx.createGain();
-  subGain.gain.value = PULSE * 0.5;
-  const breath = ctx.createOscillator();
-  breath.frequency.value = PULSE_HZ;
-  const breathAmount = ctx.createGain();
-  breathAmount.gain.value = PULSE * 0.45;
-  breath.connect(breathAmount).connect(subGain.gain);
-  sub.connect(subGain).connect(gain);
-  sub.start();
-  breath.start();
+  return { gain };
+}
 
-  filter.connect(gain).connect(master);
-  return { gain, filter };
+/**
+ * A small room for the notes, and for nothing else.
+ *
+ * One delay with light feedback, damped so each repeat is duller than the last
+ * — a room for a tenth of the cost of a convolver, and no impulse file to
+ * ship. The igloo's own voice deliberately does NOT go through it: a tail is
+ * most of what makes a sound musical, and that one must not be.
+ */
+function buildGlow() {
+  const input = ctx.createGain();
+  const delay = ctx.createDelay(1.2);
+  delay.delayTime.value = 0.42;
+  const feedback = ctx.createGain();
+  feedback.gain.value = 0.22;
+  const damp = ctx.createBiquadFilter();
+  damp.type = 'lowpass';
+  damp.frequency.value = 1600;
+  const level = ctx.createGain();
+  level.gain.value = 0.45;
+
+  input.connect(delay);
+  delay.connect(damp).connect(feedback).connect(delay);
+  delay.connect(level).connect(master);
+  return input;
 }
 
 function buildGlass() {
@@ -361,7 +347,9 @@ function buildGlass() {
   const b = ctx.createOscillator();
   b.type = 'sine';
   /* Seven hertz apart: they beat slowly against each other, which is what
-     stops a pure sine reading as a test tone. */
+     stops a pure sine reading as a test tone. It is only ever heard for the
+     moment a pointer is crossing the button, which is why a beat is fine here
+     and was not as a permanent bed. */
   b.frequency.value = GLASS_HZ + 7;
 
   const vibrato = ctx.createOscillator();
@@ -399,31 +387,6 @@ function buildCut() {
   return { gain, band };
 }
 
-/**
- * A shared tail for the page's notes. A single delay with light feedback: a
- * room for a tenth of the cost of a convolver, and no impulse file to ship.
- *
- * THE DATA BURSTS DO NOT GO THROUGH IT. A tail is most of what makes a sound
- * musical, and the igloo's voice must not be musical.
- */
-function buildSpace() {
-  const input = ctx.createGain();
-  const delay = ctx.createDelay(1.2);
-  delay.delayTime.value = 0.34;
-  const feedback = ctx.createGain();
-  feedback.gain.value = 0.34;
-  const damp = ctx.createBiquadFilter();
-  damp.type = 'lowpass';
-  damp.frequency.value = 1800;
-  const level = ctx.createGain();
-  level.gain.value = 0.5;
-
-  input.connect(delay);
-  delay.connect(damp).connect(feedback).connect(delay);
-  delay.connect(level).connect(master);
-  return input;
-}
-
 function build() {
   const Ctx = window.AudioContext || window.webkitAudioContext;
   if (!Ctx) return false;
@@ -449,9 +412,9 @@ function build() {
   voices = {
     air: buildAir(),
     pad: buildPad(),
+    glow: buildGlow(),
     glass: buildGlass(),
     cut: buildCut(),
-    space: buildSpace(),
   };
   return true;
 }
@@ -459,73 +422,12 @@ function build() {
 /* ── One-shots. Built, played and thrown away; each is a few nodes. ────── */
 
 /**
- * A line reaching its node: a burst of data being read.
- *
- * Ten to sixteen grains of under two hundredths of a second, gated open and
- * shut with two-millisecond ramps. Each grain is a coin toss: a blip from a
- * square oscillator at a pitch picked anywhere in a wide range, or a tick of
- * noise through a high band. The pitches do NOT walk a ladder and the burst
- * does NOT go to the room send — both of those are what made the earlier
- * versions sound like an instrument being touched.
- */
-function dataBurst() {
-  const now = ctx.currentTime;
-  const grains = 6 + Math.floor(Math.random() * 5);
-
-  const out = ctx.createGain();
-  out.gain.value = 1;
-  out.connect(master);
-
-  /* Two sources, gated in turn, so a burst is a mix of tone and tick. */
-  const osc = ctx.createOscillator();
-  osc.type = 'square';
-  const oscBand = ctx.createBiquadFilter();
-  oscBand.type = 'bandpass';
-  oscBand.frequency.value = 2000;
-  oscBand.Q.value = 0.9;
-  const oscGain = ctx.createGain();
-  oscGain.gain.setValueAtTime(0.0001, now);
-  osc.connect(oscBand).connect(oscGain).connect(out);
-
-  const hiss = noiseSource();
-  const hissBand = ctx.createBiquadFilter();
-  hissBand.type = 'bandpass';
-  hissBand.frequency.value = 3000;
-  hissBand.Q.value = 1.2;
-  const hissGain = ctx.createGain();
-  hissGain.gain.setValueAtTime(0.0001, now);
-  hiss.connect(hissBand).connect(hissGain).connect(out);
-
-  for (let i = 0; i < grains; i += 1) {
-    const t = now + i * LINK_GRAIN;
-    const level = LINK * (0.45 + Math.random() * 0.55);
-    const hold = LINK_GRAIN * (0.3 + Math.random() * 0.35);
-
-    if (Math.random() < 0.5) {
-      osc.frequency.setValueAtTime(LINK_LOW + Math.random() * (LINK_HIGH - LINK_LOW), t);
-      oscGain.gain.linearRampToValueAtTime(level, t + 0.002);
-      oscGain.gain.linearRampToValueAtTime(0.0001, t + hold);
-    } else {
-      hissBand.frequency.setValueAtTime(1300 + Math.random() * 1100, t);
-      hissGain.gain.linearRampToValueAtTime(level * 0.9, t + 0.002);
-      hissGain.gain.linearRampToValueAtTime(0.0001, t + hold);
-    }
-  }
-
-  const ends = now + grains * LINK_GRAIN + 0.05;
-  osc.start(now);
-  osc.stop(ends);
-  hiss.stop(ends);
-}
-
-/**
  * Taking hold of the shell: a short sci-fi hit.
  *
- * A triangle — not a square, which is where the last version's edge came from
- * — falling from HIT_FROM to HIT_TO in eighty milliseconds, with a modulator
- * two and a half times its pitch giving it a brief metallic ring that dies
- * first. Everything goes through a lowpass, and the whole thing is silent
- * inside a fifth of a second. No noise, and no room send: both are what made
+ * A triangle falling from HIT_FROM to HIT_TO in eighty milliseconds, with a
+ * modulator two and a half times its pitch giving it a brief metallic ring
+ * that dies first. Everything goes through a lowpass, and the whole thing is
+ * silent inside a fifth of a second. No noise, and no room: both are what made
  * the earlier attempts read as long.
  */
 function sciFiHit() {
@@ -565,6 +467,116 @@ function sciFiHit() {
   mod.stop(now + HIT_TAIL + 0.02);
 }
 
+/**
+ * A line reaching its node: a burst of data being read.
+ *
+ * Six to ten grains of under two hundredths of a second, gated open and shut
+ * with two-millisecond ramps. Each grain is a coin toss: a blip from a square
+ * oscillator at a pitch picked anywhere in a wide range, or a tick of noise
+ * through a band. The pitches do NOT walk a ladder, and there is no room send.
+ */
+function dataBurst() {
+  const now = ctx.currentTime;
+  const grains = 6 + Math.floor(Math.random() * 5);
+
+  const out = ctx.createGain();
+  out.gain.value = 1;
+  out.connect(master);
+
+  const osc = ctx.createOscillator();
+  osc.type = 'square';
+  const oscBand = ctx.createBiquadFilter();
+  oscBand.type = 'bandpass';
+  oscBand.frequency.value = 2000;
+  oscBand.Q.value = 0.9;
+  const oscGain = ctx.createGain();
+  oscGain.gain.setValueAtTime(0.0001, now);
+  osc.connect(oscBand).connect(oscGain).connect(out);
+
+  const hiss = noiseSource();
+  const hissBand = ctx.createBiquadFilter();
+  hissBand.type = 'bandpass';
+  hissBand.frequency.value = 1800;
+  hissBand.Q.value = 1.2;
+  const hissGain = ctx.createGain();
+  hissGain.gain.setValueAtTime(0.0001, now);
+  hiss.connect(hissBand).connect(hissGain).connect(out);
+
+  for (let i = 0; i < grains; i += 1) {
+    const t = now + i * LINK_GRAIN;
+    const level = LINK * (0.45 + Math.random() * 0.55);
+    const hold = LINK_GRAIN * (0.3 + Math.random() * 0.35);
+
+    if (Math.random() < 0.5) {
+      osc.frequency.setValueAtTime(LINK_LOW + Math.random() * (LINK_HIGH - LINK_LOW), t);
+      oscGain.gain.linearRampToValueAtTime(level, t + 0.002);
+      oscGain.gain.linearRampToValueAtTime(0.0001, t + hold);
+    } else {
+      hissBand.frequency.setValueAtTime(1300 + Math.random() * 1100, t);
+      hissGain.gain.linearRampToValueAtTime(level * 0.9, t + 0.002);
+      hissGain.gain.linearRampToValueAtTime(0.0001, t + hold);
+    }
+  }
+
+  const ends = now + grains * LINK_GRAIN + 0.05;
+  osc.start(now);
+  osc.stop(ends);
+  hiss.stop(ends);
+}
+
+/**
+ * One note over the chord: a sine with a quiet octave above it, a second to
+ * arrive and four to leave, into the small room.
+ *
+ * NO ATTACK YOU CAN POINT AT. A pluck would be an event, and events are what
+ * make a listener wait for the next one; this should arrive the way a light
+ * changes.
+ */
+function note() {
+  const now = ctx.currentTime;
+  const hz = NOTE_HZ[Math.floor(Math.random() * NOTE_HZ.length)];
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(NOTE, now + 1.0);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 4.5);
+  gain.connect(master);
+  gain.connect(voices.glow);
+
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.value = hz;
+
+  const over = ctx.createOscillator();
+  over.type = 'sine';
+  over.frequency.value = hz * 2;
+  const overLevel = ctx.createGain();
+  overLevel.gain.value = 0.16;
+
+  osc.connect(gain);
+  over.connect(overLevel).connect(gain);
+  osc.start(now);
+  over.start(now);
+  osc.stop(now + 4.7);
+  over.stop(now + 4.7);
+}
+
+function nextNote() {
+  const [min, max] = NOTE_GAP;
+  noteTimer = setTimeout(
+    () => {
+      if (!on) {
+        noteTimer = 0;
+        return;
+      }
+      fired.notes += 1;
+      note();
+      nextNote();
+    },
+    (min + Math.random() * (max - min)) * 1000
+  );
+}
+
 function bloop(power = 1) {
   const now = ctx.currentTime;
   const osc = ctx.createOscillator();
@@ -594,74 +606,11 @@ function swell() {
   osc.stop(now + 1.9);
 }
 
-/* ── The page's music: one note, then silence, then another. ───────────── */
-
-function note(level = MUSIC) {
-  const now = ctx.currentTime;
-  const step = STEPS[Math.floor(Math.random() * STEPS.length)];
-  const hz = ROOT * Math.pow(2, step / 12);
-
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.0001, now);
-  /* Slow in, slower out: nothing here should have an onset you can point at. */
-  gain.gain.exponentialRampToValueAtTime(level, now + 0.9);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 4.2);
-  gain.connect(master);
-  gain.connect(voices.space);
-
-  const osc = ctx.createOscillator();
-  osc.type = 'sine';
-  osc.frequency.value = hz;
-  /* A quiet octave over it, for air rather than for harmony. */
-  const over = ctx.createOscillator();
-  over.type = 'sine';
-  over.frequency.value = hz * 2;
-  const overGain = ctx.createGain();
-  overGain.gain.value = 0.18;
-
-  osc.connect(gain);
-  over.connect(overGain).connect(gain);
-  osc.start(now);
-  over.start(now);
-  osc.stop(now + 4.4);
-  over.stop(now + 4.4);
-}
-
-function nextNote() {
-  const [min, max] = MUSIC_GAP;
-  /* Further apart out in the world, where the breeze and the igloo are already
-     saying something; closer together on the page, where the notes are the
-     only thing there is. */
-  const gap = (min + Math.random() * (max - min)) * (page < 0.5 ? 1.5 : 1);
-  musicTimer = setTimeout(() => {
-    if (!on) {
-      musicTimer = 0;
-      return;
-    }
-    fired.notes += 1;
-    /* Quieter against the world, fuller on the page. */
-    note(page < 0.5 ? MUSIC * 0.55 : MUSIC);
-    nextNote();
-  }, gap * 1000);
-}
-
-function musicOn() {
-  if (musicTimer || !ctx) return;
-  nextNote();
-}
-
-function musicOff() {
-  clearTimeout(musicTimer);
-  musicTimer = 0;
-}
-
 /* Dev only: the last raw signal each voice was handed, so the constants above
    can be set from measurements rather than guessed at, and a tally of the
-   one-shots — a burst and a note leave no level to read, so they are counted. */
+   one-shots — they leave no level to read, so they are counted. */
 const raw = { drive: 0, force: 0, flight: 0, progress: 0, rate: 0, strength: 0 };
 const fired = { hits: 0, bursts: 0, notes: 0 };
-/** When the last data burst went out, for the gap rule. */
-let lastBurst = -1;
 
 export const sound = {
   get enabled() {
@@ -677,14 +626,14 @@ export const sound = {
     master.gain.cancelScheduledValues(now);
     master.gain.setValueAtTime(master.gain.value, now);
     master.gain.linearRampToValueAtTime(MASTER, now + FADE);
-    /* The score runs in both rooms now — see nextNote. */
-    musicOn();
+    if (!noteTimer) nextNote();
   },
 
   stop() {
     if (!ctx || !on) return;
     on = false;
-    musicOff();
+    clearTimeout(noteTimer);
+    noteTimer = 0;
     const now = ctx.currentTime;
     master.gain.cancelScheduledValues(now);
     master.gain.setValueAtTime(master.gain.value, now);
@@ -698,7 +647,8 @@ export const sound = {
 
   dispose() {
     clearTimeout(suspendTimer);
-    musicOff();
+    clearTimeout(noteTimer);
+    noteTimer = 0;
     on = false;
     ctx?.close().catch(() => {});
     ctx = null;
@@ -707,63 +657,35 @@ export const sound = {
     noise = null;
   },
 
-  /**
-   * The world's ambience: the breeze, and the music under it.
-   *
-   * Both are fed from here because both belong to the world rather than to any
-   * one thing in it, and both are gone once the work page has arrived.
-   */
+  /** The breeze: how hard the cursor stirs it, how fast the page travels. */
   air(force = 0, flight = 0) {
     raw.force = force;
     raw.flight = flight;
     if (!on) return;
+    /* Gone by the time the work page has arrived. */
     const outside = 1 - page;
     at(voices.air.gain.gain, AIR_BED * (1 + 0.45 * force + 0.35 * flight) * outside, 0.6);
     at(voices.air.band.frequency, BAND_HZ + 180 * force + 120 * flight, 0.6);
 
-    /*
-     * The pad's own swell, on the clock rather than on an oscillator, so it
-     * can be ducked by the page in the same breath. Raised to a cosine so it
-     * spends longer near silence than near full — phrases with space around
-     * them rather than a level that wanders.
-     */
-    const phase = (PAD_PHASE + ctx.currentTime * PAD_HZ) % 1;
-    const breathe = Math.pow(0.5 - 0.5 * Math.cos(phase * Math.PI * 2), 1.4);
-    const swell = PAD_FLOOR + (1 - PAD_FLOOR) * breathe;
-    /* The music CROSSES the cut, unlike the breeze: it only steps back a
-       little on the page so the notes there have room. Two rooms, one score. */
-    at(voices.pad.gain.gain, PAD * swell * (1 - 0.3 * page), 1.2);
+    /* The chord crosses the cut rather than stopping at it — it is the one
+       thing common to both rooms — but steps back on the page, where there is
+       reading to do. */
+    at(voices.pad.gain.gain, PAD * (1 - 0.35 * page), 1.5);
   },
 
   /**
-   * A measurement line reaching a node — the igloo's whole voice.
-   *
-   * IglooBlocks only grows that network while the pointer is actually on the
-   * dome, so this is already "only when touched" without a gate of its own.
-   */
-  link() {
-    if (!on || page >= 0.5) return;
-    /* One burst per LINK_GAP at most — see the note on the constant. */
-    if (ctx.currentTime - lastBurst < LINK_GAP) return;
-    lastBurst = ctx.currentTime;
-    fired.bursts += 1;
-    dataBurst();
-  },
-
-  /**
-   * The igloo, held: 0..1 of how hard the interaction has hold of the shell.
+   * The igloo, taken hold of: 0..1 of how hard the interaction has the shell.
    *
    * IglooBlocks passes its interaction strength, which is zero whenever nobody
-   * is touching the dome — so the voice is "only when touched" by its own
-   * nature, and the idle sweep that keeps the blocks drifting stays silent.
+   * is touching the dome — so this is "only when touched" by its own nature,
+   * and the idle sweep that keeps the blocks drifting stays silent.
    */
   igloo(strength = 0) {
     raw.strength = strength;
     if (!on || page >= 0.5) return;
 
-    /* The hit lands as the shell is TAKEN HOLD OF. Re-armed only once the
-       interaction has let go properly, so a cursor wandering across a joint
-       cannot retrigger it. */
+    /* Re-armed only once the interaction has let go properly, so a cursor
+       wandering across a joint cannot retrigger it. */
     if (!holding && strength > 0.15) {
       holding = true;
       fired.hits += 1;
@@ -771,6 +693,15 @@ export const sound = {
     } else if (holding && strength < 0.05) {
       holding = false;
     }
+  },
+
+  /** A measurement line reaching a node. */
+  link() {
+    if (!on || page >= 0.5) return;
+    if (ctx.currentTime - lastBurst < LINK_GAP) return;
+    lastBurst = ctx.currentTime;
+    fired.bursts += 1;
+    dataBurst();
   },
 
   /** The glass button: how hard it is flowing, and which way it is bending. */
@@ -792,8 +723,6 @@ export const sound = {
   cut(progress = 0, rate = 0) {
     raw.progress = progress;
     raw.rate = rate;
-    /* Tracked even while muted, so switching sound on inside the page starts
-       the music rather than the breeze. */
     page = ramp(0.55, 0.95, progress);
     if (!on) return;
 
@@ -811,23 +740,3 @@ export const sound = {
     }
   },
 };
-
-/* Dev only: the voices are inaudible to an automated browser, so their levels
-   are readable instead. Same channel as __worldGl. */
-if (import.meta.env.DEV && typeof window !== 'undefined') {
-  window.__sound = {
-    state: () => ({
-      on,
-      context: ctx?.state ?? 'none',
-      page,
-      music: Boolean(musicTimer),
-      master: master?.gain.value ?? 0,
-      air: voices?.air.gain.gain.value ?? 0,
-      pad: voices?.pad.gain.gain.value ?? 0,
-      glass: voices?.glass.gain.gain.value ?? 0,
-      cut: voices?.cut.gain.gain.value ?? 0,
-      raw: { ...raw },
-      fired: { ...fired },
-    }),
-  };
-}

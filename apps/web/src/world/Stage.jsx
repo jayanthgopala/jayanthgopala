@@ -12,7 +12,6 @@ import IglooBlocks from './structures/IglooBlocks.jsx';
 import CameraRig from './camera/CameraRig.jsx';
 import TravelGlitch from './effects/TravelGlitch.jsx';
 import IceCut, { CutFrameGate } from './effects/IceCut.jsx';
-import Diagnostics from './Diagnostics.jsx';
 import { EffectComposer, Bloom, Vignette, ChromaticAberration, TiltShift2, ToneMapping } from '@react-three/postprocessing';
 import { ToneMappingMode } from 'postprocessing';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -410,9 +409,6 @@ export default function Stage({ onIglooReady, begin = false, warm = false, onWar
              against the page every frame is wasted bandwidth. */
           alpha: false,
           stencil: false,
-          /* Dev only: readPixels needs the buffer to survive the frame, and
-             Diagnostics uses it to measure flicker. Off in production. */
-          preserveDrawingBuffer: import.meta.env.DEV,
         }}
         /*
          * near is 3, not 0.5. Depth precision is distributed by the near:far
@@ -430,13 +426,6 @@ export default function Stage({ onIglooReady, begin = false, warm = false, onWar
          */
         onCreated={({ gl }) => {
           gl.toneMappingExposure = EXPOSURE;
-          /* Dev only: the grade is tuned by measuring rendered frames, and
-             every lever that reaches the picture after the materials — tone
-             mapping, exposure, colour space — lives on this object. Reaching it
-             from the console is the difference between reading a number and
-             checking one, which is exactly what the note above records going
-             wrong. Same channel as Diagnostics, same reason. */
-          if (import.meta.env.DEV) window.__worldGl = gl;
         }}
       >
         {/* Nothing here suspends today, but the character GLB will, and a
@@ -705,10 +694,6 @@ export default function Stage({ onIglooReady, begin = false, warm = false, onWar
         {/* Parks the render loop while the work page covers the world. See
             CutFrameGate in effects/IceCut.jsx. */}
         <CutFrameGate />
-
-        {/* Reports draw counts onto <html data-world-stats>. See Diagnostics for
-            why that goes through the DOM rather than a global. */}
-        {import.meta.env.DEV && <Diagnostics />}
       </Canvas>
     </div>
   );

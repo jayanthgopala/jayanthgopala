@@ -1967,13 +1967,6 @@ export default function Terrain() {
   const uReveal = useRef({ value: 0 });
   const meshRef = useRef(null);
   const { intro } = useWorldScroll();
-  /* Dev only: the reveal is a uniform inside a shader, invisible from the page,
-     and the mesh is what WorldSite's health report inspects. Same channel and
-     reason as __worldGl in Stage.jsx. */
-  if (import.meta.env.DEV) {
-    window.__terrainReveal = uReveal.current;
-    window.__terrainMesh = meshRef;
-  }
 
   useFrame((state, delta) => {
     const ws = updateWindState(state, delta);
