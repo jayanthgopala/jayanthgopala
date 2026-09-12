@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ScrollProvider, { useWorldScroll } from './scroll/ScrollProvider.jsx';
-import { createWind } from './lib/wind.js';
+import { windState } from './lib/wind.js';
+import { sound } from './lib/sound.js';
 import Stage from './Stage.jsx';
 import WorkPage from './WorkPage.jsx';
 import WorldLoader from './WorldLoader.jsx';
@@ -61,38 +62,62 @@ function useActiveAct() {
  * install blockers for. The first click is what both starts the context and
  * turns it on, which is exactly the gesture the policy wants.
  *
- * The wind itself is built lazily inside createWind, so a visitor who never
- * touches this never allocates an AudioContext at all.
+ * The soundscape is built lazily inside lib/sound.js — the context is not
+ * created until this is first pressed, so a visitor who never touches it
+ * allocates nothing at all.
  */
 function SoundToggle() {
   const [on, setOn] = useState(false);
-  const wind = useRef(null);
+  const { flight, cut } = useWorldScroll();
 
-  useEffect(() => {
-    wind.current = createWind();
-    return () => {
-      wind.current?.dispose();
-      wind.current = null;
-    };
-  }, []);
+  useEffect(() => () => sound.dispose(), []);
 
   /* Stop when the tab is hidden. A backgrounded tab playing wind is the thing
      people hunt through their tabs to find and close. */
   useEffect(() => {
     if (!on) return undefined;
     const onVisibility = () => {
-      if (document.hidden) wind.current?.stop();
-      else wind.current?.start();
+      if (document.hidden) sound.stop();
+      else sound.start();
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, [on]);
 
+  /*
+   * The two voices nobody else can feed.
+   *
+   * The igloo and the glass button report from their own frame loops, because
+   * they own the numbers. The air and the cut are properties of the page as a
+   * whole — how fast it is travelling, how far through the wipe it is, how
+   * hard the cursor is stirring the air — so they are read here, in the one
+   * component that already knows whether there is any sound to feed.
+   */
+  useEffect(() => {
+    if (!on) return undefined;
+    let frame = 0;
+    let last = performance.now();
+    let previous = cut.current;
+
+    const tick = (now) => {
+      const dt = Math.max(0.001, (now - last) / 1000);
+      last = now;
+      const progress = cut.current;
+      sound.air(windState.cursorForce, flight.current);
+      sound.cut(progress, (progress - previous) / dt);
+      previous = progress;
+      frame = requestAnimationFrame(tick);
+    };
+
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [on, flight, cut]);
+
   const toggle = () => {
     const next = !on;
     setOn(next);
-    if (next) wind.current?.start();
-    else wind.current?.stop();
+    if (next) sound.start();
+    else sound.stop();
   };
 
   return (

@@ -258,8 +258,23 @@ const CAMERA_POINTS = [
    * to stand against, and why the blue in Sky.jsx was invisible however it was
    * graded.
    */
-  [12.8, 60, 422], // 1  the held opening frame — solved above
-  [15, 80, 468], //   1  starting back and up, the dome still reads as the subject
+  /*
+   * PULLED IN ~13%, AND ALONG THE SIGHT LINE RATHER THAN ANYWHERE ELSE.
+   *
+   * The dome was asked to read bigger. The model is NOT scaled — a stretch
+   * once distorted the shell and the porch arch, and the standing rule from
+   * that is that silhouette belongs to the source model, never to a transform.
+   * Distance is the honest lever: the lens was 177 units off its aim, it is
+   * now about 154, which is the same picture with the dome about a sixth
+   * larger in it.
+   *
+   * MOVED DOWN THE VECTOR TO THE TARGET, so the aim, the pitch and therefore
+   * the whole composition are untouched — only the subject's size changes.
+   * The second waypoint comes in with it, or the first stretch of the
+   * pull-back would start with a lurch.
+   */
+  [7.9, 57.8, 399.5], // 1  the held opening frame — solved above, then pulled in
+  [12.2, 77.5, 453], //  1  starting back and up, the dome still reads as the subject
   [18, 112, 524], //  2  the drift and the near hills come into view around it
   [22, 155, 588], //  2  the igloo is one object in a landscape now
   [27, 210, 660], //  3  and finally a mark on an empty white plain

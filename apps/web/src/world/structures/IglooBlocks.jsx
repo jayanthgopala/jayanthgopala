@@ -7,6 +7,7 @@ import { loadIgloo } from '../../igloo/Igloo.js';
 import { BlockPhysics } from '../../igloo/BlockPhysics.js';
 import { IglooInteraction } from '../../igloo/IglooInteraction.js';
 import { LOOK } from '../lib/lighting.js';
+import { sound } from '../lib/sound.js';
 
 /**
  * The baked igloo, standing in the world.
@@ -54,6 +55,14 @@ const LINE_VERTICES = MAX_NODES + 1;
  * the four or five nearest the cursor, which is what the readout is for.
  */
 const NODE_FLOOR = 0.42;
+
+/*
+ * How many measurement lines were joined on the last frame, so a new one can
+ * be HEARD arriving (see sound.link). Module scope for the same reason the
+ * projection scratch vectors are: there is one igloo, and this is per-frame
+ * state that never belongs to React.
+ */
+let linkedNodes = 0;
 
 
 /*
@@ -1071,6 +1080,10 @@ export default function IglooBlocks({
     physics.step(dt);
     physics.writeTo(igloo.mesh);
 
+    /* The shell's own voice, swelling with how hard the pointer has hold of
+       it — zero whenever nobody is touching it. See sound.igloo. */
+    sound.igloo(interaction.strength);
+
     // --- Measurement network ------------------------------------------------
     /* Carried over from the procedural igloo, reading hover pressure instead of
        its per-instance amount. Same readout, same styles, different source. */
@@ -1098,6 +1111,17 @@ export default function IglooBlocks({
 
     nodes.sort((a, b) => b.amount - a.amount);
     const chain = nodes.slice(0, MAX_NODES);
+
+    /*
+     * A LINE REACHING A NEW NODE GETS A PING. One per node joined, and silence
+     * while the chain holds steady or shrinks — so the sound belongs to the
+     * network being drawn rather than to it existing. The rank is passed so a
+     * burst of them arpeggiates instead of repeating one pitch.
+     */
+    if (chain.length > linkedNodes) {
+      for (let n = linkedNodes; n < chain.length; n += 1) sound.link(n);
+    }
+    linkedNodes = chain.length;
 
     /* Wind the polygon by angle about its own centroid, or the polyline
        crosses itself as the cursor moves and reads as a scribble. */

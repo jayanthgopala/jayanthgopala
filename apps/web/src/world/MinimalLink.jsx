@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
+import { sound } from './lib/sound.js';
 
 /**
  * The way back to the minimal site: a pane of ice that gives where it is
@@ -251,6 +252,8 @@ export default function MinimalLink({ label = 'Minimal', href = '/' }) {
     /* 0..1: how hard the pointer is travelling across the glass right now.
        Nothing at all while it rests — which is what keeps it from inflating. */
     const drive = s.inside ? Math.min(1, s.speed / FLOW_SPEED) : 0;
+    /* Kept for the glass voice, which is fed from tick(). */
+    s.drive = drive;
 
     const px = s.ax + MARGIN;
     const py = s.ay + MARGIN;
@@ -294,13 +297,17 @@ export default function MinimalLink({ label = 'Minimal', href = '/' }) {
     s.last = now;
     step(dt);
     draw();
+    /* The glass sings while it is flowing, and bends with the lens. */
+    sound.glass(s.drive, s.lens);
     if (settled()) {
       /* Exactly a pill again, and no filter on the text. */
       s.off.fill(0);
       s.vel.fill(0);
       s.lens = 0;
       s.lensV = 0;
+      s.drive = 0;
       draw();
+      sound.glass(0, 0);
       lens(false);
       s.frame = 0;
       return;
@@ -360,6 +367,7 @@ export default function MinimalLink({ label = 'Minimal', href = '/' }) {
     s.inside = true;
     dent(PRESS_DENT, REACH * 1.4);
     s.lensV -= LENS_PRESS;
+    sound.glassPress();
     start();
   };
 
