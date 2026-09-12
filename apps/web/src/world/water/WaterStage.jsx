@@ -13,6 +13,7 @@ import { NoToneMapping, Vector2, Vector3 } from 'three';
 import Backdrop from './Backdrop.jsx';
 import GlyphWater, { PLANE } from './GlyphWater.jsx';
 import Droplets from './Droplets.jsx';
+import Bubbles from './Bubbles.jsx';
 import { RippleSim } from './ripples.js';
 import { glyphSdf } from './glyph.js';
 
@@ -163,6 +164,7 @@ function Scene({ pointer, calm, burstApi, letters, index }) {
       </Environment>
 
       <GlyphWater sim={sim} glyphA={pair.a} glyphB={pair.b} morph={morph} calm={calm} />
+      <Bubbles calm={calm} />
       {!calm && <Droplets api={burstApi} />}
     </>
   );

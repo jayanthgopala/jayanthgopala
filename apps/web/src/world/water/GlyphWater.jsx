@@ -81,14 +81,21 @@ float surfaceAt(vec2 uv) {
 
 function makeMaterial(uniforms, sign) {
   const material = new MeshPhysicalMaterial({
-    color: new Color('#e6f1f7'),
-    roughness: 0.035,
+    color: new Color('#ffffff'),
+    roughness: 0.015,
     metalness: 0,
     transmission: 1,
-    thickness: 0.85,
+    // Thin, and with absorption pushed far out, so the background reads
+    // straight through the letter instead of being tinted by it.
+    thickness: 0.32,
     ior: 1.33,
-    attenuationColor: new Color('#93bcd2'),
-    attenuationDistance: 2.4,
+    attenuationColor: new Color('#dcecf6'),
+    attenuationDistance: 7.5,
+    // A little dispersion at the rim, where the surface turns away hardest.
+    iridescence: 0.06,
+    iridescenceIOR: 1.2,
+    specularIntensity: 1,
+    envMapIntensity: 1.8,
     transparent: true,
     side: sign > 0 ? FrontSide : BackSide,
   });

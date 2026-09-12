@@ -162,6 +162,10 @@ export function glyphSdf(character) {
   texture.magFilter = LinearFilter;
   texture.wrapS = ClampToEdgeWrapping;
   texture.wrapT = ClampToEdgeWrapping;
+  // getImageData returns rows top-down, but a plane’s v runs bottom-up, and a
+  // DataTexture does not flip on upload the way a loaded image does. Without
+  // this every letter renders upside down.
+  texture.flipY = true;
   texture.needsUpdate = true;
 
   cache.set(key, texture);
