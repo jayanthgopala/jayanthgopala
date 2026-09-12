@@ -339,6 +339,7 @@ const GlassCloseButton = forwardRef(function GlassCloseButton(
       ref={buttonRef}
       type="button"
       className="w-glass w-detail-glass-close"
+      style={{ outline: 'none', border: 'none', boxShadow: 'none' }}
       aria-label="Close project"
       onPointerEnter={onEnter}
       onPointerMove={onMove}

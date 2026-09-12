@@ -6,6 +6,8 @@ import WaterStage from './water/WaterStage.jsx';
 import { shapeFor } from './water/shapes.js';
 import { sound } from './lib/sound.js';
 import GlassCloseButton from './GlassCloseButton.jsx';
+import DetailBackdrop from './DetailBackdrop.jsx';
+import ExploreTextLens from './ExploreTextLens.jsx';
 
 // The project index, shown as water in the shape of each project's initial.
 // Scrolling moves between projects; clicking opens the one on screen.
@@ -246,183 +248,12 @@ function About({ profile, content, boxRef, shown = true }) {
   );
 }
 
-// Ambient water waves and interactive liquid ripples around explore text
-function DetailWaves() {
-  const canvasRef = useRef(null);
-  const ripplesRef = useRef([]);
-  const lastMoveRef = useRef(0);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return undefined;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return undefined;
-
-    const reduced =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    let animFrame = 0;
-    let width = 0;
-    let height = 0;
-    let dpr = 1;
-
-    const resize = () => {
-      width = window.innerWidth;
-      height = window.innerHeight;
-      dpr = Math.min(window.devicePixelRatio || 1, 2);
-
-      canvas.width = Math.round(width * dpr);
-      canvas.height = Math.round(height * dpr);
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-    };
-
-    resize();
-    window.addEventListener('resize', resize);
-
-    const onPointerMove = (e) => {
-      const now = performance.now();
-      if (now - lastMoveRef.current < 70) return;
-      lastMoveRef.current = now;
-
-      if (ripplesRef.current.length < 18) {
-        ripplesRef.current.push({
-          x: e.clientX,
-          y: e.clientY,
-          r: 2,
-          maxR: 90 + Math.random() * 40,
-          alpha: 0.38,
-          speed: 1.8 + Math.random() * 0.8,
-        });
-      }
-    };
-
-    const onPointerDown = (e) => {
-      ripplesRef.current.push(
-        { x: e.clientX, y: e.clientY, r: 2, maxR: 140, alpha: 0.6, speed: 2.4 },
-        { x: e.clientX, y: e.clientY, r: 12, maxR: 160, alpha: 0.4, speed: 2.1 }
-      );
-      sound.drop?.(0.5);
-    };
-
-    window.addEventListener('pointermove', onPointerMove, { passive: true });
-    window.addEventListener('pointerdown', onPointerDown, { passive: true });
-
-    const start = performance.now();
-
-    const render = (time) => {
-      const elapsed = (time - start) / 1000;
-      ctx.save();
-      ctx.scale(dpr, dpr);
-      ctx.clearRect(0, 0, width, height);
-
-      // Soft undulating water waves across the background
-      const waveCount = 3;
-      for (let w = 0; w < waveCount; w += 1) {
-        const speed = 0.5 + w * 0.3;
-        const amplitude = 12 + w * 6;
-        const wavelength = 240 + w * 80;
-        const yOffset = height * (0.2 + w * 0.3);
-
-        ctx.beginPath();
-        ctx.moveTo(0, height);
-
-        for (let x = 0; x <= width; x += 16) {
-          const k = (x / wavelength) * Math.PI * 2;
-          const phase = elapsed * speed + w * 1.8;
-          const y = yOffset + Math.sin(k + phase) * amplitude + Math.cos(k * 0.5 - phase * 0.7) * (amplitude * 0.5);
-          if (x === 0) ctx.lineTo(0, y);
-          else ctx.lineTo(x, y);
-        }
-
-        ctx.lineTo(width, height);
-        ctx.closePath();
-
-        const grad = ctx.createLinearGradient(0, yOffset - amplitude, 0, yOffset + amplitude * 3);
-        grad.addColorStop(0, `rgba(255, 255, 255, ${0.12 - w * 0.02})`);
-        grad.addColorStop(0.5, `rgba(185, 212, 238, ${0.09 - w * 0.02})`);
-        grad.addColorStop(1, 'rgba(185, 212, 238, 0)');
-
-        ctx.fillStyle = grad;
-        ctx.fill();
-
-        // Wave crest highlight
-        ctx.beginPath();
-        for (let x = 0; x <= width; x += 16) {
-          const k = (x / wavelength) * Math.PI * 2;
-          const phase = elapsed * speed + w * 1.8;
-          const y = yOffset + Math.sin(k + phase) * amplitude + Math.cos(k * 0.5 - phase * 0.7) * (amplitude * 0.5);
-          if (x === 0) ctx.moveTo(0, y);
-          else ctx.lineTo(x, y);
-        }
-        ctx.strokeStyle = `rgba(255, 255, 255, ${0.24 - w * 0.04})`;
-        ctx.lineWidth = 1.25;
-        ctx.stroke();
-      }
-
-      // Interactive expanding liquid ripples
-      const ripples = ripplesRef.current;
-      for (let i = ripples.length - 1; i >= 0; i -= 1) {
-        const rip = ripples[i];
-        rip.r += rip.speed;
-        rip.alpha *= 0.965;
-
-        if (rip.alpha < 0.01 || rip.r >= rip.maxR) {
-          ripples.splice(i, 1);
-          continue;
-        }
-
-        ctx.beginPath();
-        ctx.arc(rip.x, rip.y, rip.r, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(255, 255, 255, ${rip.alpha.toFixed(3)})`;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        if (rip.r > 6) {
-          ctx.beginPath();
-          ctx.arc(rip.x, rip.y, rip.r - 5, 0, Math.PI * 2);
-          ctx.strokeStyle = `rgba(118, 142, 170, ${(rip.alpha * 0.65).toFixed(3)})`;
-          ctx.lineWidth = 1.2;
-          ctx.stroke();
-        }
-      }
-
-      ctx.restore();
-
-      if (!reduced) {
-        animFrame = requestAnimationFrame(render);
-      }
-    };
-
-    if (reduced) {
-      render(performance.now());
-    } else {
-      animFrame = requestAnimationFrame(render);
-    }
-
-    return () => {
-      window.removeEventListener('resize', resize);
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerdown', onPointerDown);
-      cancelAnimationFrame(animFrame);
-    };
-  }, []);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      className="w-detail-waves"
-      aria-hidden="true"
-    />
-  );
-}
-
 // Everything a project has to say, revealed only on request.
 function Detail({ project, number, onClose }) {
   const arrival = 1;
   const closeRef = useRef(null);
   const detailRef = useRef(null);
+  const panelRef = useRef(null);
 
   // Always reset scroll position to top when modal opens
   useEffect(() => {
@@ -432,7 +263,7 @@ function Detail({ project, number, onClose }) {
   }, [project]);
 
   useEffect(() => {
-    closeRef.current?.focus({ preventScroll: true });
+    detailRef.current?.focus({ preventScroll: true });
   }, [project]);
 
   useEffect(() => {
@@ -458,49 +289,37 @@ function Detail({ project, number, onClose }) {
       role="dialog"
       aria-modal="true"
       aria-label={project.title}
+      tabIndex={-1}
+      data-lenis-prevent
+      onWheel={(e) => {
+        e.stopPropagation();
+      }}
+      onTouchMove={(e) => {
+        e.stopPropagation();
+      }}
     >
-      <DetailWaves />
+      <DetailBackdrop scrollRef={detailRef} />
+
+      <ExploreTextLens panelRef={panelRef} />
 
       <GlassCloseButton ref={closeRef} onClick={onClose} label="Close" />
 
-      <div className="w-detail-panel">
-        <Decoded as="p" className="w-work-code" text={`PROJECT_${pad(number)}`} arrival={arrival} />
+      <div className="w-detail-panel" ref={panelRef}>
+        <p className="w-work-code">PROJECT_{pad(number)}</p>
         <Decoded
           as="h2"
           className="w-work-title"
           text={project.title || 'Untitled'}
           arrival={arrival}
-          delay={120}
-        />
-
-        <div className="w-work-wave" aria-hidden="true">
-          <svg viewBox="0 0 160 10" preserveAspectRatio="none">
-            <path d="M 0 5 Q 20 0, 40 5 T 80 5 T 120 5 T 160 5" />
-          </svg>
-        </div>
-
-        {hasSeparateSummary && (
-          <Decoded
-            as="p"
-            className="w-work-lead"
-            text={project.summary}
-            arrival={arrival}
-            delay={180}
-            duration={700}
-            withSound
-          />
-        )}
-
-        <p className="w-work-rule">////// {hasSeparateSummary ? 'Description' : 'Summary'}</p>
-        <Decoded
-          as="p"
-          className="w-work-body"
-          text={descriptionText}
-          arrival={arrival}
-          delay={260}
-          duration={1200}
+          delay={80}
+          duration={700}
           withSound
         />
+
+        {hasSeparateSummary && <p className="w-work-lead">{project.summary}</p>}
+
+        <p className="w-work-rule">////// {hasSeparateSummary ? 'Description' : 'Summary'}</p>
+        <p className="w-work-body">{descriptionText}</p>
 
         {tech.length > 0 && (
           <>
