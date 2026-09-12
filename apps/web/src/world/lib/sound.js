@@ -15,24 +15,10 @@ const AIR_BREATH_HZ = 0.055;
 
 const BUFFER_SECONDS = 8;
 
-// Ambient chord pad parameters
-const PAD = 0.065;
-const PAD_CUTOFF = 1300;
-// [frequency (Hz), level, cycle period (s)]
-const PAD_VOICES = [
-  [110.0, 0.9, 48],
-  [164.81, 0.7, 59],
-  [220.0, 0.6, 77],
-  [277.18, 0.4, 34],
-  [329.63, 0.35, 43],
-  [440.0, 0.22, 63],
-  [659.25, 0.14, 71],
-];
-
-// Sparse melody note frequencies and intervals
-const NOTE = 0.038;
-const NOTE_HZ = [220.0, 246.94, 277.18, 329.63, 369.99, 440.0];
-const NOTE_GAP = [8, 16]; // Seconds between notes
+// Ambient music track parameters
+const MUSIC_PATH = '/audio/pad.mp3';
+const MUSIC_VOLUME = 0.55;
+const MUSIC_STEP = 1 / 24; // Volume ramp tick, in seconds.
 
 // Igloo interaction SFX parameters
 const LINK = 0.022;
@@ -61,12 +47,14 @@ let ctx = null;
 let master = null;
 let voices = null;
 let noise = null;
+let musicEl = null;
+let musicTarget = 0;
+let musicTimer = 0;
 let on = false;
 let suspendTimer = 0;
 let page = 0; // Transition progress (0 to 1)
 let landed = false;
 let holding = false;
-let noteTimer = 0;
 let lastBurst = -1;
 
 // Pink noise generation with wrapped tail for seamless looping
@@ -158,55 +146,65 @@ function buildAir() {
   return { gain, band };
 }
 
-function buildPad() {
-  const gain = ctx.createGain();
-  gain.gain.value = 0;
-
-  const soft = ctx.createBiquadFilter();
-  soft.type = 'lowpass';
-  soft.frequency.value = PAD_CUTOFF;
-  soft.Q.value = 0.4;
-  soft.connect(gain).connect(master);
-
-  for (const [hz, level, period] of PAD_VOICES) {
-    const osc = ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.value = hz;
-
-    const voice = ctx.createGain();
-    voice.gain.value = level * 0.5;
-
-    const breath = ctx.createOscillator();
-    breath.frequency.value = 1 / period;
-    const depth = ctx.createGain();
-    depth.gain.value = level * 0.5;
-    breath.connect(depth).connect(voice.gain);
-    breath.start();
-
-    osc.connect(voice).connect(soft);
-    osc.start();
+function getMusic() {
+  if (!musicEl && typeof Audio !== 'undefined') {
+    musicEl = new Audio();
+    musicEl.loop = true;
+    musicEl.preload = 'auto';
+    musicEl.volume = 0;
+    musicEl.src = MUSIC_PATH;
+    musicEl.addEventListener('error', () => {
+      console.warn('[sound] pad track failed to load:', MUSIC_PATH, musicEl?.error);
+    });
+    musicEl.load();
   }
-
-  return { gain };
+  return musicEl;
 }
 
-// Light delay/reverb bus for note echoes
-function buildGlow() {
-  const input = ctx.createGain();
-  const delay = ctx.createDelay(1.2);
-  delay.delayTime.value = 0.42;
-  const feedback = ctx.createGain();
-  feedback.gain.value = 0.22;
-  const damp = ctx.createBiquadFilter();
-  damp.type = 'lowpass';
-  damp.frequency.value = 1600;
-  const level = ctx.createGain();
-  level.gain.value = 0.45;
+// Warms the pad track so the first toggle plays instead of waiting on the download.
+function preloadMusic() {
+  getMusic();
+}
 
-  input.connect(delay);
-  delay.connect(damp).connect(feedback).connect(delay);
-  delay.connect(level).connect(master);
-  return input;
+// Glides the element volume toward its target; the pad is pre-mastered, so it
+// needs a level envelope rather than a place in the synth graph.
+function musicTick() {
+  if (!musicEl) {
+    clearInterval(musicTimer);
+    musicTimer = 0;
+    return;
+  }
+
+  const step = MUSIC_STEP / Math.max(MUSIC_STEP, FADE);
+  const delta = musicTarget - musicEl.volume;
+
+  if (Math.abs(delta) <= step) {
+    musicEl.volume = musicTarget;
+    clearInterval(musicTimer);
+    musicTimer = 0;
+    if (musicTarget === 0) musicEl.pause();
+    return;
+  }
+
+  musicEl.volume = Math.min(1, Math.max(0, musicEl.volume + Math.sign(delta) * step));
+}
+
+function musicTo(target, immediate = false) {
+  musicTarget = Math.min(1, Math.max(0, target));
+  const audio = getMusic();
+  if (!audio) return;
+
+  if (immediate) {
+    clearInterval(musicTimer);
+    musicTimer = 0;
+    audio.volume = musicTarget;
+    return;
+  }
+
+  // air() retargets every frame, so settle silently rather than respawning the timer.
+  if (!musicTimer && audio.volume !== musicTarget) {
+    musicTimer = setInterval(musicTick, MUSIC_STEP * 1000);
+  }
 }
 
 function buildGlass() {
@@ -274,8 +272,6 @@ function build() {
 
   voices = {
     air: buildAir(),
-    pad: buildPad(),
-    glow: buildGlow(),
     glass: buildGlass(),
     cut: buildCut(),
   };
@@ -368,52 +364,6 @@ function dataBurst() {
   hiss.stop(ends);
 }
 
-// Single ambient chime note
-function note() {
-  const now = ctx.currentTime;
-  const hz = NOTE_HZ[Math.floor(Math.random() * NOTE_HZ.length)];
-
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(NOTE, now + 1.0);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 4.5);
-  gain.connect(master);
-  gain.connect(voices.glow);
-
-  const osc = ctx.createOscillator();
-  osc.type = 'sine';
-  osc.frequency.value = hz;
-
-  const over = ctx.createOscillator();
-  over.type = 'sine';
-  over.frequency.value = hz * 2;
-  const overLevel = ctx.createGain();
-  overLevel.gain.value = 0.16;
-
-  osc.connect(gain);
-  over.connect(overLevel).connect(gain);
-  osc.start(now);
-  over.start(now);
-  osc.stop(now + 4.7);
-  over.stop(now + 4.7);
-}
-
-function nextNote() {
-  const [min, max] = NOTE_GAP;
-  noteTimer = setTimeout(
-    () => {
-      if (!on) {
-        noteTimer = 0;
-        return;
-      }
-      fired.notes += 1;
-      note();
-      nextNote();
-    },
-    (min + Math.random() * (max - min)) * 1000
-  );
-}
-
 function bloop(power = 1) {
   const now = ctx.currentTime;
   const osc = ctx.createOscillator();
@@ -445,11 +395,16 @@ function swell() {
 
 // Telemetry and diagnostics counters
 const raw = { drive: 0, force: 0, flight: 0, progress: 0, rate: 0, strength: 0 };
-const fired = { hits: 0, bursts: 0, notes: 0 };
+const fired = { hits: 0, bursts: 0 };
 
 export const sound = {
   get enabled() {
     return on;
+  },
+
+  // Begins buffering the pad track ahead of the first toggle.
+  preload() {
+    preloadMusic();
   },
 
   start() {
@@ -461,18 +416,26 @@ export const sound = {
     master.gain.cancelScheduledValues(now);
     master.gain.setValueAtTime(master.gain.value, now);
     master.gain.linearRampToValueAtTime(MASTER, now + FADE);
-    if (!noteTimer) nextNote();
+
+    const audio = getMusic();
+    if (audio) {
+      musicTo(MUSIC_VOLUME);
+      audio.play().catch((err) => {
+        console.warn('[sound] pad playback was blocked:', err?.name, err?.message);
+      });
+    }
   },
 
   stop() {
     if (!ctx || !on) return;
     on = false;
-    clearTimeout(noteTimer);
-    noteTimer = 0;
     const now = ctx.currentTime;
     master.gain.cancelScheduledValues(now);
     master.gain.setValueAtTime(master.gain.value, now);
     master.gain.linearRampToValueAtTime(0, now + FADE);
+
+    musicTo(0);
+
     clearTimeout(suspendTimer);
     suspendTimer = setTimeout(() => {
       if (!on) ctx?.suspend().catch(() => {});
@@ -481,9 +444,16 @@ export const sound = {
 
   dispose() {
     clearTimeout(suspendTimer);
-    clearTimeout(noteTimer);
-    noteTimer = 0;
+    clearInterval(musicTimer);
+    musicTimer = 0;
+    musicTarget = 0;
     on = false;
+    if (musicEl) {
+      musicEl.pause();
+      musicEl.removeAttribute('src');
+      musicEl.load();
+      musicEl = null;
+    }
     ctx?.close().catch(() => {});
     ctx = null;
     master = null;
@@ -499,7 +469,7 @@ export const sound = {
     const outside = 1 - page;
     at(voices.air.gain.gain, AIR_BED * (1 + 0.45 * force + 0.35 * flight) * outside, 0.6);
     at(voices.air.band.frequency, BAND_HZ + 180 * force + 120 * flight, 0.6);
-    at(voices.pad.gain.gain, PAD * (1 - 0.35 * page), 1.5);
+    musicTo(MUSIC_VOLUME * (1 - 0.35 * page));
   },
 
   // Igloo block interaction sound

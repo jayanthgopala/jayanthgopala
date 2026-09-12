@@ -39,7 +39,11 @@ function SoundToggle() {
   const [on, setOn] = useState(false);
   const { flight, cut } = useWorldScroll();
 
-  useEffect(() => () => sound.dispose(), []);
+  // Buffer the pad track up front so the first toggle starts immediately.
+  useEffect(() => {
+    sound.preload();
+    return () => sound.dispose();
+  }, []);
 
   // Pause audio when document is hidden.
   useEffect(() => {
