@@ -527,3 +527,123 @@
   }
   .w-sound-bars i { transition: none; }
 }
+
+/* ── Water letterform ──────────────────────────────────────────────────────
+   The Selected Work page is the water and nothing else: the liquid takes the
+   shape of each project's initial, scroll moves between them, a click opens
+   one. The canvas paints the ice background itself, so it fully covers the
+   frozen world canvas rather than compositing over it — that is what keeps the
+   dot grid from doubling. */
+
+.w-water {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* The canvas is opaque, so fading it in is what hides the simulation's first
+     frames while the cut is still running. */
+  opacity: 0;
+  transition: opacity 620ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.w-work.is-live .w-water {
+  opacity: 1;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.w-water canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Ring cursor. Positioned by transform alone so the follow stays on the
+   compositor rather than relaying out every frame. */
+.w-water-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 62px;
+  height: 62px;
+  margin: -31px 0 0 -31px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  box-shadow:
+    0 0 18px 2px rgba(255, 255, 255, 0.55),
+    inset 0 0 12px rgba(255, 255, 255, 0.35);
+  opacity: 0;
+  transition: opacity 220ms ease;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.w-water-ring[data-on] { opacity: 1; }
+
+.w-water-hint {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(18px, 4vh, 38px);
+  transform: translateX(-50%);
+  margin: 0;
+  font-size: var(--w-meta);
+  letter-spacing: var(--w-track);
+  text-transform: uppercase;
+  color: rgba(31, 38, 43, 0.55);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ── Project detail ─────────────────────────────────────────────────────── */
+
+.w-detail {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 4vw, 48px);
+  background: rgba(203, 215, 228, 0.72);
+  backdrop-filter: blur(14px) saturate(1.1);
+  animation: w-detail-in 320ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.w-work.is-live .w-detail { pointer-events: auto; }
+
+@keyframes w-detail-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.w-detail-panel {
+  position: relative;
+  width: min(34rem, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: clamp(20px, 3vw, 34px);
+  border: 1px solid rgba(63, 72, 85, 0.25);
+  background: rgba(233, 240, 248, 0.9);
+  font-size: 0.8rem;
+  line-height: 1.65;
+}
+
+.w-detail-close {
+  float: right;
+  margin: 0 0 0.6em 1em;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--w-ink);
+  cursor: pointer;
+}
+
+.w-detail-close:hover,
+.w-detail-close:focus-visible { text-decoration: underline; }
+
+@media (prefers-reduced-motion: reduce) {
+  .w-water,
+  .w-water-ring { transition: none; }
+  .w-detail { animation: none; }
+}
