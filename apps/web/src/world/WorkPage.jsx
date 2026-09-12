@@ -8,6 +8,7 @@ import { sound } from './lib/sound.js';
 import GlassCloseButton from './GlassCloseButton.jsx';
 import DetailBackdrop from './DetailBackdrop.jsx';
 import ExploreTextLens from './ExploreTextLens.jsx';
+import { SoundToggle } from './WorldSite.jsx';
 
 // The project index, shown as water in the shape of each project's initial.
 // Scrolling moves between projects; clicking opens the one on screen.
@@ -313,7 +314,6 @@ function Detail({ project, number, onClose }) {
           arrival={arrival}
           delay={80}
           duration={700}
-          withSound
         />
 
         {hasSeparateSummary && <p className="w-work-lead">{project.summary}</p>}
@@ -361,6 +361,10 @@ function Detail({ project, number, onClose }) {
             </p>
           </>
         )}
+      </div>
+
+      <div className="w-detail-sound-bar">
+        <SoundToggle />
       </div>
     </div>
   );

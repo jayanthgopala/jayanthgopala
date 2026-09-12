@@ -250,6 +250,88 @@ function buildCut() {
   return { gain, band };
 }
 
+// Futuristic sci-fi cyber sound for explore page text wave interaction
+function buildFuturisticTextVoice() {
+  // Carrier oscillator (triangle for rich futuristic cyber harmonics)
+  const carrier = ctx.createOscillator();
+  carrier.type = 'triangle';
+  carrier.frequency.value = 480;
+
+  // Modulator oscillator (FM metallic cyber sheen)
+  const modulator = ctx.createOscillator();
+  modulator.type = 'sine';
+  modulator.frequency.value = 1080;
+
+  const modGain = ctx.createGain();
+  modGain.gain.value = 140;
+  modulator.connect(modGain).connect(carrier.frequency);
+
+  // Sub-harmonic for holographic depth
+  const sub = ctx.createOscillator();
+  sub.type = 'sine';
+  sub.frequency.value = 240;
+  const subGain = ctx.createGain();
+  subGain.gain.value = 0.4;
+  sub.connect(subGain);
+
+  // Resonant holographic bandpass filter
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 1350;
+  filter.Q.value = 3.2;
+
+  carrier.connect(filter);
+  subGain.connect(filter);
+
+  const gain = ctx.createGain();
+  gain.gain.value = 0;
+  filter.connect(gain).connect(master);
+
+  carrier.start();
+  modulator.start();
+  sub.start();
+
+  return { gain, carrier, modulator, modGain, sub, filter };
+}
+
+let lastWavePulseTime = 0;
+function playWavePulse(norm = 0.5) {
+  if (!on || !ctx) return;
+  const now = ctx.currentTime;
+  if (now - lastWavePulseTime < 0.04) return;
+  lastWavePulseTime = now;
+
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  const startF = 1500 + norm * 600;
+  const endF = 580 + norm * 260;
+  osc.frequency.setValueAtTime(startF, now);
+  osc.frequency.exponentialRampToValueAtTime(endF, now + 0.034);
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(startF * 0.95, now);
+  filter.frequency.exponentialRampToValueAtTime(endF * 0.95, now + 0.034);
+  filter.Q.value = 2.8;
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.018, now);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.038);
+
+  osc.connect(filter).connect(gain).connect(master);
+  osc.start(now);
+  osc.stop(now + 0.042);
+}
+
+const stateListeners = new Set();
+function notifyState() {
+  for (const fn of stateListeners) {
+    try {
+      fn(on);
+    } catch {}
+  }
+}
+
 function build() {
   const Ctx = window.AudioContext || window.webkitAudioContext;
   if (!Ctx) return false;
@@ -274,6 +356,7 @@ function build() {
     air: buildAir(),
     glass: buildGlass(),
     cut: buildCut(),
+    futuristicText: buildFuturisticTextVoice(),
   };
   return true;
 }
@@ -547,6 +630,7 @@ export const sound = {
     clearTimeout(suspendTimer);
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});
     on = true;
+    notifyState();
     const now = ctx.currentTime;
     master.gain.cancelScheduledValues(now);
     master.gain.setValueAtTime(master.gain.value, now);
@@ -564,6 +648,7 @@ export const sound = {
   stop() {
     if (!ctx || !on) return;
     on = false;
+    notifyState();
     const now = ctx.currentTime;
     master.gain.cancelScheduledValues(now);
     master.gain.setValueAtTime(master.gain.value, now);
@@ -583,6 +668,7 @@ export const sound = {
     musicTimer = 0;
     musicTarget = 0;
     on = false;
+    notifyState();
     if (musicEl) {
       musicEl.pause();
       musicEl.removeAttribute('src');
@@ -689,5 +775,29 @@ export const sound = {
 
   decodeDone() {
     decodeDone();
+  },
+
+  subscribe(fn) {
+    stateListeners.add(fn);
+    fn(on);
+    return () => stateListeners.delete(fn);
+  },
+
+  textLens(intensity = 0, normX = 0.5, speed = 0) {
+    if (!on || !voices?.futuristicText) return;
+    const v = voices.futuristicText;
+    const targetGain = 0.024 * Math.max(0, Math.min(1, intensity));
+    at(v.gain.gain, targetGain, intensity > 0.01 ? 0.06 : 0.28);
+
+    const pitch = 1 + (normX - 0.5) * 0.35 + Math.min(0.4, speed * 0.0008);
+    at(v.carrier.frequency, 480 * pitch, 0.08);
+    at(v.modulator.frequency, 1080 * pitch, 0.08);
+    at(v.sub.frequency, 240 * pitch, 0.08);
+    at(v.filter.frequency, 1350 * pitch, 0.08);
+    at(v.modGain.gain, 70 + 150 * Math.min(1, speed * 0.002), 0.08);
+  },
+
+  wavePulse(normX = 0.5) {
+    playWavePulse(normX);
   },
 };

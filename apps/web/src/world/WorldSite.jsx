@@ -35,14 +35,17 @@ function useActiveAct() {
 }
 
 // Ambient sound toggle.
-function SoundToggle() {
-  const [on, setOn] = useState(false);
+export function SoundToggle({ className = '' } = {}) {
+  const [on, setOn] = useState(() => sound.enabled);
   const { flight, cut } = useWorldScroll();
 
   // Buffer the pad track up front so the first toggle starts immediately.
   useEffect(() => {
     sound.preload();
-    return () => sound.dispose();
+    const unsub = sound.subscribe((active) => setOn(active));
+    return () => {
+      unsub();
+    };
   }, []);
 
   // Pause audio when document is hidden.
@@ -78,16 +81,14 @@ function SoundToggle() {
   }, [on, flight, cut]);
 
   const toggle = () => {
-    const next = !on;
-    setOn(next);
-    if (next) sound.start();
-    else sound.stop();
+    if (sound.enabled) sound.stop();
+    else sound.start();
   };
 
   return (
     <button
       type="button"
-      className={`w-sound${on ? ' is-on' : ''}`}
+      className={`w-sound${on ? ' is-on' : ''}${className ? ` ${className}` : ''}`}
       onClick={toggle}
       aria-pressed={on}
     >

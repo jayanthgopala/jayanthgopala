@@ -695,6 +695,21 @@
   box-shadow: none !important;
 }
 
+/* Sound toggle in explore page — positioned and styled identically to project page HUD */
+.w-detail-sound-bar {
+  position: fixed;
+  bottom: clamp(16px, 2.4vw, 34px);
+  left: clamp(16px, 2.4vw, 34px);
+  z-index: 70;
+  pointer-events: auto;
+  font-family: var(--w-mono);
+  color: var(--w-ink);
+  text-transform: uppercase;
+  letter-spacing: var(--w-track);
+  font-size: var(--w-meta);
+  font-weight: 500;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .w-water,
   .w-water-ring { transition: none; }

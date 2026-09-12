@@ -1,85 +1,97 @@
 import { useEffect, useRef } from 'react';
 import { sound } from './lib/sound.js';
 
-// SVG lens distortion filter and spring physics applied to explore text on cursor movement,
-// matching the interaction in MinimalLink.
+// Renders an active trail of propagating ripple waves along the trajectory
+// where the cursor has moved across the text, curing smoothly over time.
 
 const LENS = 'w-explore-text-lens';
-const LENS_R = 48;
-const LENS_FLOW = 4200;
-const LENS_SPRING = 320;
-const LENS_DAMP = 12;
-const LENS_ENTER = 180;
-const FLOW_SPEED = 420;
-const STEP = 1 / 240;
+const WAVES_MAX = 14;
+const BASE_SCALE = 22; // Wave ripple displacement intensity
+const SPAWN_DIST = 18; // Pixels between new wave spawns
 
 const reduced = () =>
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-// Procedural radial displacement map for SVG feDisplacementMap
-let lensUrl = '';
-function lensMap() {
-  if (lensUrl) return lensUrl;
-  const size = 96;
+// Procedural multi-ring wave ripple template (128x128)
+let waveTemplateImg = null;
+function getWaveTemplate() {
+  if (waveTemplateImg) return waveTemplateImg;
+  const size = 128;
   const half = size / 2;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d');
-  const img = ctx.createImageData(size, size);
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
+  const imgData = ctx.createImageData(size, size);
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
       const dx = (x + 0.5 - half) / half;
       const dy = (y + 0.5 - half) / half;
       const d = Math.hypot(dx, dy);
-      let vx = 0;
-      let vy = 0;
-      if (d > 0 && d < 1) {
-        const m = (d * (1 - d) * (1 - d)) / 0.148;
-        vx = (dx / d) * m;
-        vy = (dy / d) * m;
-      }
       const i = (y * size + x) * 4;
-      img.data[i] = Math.round(128 + vx * 127);
-      img.data[i + 1] = Math.round(128 + vy * 127);
-      img.data[i + 2] = 128;
-      img.data[i + 3] = 255;
+
+      if (d > 0 && d < 1) {
+        // Multi-ripple harmonic wave packet (crest, trough, crest)
+        const envelope = Math.sin(d * Math.PI); // smooth bell envelope
+        const wave = Math.sin(d * Math.PI * 3.5); // 2 distinct ripple rings
+        const m = (wave * envelope) / 0.85;
+        const vx = (dx / d) * m;
+        const vy = (dy / d) * m;
+
+        imgData.data[i] = Math.round(128 + Math.max(-1, Math.min(1, vx)) * 127);
+        imgData.data[i + 1] = Math.round(128 + Math.max(-1, Math.min(1, vy)) * 127);
+        imgData.data[i + 2] = 128;
+        imgData.data[i + 3] = Math.round(envelope * 255);
+      } else {
+        imgData.data[i] = 128;
+        imgData.data[i + 1] = 128;
+        imgData.data[i + 2] = 128;
+        imgData.data[i + 3] = 0;
+      }
     }
   }
-  ctx.putImageData(img, 0, 0);
-  lensUrl = canvas.toDataURL('image/png');
-  return lensUrl;
+
+  ctx.putImageData(imgData, 0, 0);
+  const img = new Image();
+  img.src = canvas.toDataURL();
+  waveTemplateImg = img;
+  return img;
 }
 
 export default function ExploreTextLens({ panelRef }) {
   const lensImg = useRef(null);
   const lensDisp = useRef(null);
 
-  const sim = useRef({
-    x: -9999,
-    y: -9999,
-    speed: 0,
-    lastMove: 0,
-    lens: 0,
-    lensV: 0,
-    inside: false,
-    drive: 0,
-    frame: 0,
-    last: 0,
-    acc: 0,
-  });
+  // Dynamic displacement canvas
+  const canvasRef = useRef(null);
 
-  const draw = () => {
-    const s = sim.current;
-    const img = lensImg.current;
-    if (img) {
-      img.setAttribute('x', (s.x - LENS_R).toFixed(1));
-      img.setAttribute('y', (s.y - LENS_R).toFixed(1));
-      img.setAttribute('width', String(LENS_R * 2));
-      img.setAttribute('height', String(LENS_R * 2));
-    }
-    lensDisp.current?.setAttribute('scale', s.lens.toFixed(2));
-  };
+  // Ring buffer of propagating waves along the cursor path
+  const waves = useRef(
+    Array.from({ length: WAVES_MAX }, () => ({
+      active: false,
+      x: 0,
+      y: 0,
+      age: 0,
+      maxLife: 0.9,
+      startR: 16,
+      endR: 56,
+    }))
+  );
+
+  const state = useRef({
+    nextIdx: 0,
+    lastSpawnX: -9999,
+    lastSpawnY: -9999,
+    lastSpawnTime: 0,
+    lastX: 0,
+    lastY: 0,
+    speed: 0,
+    normX: 0.5,
+    inside: false,
+    frame: 0,
+    lastTime: 0,
+  });
 
   const setFilter = (on) => {
     if (panelRef.current) {
@@ -88,100 +100,164 @@ export default function ExploreTextLens({ panelRef }) {
   };
 
   useEffect(() => {
-    lensImg.current?.setAttribute('href', lensMap());
+    if (!canvasRef.current && typeof document !== 'undefined') {
+      const c = document.createElement('canvas');
+      c.width = 280;
+      c.height = 420;
+      canvasRef.current = c;
+    }
+    getWaveTemplate();
   }, []);
 
   useEffect(() => {
     const panel = panelRef.current;
     if (!panel) return undefined;
 
-    const step = (dt) => {
-      const s = sim.current;
-      s.speed *= Math.exp(-dt * 8);
-      const drive = s.inside ? Math.min(1, s.speed / FLOW_SPEED) : 0;
-      s.drive = drive;
-
-      s.acc += dt;
-      while (s.acc >= STEP) {
-        s.acc -= STEP;
-        s.lensV += (-LENS_FLOW * drive - LENS_SPRING * s.lens - LENS_DAMP * s.lensV) * STEP;
-        s.lens += s.lensV * STEP;
-      }
-    };
-
-    const settled = () => {
-      const s = sim.current;
-      if (s.inside && s.speed > 5) return false;
-      return Math.abs(s.lens) <= 0.03 && Math.abs(s.lensV) <= 0.3;
+    const spawnWave = (cx, cy, nx) => {
+      const wList = waves.current;
+      const s = state.current;
+      const w = wList[s.nextIdx];
+      w.active = true;
+      w.x = cx;
+      w.y = cy;
+      w.age = 0;
+      w.maxLife = 0.9;
+      w.startR = 14;
+      w.endR = 56;
+      s.nextIdx = (s.nextIdx + 1) % WAVES_MAX;
+      s.lastSpawnX = cx;
+      s.lastSpawnY = cy;
+      s.lastSpawnTime = performance.now();
+      sound.wavePulse?.(nx);
     };
 
     const tick = (now) => {
-      const s = sim.current;
-      const dt = Math.min(0.05, (now - s.last) / 1000);
-      s.last = now;
-      step(dt);
-      draw();
-      sound.glass(s.drive, s.lens);
+      const s = state.current;
+      const dt = Math.min(0.05, (now - s.lastTime) / 1000);
+      s.lastTime = now;
 
-      if (settled()) {
-        s.lens = 0;
-        s.lensV = 0;
-        s.drive = 0;
-        draw();
-        sound.glass(0, 0);
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const waveImg = getWaveTemplate();
+
+      // Clear with neutral gray (zero displacement)
+      ctx.fillStyle = 'rgb(128, 128, 128)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      let activeCount = 0;
+      const wList = waves.current;
+
+      for (let i = 0; i < WAVES_MAX; i++) {
+        const w = wList[i];
+        if (!w.active) continue;
+
+        w.age += dt;
+        const progress = w.age / w.maxLife;
+
+        if (progress >= 1) {
+          w.active = false;
+        } else {
+          activeCount++;
+          // Wave expands outward where the cursor was
+          const r = w.startR + (w.endR - w.startR) * progress;
+          // Smooth curing decay over time
+          const cure = Math.pow(1 - progress, 1.4);
+
+          ctx.globalAlpha = cure;
+          ctx.drawImage(waveImg, w.x - r, w.y - r, r * 2, r * 2);
+        }
+      }
+
+      ctx.globalAlpha = 1.0;
+
+      // Update SVG filter with rendered wave trail map
+      if (lensImg.current) {
+        lensImg.current.setAttribute('href', canvas.toDataURL('image/png'));
+      }
+      lensDisp.current?.setAttribute('scale', String(BASE_SCALE));
+
+      // Continuous futuristic sound sweeps with active waves and speed
+      sound.textLens?.(Math.min(1, activeCount / 3.5), s.normX, s.speed);
+
+      // Settle check: all waves have cured to flat rest
+      if (activeCount === 0) {
+        sound.textLens?.(0, 0.5, 0);
         setFilter(false);
         s.frame = 0;
         return;
       }
+
       s.frame = requestAnimationFrame(tick);
     };
 
     const start = () => {
-      const s = sim.current;
+      const s = state.current;
       setFilter(true);
       if (s.frame) return;
-      s.last = performance.now();
-      s.acc = 0;
+      s.lastTime = performance.now();
       s.frame = requestAnimationFrame(tick);
     };
 
     const onEnter = (e) => {
       if (reduced()) return;
       const rect = panel.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      const s = sim.current;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const targetH = Math.max(280, Math.min(840, Math.round(280 * (rect.height / Math.max(1, rect.width)))));
+      if (canvas.height !== targetH) canvas.height = targetH;
+
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const nx = Math.max(0, Math.min(1, px / Math.max(1, rect.width)));
+      const ny = Math.max(0, Math.min(1, py / Math.max(1, rect.height)));
+      const cx = nx * canvas.width;
+      const cy = ny * canvas.height;
+
+      const s = state.current;
       s.inside = true;
-      s.x = x;
-      s.y = y;
-      s.lastMove = performance.now();
-      s.lensV -= LENS_ENTER;
+      s.normX = nx;
+      s.lastX = cx;
+      s.lastY = cy;
+      spawnWave(cx, cy, nx);
       start();
     };
 
     const onMove = (e) => {
       if (reduced()) return;
       const rect = panel.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      const now = performance.now();
-      const s = sim.current;
-      if (s.inside && s.lastMove) {
-        const dt = Math.max(1, now - s.lastMove) / 1000;
-        s.speed = Math.hypot(x - s.x, y - s.y) / dt;
-      }
-      s.lastMove = now;
-      s.x = x;
-      s.y = y;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const nx = Math.max(0, Math.min(1, px / Math.max(1, rect.width)));
+      const ny = Math.max(0, Math.min(1, py / Math.max(1, rect.height)));
+      const cx = nx * canvas.width;
+      const cy = ny * canvas.height;
+
+      const s = state.current;
       s.inside = true;
+      s.normX = nx;
+
+      const dist = Math.hypot(cx - s.lastSpawnX, cy - s.lastSpawnY);
+      const now = performance.now();
+      s.speed = Math.hypot(cx - s.lastX, cy - s.lastY) / Math.max(0.001, (now - s.lastTime) / 1000);
+      s.lastX = cx;
+      s.lastY = cy;
+
+      // Create waves along the path where the cursor has moved before
+      if (dist >= SPAWN_DIST || (dist > 8 && now - s.lastSpawnTime > 75)) {
+        spawnWave(cx, cy, nx);
+      }
+
       start();
     };
 
     const onLeave = () => {
-      const s = sim.current;
-      s.inside = false;
-      s.speed = 0;
-      if (!reduced()) start();
+      state.current.inside = false;
+      state.current.speed = 0;
     };
 
     panel.addEventListener('pointerenter', onEnter);
@@ -192,7 +268,7 @@ export default function ExploreTextLens({ panelRef }) {
       panel.removeEventListener('pointerenter', onEnter);
       panel.removeEventListener('pointermove', onMove);
       panel.removeEventListener('pointerleave', onLeave);
-      if (sim.current.frame) cancelAnimationFrame(sim.current.frame);
+      if (state.current.frame) cancelAnimationFrame(state.current.frame);
       setFilter(false);
     };
   }, [panelRef]);
@@ -206,28 +282,26 @@ export default function ExploreTextLens({ panelRef }) {
       <defs>
         <filter
           id={LENS}
-          x="-10%"
-          y="-10%"
-          width="120%"
-          height="120%"
+          x="0%"
+          y="0%"
+          width="100%"
+          height="100%"
           primitiveUnits="userSpaceOnUse"
           colorInterpolationFilters="sRGB"
         >
-          <feFlood floodColor="rgb(128,128,128)" result="flat" />
           <feImage
             ref={lensImg}
-            x="-9999"
-            y="-9999"
-            width="0"
-            height="0"
+            x="0"
+            y="0"
+            width="100%"
+            height="100%"
             preserveAspectRatio="none"
             result="bump"
           />
-          <feComposite in="bump" in2="flat" operator="over" result="map" />
           <feDisplacementMap
             ref={lensDisp}
             in="SourceGraphic"
-            in2="map"
+            in2="bump"
             scale="0"
             xChannelSelector="R"
             yChannelSelector="G"
