@@ -393,6 +393,91 @@ function swell() {
   osc.stop(now + 1.9);
 }
 
+// A drop falling into water. The pitch rising as it decays is what reads as a
+// cavity closing over, which is the part the ear recognises as "water" rather
+// than as a generic blip.
+function plip(power = 1) {
+  const now = ctx.currentTime;
+  const level = 0.055 * Math.min(1, Math.max(0.2, power));
+
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(420 + Math.random() * 180, now);
+  osc.frequency.exponentialRampToValueAtTime(1500 + Math.random() * 500, now + 0.085);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(level, now + 0.006);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+
+  osc.connect(gain).connect(master);
+  osc.start(now);
+  osc.stop(now + 0.2);
+}
+
+// The body of liquid moving past, for a change of object. Filtered noise with
+// the band sweeping up and away again, so it passes rather than arrives.
+function passBy() {
+  const now = ctx.currentTime;
+
+  const band = ctx.createBiquadFilter();
+  band.type = 'bandpass';
+  band.Q.value = 1.1;
+  band.frequency.setValueAtTime(260, now);
+  band.frequency.exponentialRampToValueAtTime(1400, now + 0.34);
+  band.frequency.exponentialRampToValueAtTime(300, now + 0.8);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.linearRampToValueAtTime(0.05, now + 0.18);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.85);
+
+  const source = noiseSource();
+  source.connect(band).connect(gain).connect(master);
+  source.stop(now + 0.9);
+}
+
+// A note for an object arriving.
+//
+// Pitched from a pentatonic scale rather than a chromatic one: the reader
+// controls the order and the timing by scrolling, so any two notes have to sit
+// together whichever way they are played. A pentatonic has no semitones in it,
+// which is what makes that true.
+const SCALE = [1, 9 / 8, 5 / 4, 3 / 2, 5 / 3];
+const ROOT = 294; // D4, low enough to sit under the pad rather than over it.
+
+function chime(step = 0) {
+  const now = ctx.currentTime;
+  const octave = Math.floor(step / SCALE.length);
+  const hz = ROOT * SCALE[((step % SCALE.length) + SCALE.length) % SCALE.length] * 2 ** octave;
+
+  const soft = ctx.createBiquadFilter();
+  soft.type = 'lowpass';
+  soft.frequency.setValueAtTime(2600, now);
+  soft.frequency.exponentialRampToValueAtTime(900, now + 1.6);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.05, now + 0.05);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 2.2);
+  soft.connect(gain).connect(master);
+
+  // Fundamental plus a fifth above it, detuned a little so the pair beats
+  // slowly instead of sounding like a synthesiser holding one note.
+  for (const [ratio, level, detune] of [[1, 1, 0], [1.5, 0.42, 4], [2, 0.2, -6]]) {
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = hz * ratio;
+    osc.detune.value = detune;
+
+    const voice = ctx.createGain();
+    voice.gain.value = level;
+    osc.connect(voice).connect(soft);
+    osc.start(now);
+    osc.stop(now + 2.3);
+  }
+}
+
 // Telemetry and diagnostics counters
 const raw = { drive: 0, force: 0, flight: 0, progress: 0, rate: 0, strength: 0 };
 const fired = { hits: 0, bursts: 0 };
@@ -508,6 +593,24 @@ export const sound = {
   glassPress(power = 1) {
     if (!on) return;
     bloop(power);
+  },
+
+  /** A touch landing on the object. */
+  drop(power = 1) {
+    if (!on) return;
+    plip(power);
+  },
+
+  /** One project giving way to the next. */
+  pass() {
+    if (!on) return;
+    passBy();
+  },
+
+  /** An object settling into view, given its own note. */
+  arrive(step = 0) {
+    if (!on) return;
+    chime(step);
   },
 
   // Scroll transition sound

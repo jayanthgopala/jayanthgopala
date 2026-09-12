@@ -20,6 +20,7 @@ export function rowToProject(row) {
     liveUrl: row.live_url,
     repoUrl: row.repo_url,
     accent: row.accent,
+    shape: row.shape || '',
     featured: !!row.featured,
     published: !!row.published,
     sortOrder: row.sort_order,

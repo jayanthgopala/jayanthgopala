@@ -1,18 +1,27 @@
-// The page behind the letter, and the surface of the water it sits in.
+// The space the object sits in.
 //
-// This is what the glass and the liquid actually refract, so it cannot be an
-// approximation of the ice page — any drift in the dot grid or the wash would
-// show as a seam against the frozen world canvas underneath. It is the same
-// `iceGround` the cut shader draws, from the same ICE_PAGE constants, evaluated
-// in screen space so the 36px dot lattice lands on identical pixels.
+// The ice page is still the ground, and still drawn from the same ICE_PAGE
+// constants the cut shader uses, evaluated in screen space so the 36px dot
+// lattice lands on identical pixels and the fade between the two shows no seam.
+//
+// Everything layered on top of it is there to make the background read as a
+// material with depth rather than a flat fill: a drifting smear, and frost that
+// glazes over a patch and clears again.
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { FrontSide, ShaderMaterial, Vector2, Vector3, Vector4 } from 'three';
 import { ICE_PAGE } from '../lib/ice-page.js';
+import { GLAZE_ACTIVE } from './device.js';
 
 const rgb = (c) => new Vector3(c[0] / 255, c[1] / 255, c[2] / 255);
 const rgba = (c) => new Vector4(c[0] / 255, c[1] / 255, c[2] / 255, c[3]);
+
+/** How many patches of frost can be forming at once. */
+const GLAZE = 4;
+
+/** Seconds a patch takes to bloom and clear. */
+const GLAZE_LIFE = [7, 14];
 
 const VERT = /* glsl */ `
 void main() {
@@ -23,9 +32,11 @@ void main() {
 const FRAG = /* glsl */ `
 uniform vec2 uViewport;
 uniform float uDpr;
-uniform sampler2D uSurface;
-uniform float uRefract;
-uniform float uGlint;
+uniform float uTime;
+uniform float uSmear;
+uniform float uScroll;
+uniform vec4 uGlaze[${GLAZE}]; // xy = screen uv, z = radius, w = strength
+
 uniform vec3 uIceBase;
 uniform vec4 uIceDot;
 uniform vec2 uIceDotSize;
@@ -44,27 +55,61 @@ vec3 overGradient(vec4 a, vec4 b, float t, vec3 below) {
   return pm + below * (1.0 - mix(a.a, b.a, t));
 }
 
+float hash21(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float vnoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
+    mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x),
+    f.y
+  );
+}
+
+float fbm(vec2 p) {
+  return vnoise(p) * 0.55 + vnoise(p * 2.1) * 0.28 + vnoise(p * 4.3) * 0.17;
+}
+
+/**
+ * Drifting cloud smear.
+ *
+ * The streaks come from sampling a field compressed hard in y, so its structure
+ * runs across the frame rather than clumping; the curl comes from warping that
+ * lookup with a second, slower field. Plain layered noise gives fog — it is the
+ * warp that makes it look like something moving through air.
+ */
+float smear(vec2 p, float t) {
+  // A slow, wide warp. Large amplitude over a low frequency is what bends the
+  // bands into swells instead of shredding them into wisps.
+  vec2 warp = vec2(
+    fbm(p * 0.42 + vec2(t * 0.055, t * -0.038)),
+    fbm(p * 0.51 + vec2(t * -0.047, t * 0.031))
+  );
+
+  vec2 q = p + (warp - 0.5) * 2.6;
+
+  // Only mildly compressed, so the forms stay broad rather than becoming
+  // threads, and sampled at one scale only — a second octave here is exactly
+  // the fine detail that made it look continuous rather than made of waves.
+  vec2 stretched = vec2(q.x * 0.42, q.y * 1.35);
+
+  return fbm(stretched + vec2(t * 0.085, t * 0.012));
+}
+
 void main() {
-  // The cut shader sizes the dot lattice in CSS pixels (its viewport uniform
-  // comes from R3F's size, which is CSS). gl_FragCoord is in device pixels, so
-  // it has to be divided down or the grid comes out denser and finer here than
-  // on the page behind — at any DPR above 1 the dots all but disappear.
-  // The flip is because the cut shader measures from the top left.
+  // The cut shader sizes the dot lattice in CSS pixels; gl_FragCoord is in
+  // device pixels, so it has to be divided down or the grid comes out denser
+  // and finer here than on the page behind.
   vec2 css = gl_FragCoord.xy / max(uDpr, 0.0001);
   vec2 px = vec2(css.x, uViewport.y - css.y);
-
-  // The page is the surface of the water, not a picture behind it. Sampling the
-  // height field's slope and displacing where we read the page from is what
-  // bends the dot lattice: a wave crossing the screen drags the dots with it,
-  // the way looking through moving water does.
   vec2 screen = clamp(css / max(uViewport, vec2(1.0)), 0.0, 1.0);
-  const float STEP = 1.0 / 256.0;
-  float h = texture2D(uSurface, screen).r;
-  vec2 slope = vec2(
-    texture2D(uSurface, screen + vec2(STEP, 0.0)).r - h,
-    texture2D(uSurface, screen + vec2(0.0, STEP)).r - h
-  );
-  px += vec2(slope.x, -slope.y) * uRefract;
+  float aspect = uViewport.x / max(uViewport.y, 1.0);
 
   vec3 c = uIceBase;
 
@@ -81,9 +126,43 @@ void main() {
     ? overGradient(uWashTop, vec4(0.0), y / uWashClear, c)
     : overGradient(vec4(0.0), uWashBottom, (y - uWashClear) / (1.0 - uWashClear), c);
 
-  // Light catching the slope. Clamped hard on both sides: an unbounded additive
-  // term here is exactly what blew the page out to white before.
-  c += clamp((slope.x - slope.y) * uGlint, -0.1, 0.1);
+  // Offset by the scroll, so the background travels with the page instead of
+  // sitting still behind an object that moves. Subtracted, not added: scrolling
+  // down has to carry the background up with the content, and adding ran it the
+  // other way.
+  vec2 field = vec2(screen.x * aspect, screen.y - uScroll) * 0.95;
+  float haze = smear(field, uTime);
+
+  // Layered noise comes back bunched around the middle — a band of roughly
+  // 0.35 to 0.65 — so subtracting it straight gave an almost uniform darkening
+  // with no visible structure at all. Centred on zero and stretched, the
+  // variation becomes the thing you see, and the mean stays put so the page
+  // does not simply get darker.
+  // Centred on 0.63, not 0.5. Layered noise through a warp does not come back
+  // symmetric — this field averages 0.63 — so subtracting around the midpoint
+  // biased every pixel darker and dimmed the whole page by about twenty levels.
+  float shade = clamp((haze - 0.63) * 3.0, -1.0, 1.0);
+  c -= shade * uSmear;
+
+  // Frost glazing over a patch and clearing again. Each is a soft disc with a
+  // crystalline grain inside it — the grain is what makes it read as ice rather
+  // than as a bright spot.
+  for (int i = 0; i < ${GLAZE}; i++) {
+    vec4 frost = uGlaze[i];
+    if (frost.w <= 0.0) continue;
+
+    vec2 delta = (screen - frost.xy) * vec2(aspect, 1.0);
+    float fall = 1.0 - smoothstep(frost.z * 0.35, frost.z, length(delta));
+    if (fall <= 0.0) continue;
+
+    // No brightening at all. Adding light made these read as lamps pointed at
+    // the page — bright spots — rather than as anything forming on it. What
+    // frost actually does is scatter: it flattens whatever is behind it, so
+    // that is all this does, with the grain breaking up the edge.
+    float grain = fbm(delta * 34.0 + frost.xy * 40.0);
+    float veil = fall * frost.w * (0.6 + grain * 0.4);
+    c = mix(c, vec3(dot(c, vec3(0.3333))), veil * 0.3);
+  }
 
   gl_FragColor = vec4(toLinear(clamp(c, 0.0, 1.0)), 1.0);
 
@@ -92,11 +171,14 @@ void main() {
 }
 `;
 
-/** Distance behind the jar, far enough that refraction has something to bend. */
+/** Distance behind the object, far enough that refraction has something to bend. */
 const DEPTH = 9;
 
-export default function Backdrop({ surface }) {
-  const { size, camera, viewport } = useThree();
+/** Comfortably past the frustum at this depth, at any viewport shape. */
+const SPAN = 120;
+
+export default function Backdrop({ scroll }) {
+  const { size, viewport } = useThree();
 
   const material = useMemo(
     () =>
@@ -107,10 +189,10 @@ export default function Backdrop({ surface }) {
         uniforms: {
           uViewport: { value: new Vector2(1, 1) },
           uDpr: { value: 1 },
-          uSurface: { value: null },
-          // How far, in CSS pixels, a full-slope wave drags the page.
-          uRefract: { value: 210 },
-          uGlint: { value: 0.9 },
+          uTime: { value: 0 },
+          uSmear: { value: 0.11 },
+          uScroll: { value: 0 },
+          uGlaze: { value: Array.from({ length: GLAZE }, () => new Vector4()) },
           uIceBase: { value: rgb(ICE_PAGE.base) },
           uIceDot: { value: rgba([...ICE_PAGE.dot.color, ICE_PAGE.dot.alpha]) },
           uIceDotSize: {
@@ -126,25 +208,72 @@ export default function Backdrop({ surface }) {
     []
   );
 
-  // CSS pixels, exactly as IceCut passes them, with the device-pixel ratio kept
-  // alongside so the shader can convert gl_FragCoord into the same space.
-  useFrame(() => {
-    material.uniforms.uViewport.value.set(size.width, size.height);
-    material.uniforms.uDpr.value = viewport.dpr;
-    if (surface) material.uniforms.uSurface.value = surface.texture;
+  useEffect(() => () => material.dispose(), [material]);
+
+  // Each patch keeps its own clock, so they overlap rather than pulsing
+  // together — which is what makes the frost read as weather instead of as an
+  // animation on a loop.
+  const patches = useMemo(
+    () =>
+      Array.from({ length: GLAZE }, () => ({
+        x: Math.random(),
+        y: Math.random(),
+        radius: 0.16 + Math.random() * 0.22,
+        life: GLAZE_LIFE[0] + Math.random() * (GLAZE_LIFE[1] - GLAZE_LIFE[0]),
+        age: Math.random() * 6,
+      })),
+    []
+  );
+
+  useFrame((_, delta) => {
+    const dt = Math.min(delta, 0.05);
+    const u = material.uniforms;
+    u.uTime.value += dt;
+    u.uViewport.value.set(size.width, size.height);
+    u.uDpr.value = viewport.dpr;
+    u.uScroll.value = (scroll?.current ?? 0) * 0.5;
+
+    for (let i = 0; i < GLAZE; i += 1) {
+      // Slots past the active count stay at zero strength, which the shader
+      // skips outright — cheaper than compiling a second shader for phones.
+      if (i >= GLAZE_ACTIVE) {
+        u.uGlaze.value[i].set(0, 0, 0, 0);
+        continue;
+      }
+
+      const patch = patches[i];
+      patch.age += dt;
+
+      if (patch.age > patch.life) {
+        patch.age = 0;
+        patch.x = Math.random();
+        patch.y = Math.random();
+        patch.radius = 0.16 + Math.random() * 0.22;
+        patch.life = GLAZE_LIFE[0] + Math.random() * (GLAZE_LIFE[1] - GLAZE_LIFE[0]);
+      }
+
+      // In slowly, hold, out slowly.
+      const t = Math.min(1, Math.max(0, patch.age / patch.life));
+      u.uGlaze.value[i].set(patch.x, patch.y, patch.radius, Math.sin(Math.PI * t) ** 1.6);
+    }
   });
 
-  // Sized to cover the frustum at its depth, with margin for refraction pulling
-  // in samples from beyond the frame edge.
-  const span = useMemo(() => {
-    const distance = DEPTH + camera.position.z;
-    const height = 2 * Math.tan((camera.fov * Math.PI) / 360) * distance;
-    return { h: height * 1.6, w: height * (size.width / size.height) * 1.6 };
-  }, [camera, size.width, size.height]);
-
+  // Fixed and oversized rather than fitted to the camera.
+  //
+  // Deriving the size from the viewport meant dividing by size.height, which is
+  // zero until the first measurement lands — one NaN vertex gives the mesh a
+  // NaN bounding sphere, frustum culling drops it, and the clear colour shows
+  // through as a black screen. The pattern is drawn in screen space from
+  // gl_FragCoord, so the plane's own dimensions never mattered; it only has to
+  // be larger than the frustum, which this is at any aspect.
   return (
-    <mesh position={[0, 0, -DEPTH]} material={material} renderOrder={-1}>
-      <planeGeometry args={[span.w, span.h]} />
+    <mesh
+      position={[0, 0, -DEPTH]}
+      material={material}
+      renderOrder={-1}
+      frustumCulled={false}
+    >
+      <planeGeometry args={[SPAN, SPAN]} />
     </mesh>
   );
 }

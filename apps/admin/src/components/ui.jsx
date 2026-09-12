@@ -43,9 +43,11 @@ export function Select({ value, onChange, options = [], ...rest }) {
       {...rest}
     >
       {options.map((opt) => {
-        const { value: v, label } = typeof opt === 'string' ? { value: opt, label: opt } : opt;
+        const { value: v, label, disabled } = typeof opt === 'string'
+          ? { value: opt, label: opt }
+          : opt;
         return (
-          <option key={v} value={v}>
+          <option key={v} value={v} disabled={disabled}>
             {label}
           </option>
         );

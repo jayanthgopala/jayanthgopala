@@ -45,7 +45,7 @@ CREATE TABLE status (
   github_state        TEXT    NOT NULL DEFAULT 'operational',
   health_state        TEXT    NOT NULL DEFAULT 'operational', -- operational|degraded|down
   health_uptime       REAL    NOT NULL DEFAULT 99.9,
-  timezone            TEXT    NOT NULL DEFAULT 'Asia/Kolkata',
+  timezone            TEXT    NOT NULL DEFAULT 'Asia/Banglore',
   updated_at          TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -60,6 +60,7 @@ CREATE TABLE projects (
   live_url     TEXT    NOT NULL DEFAULT '',
   repo_url     TEXT    NOT NULL DEFAULT '',
   accent       TEXT    NOT NULL DEFAULT 'iris',    -- iris|violet|mint|amber|rose
+  shape        TEXT    NOT NULL DEFAULT '',        -- object shown on the world page
   featured     INTEGER NOT NULL DEFAULT 1,
   published    INTEGER NOT NULL DEFAULT 1,
   sort_order   INTEGER NOT NULL DEFAULT 0,

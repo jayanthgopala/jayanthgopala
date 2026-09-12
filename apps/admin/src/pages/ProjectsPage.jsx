@@ -5,20 +5,38 @@ import {
   Button, Empty, Field, Input, Select, Switch, Textarea, useToast,
 } from '../components/ui.jsx';
 import ImageUploadField from '../components/ImageUploadField.jsx';
+import {
+  SHAPES, availableShapes, labelOf, nextShape, roundProgress,
+} from '@portfolio/shapes';
 
 const ACCENTS = ['iris', 'violet', 'mint', 'amber', 'rose'];
 
 const BLANK = {
   title: '', slug: '', summary: '', description: '', screenshot: '',
-  tech: [], liveUrl: '', repoUrl: '', accent: 'iris', featured: true, published: true,
+  tech: [], liveUrl: '', repoUrl: '', accent: 'iris', shape: '', featured: true, published: true,
 };
 
 // Project editor form
-function Editor({ initial, onSaved, onCancel }) {
+function Editor({ initial, projects, onSaved, onCancel }) {
   const toast = useToast();
   const [draft, setDraft] = useState(initial);
   const [saving, setSaving] = useState(false);
   const set = (key, value) => setDraft((prev) => ({ ...prev, [key]: value }));
+
+  // Shapes still free this round, ignoring whatever this project itself holds
+  // so editing without changing the shape is never blocked by its own choice.
+  const free = availableShapes(projects, draft.id ?? null);
+  const progress = roundProgress(projects);
+
+  const options = SHAPES.map((shape) => {
+    const open = free.includes(shape.id);
+    const mine = shape.id === draft.shape;
+    return {
+      value: shape.id,
+      label: open || mine ? shape.label : `${shape.label} — taken`,
+      disabled: !open && !mine,
+    };
+  });
 
   async function save() {
     if (!draft.title?.trim()) {
@@ -37,6 +55,7 @@ function Editor({ initial, onSaved, onCancel }) {
         liveUrl: draft.liveUrl,
         repoUrl: draft.repoUrl,
         accent: draft.accent,
+        shape: draft.shape,
         featured: draft.featured,
         published: draft.published,
       };
@@ -114,6 +133,17 @@ function Editor({ initial, onSaved, onCancel }) {
           <Select value={draft.accent} onChange={(v) => set('accent', v)} options={ACCENTS} />
         </Field>
 
+        <Field
+          label="Object"
+          hint={`The shape this project becomes on the world page. Round ${progress.round}: ${free.length} of ${progress.total} still free.`}
+        >
+          <Select
+            value={draft.shape || ''}
+            onChange={(v) => set('shape', v)}
+            options={[{ value: '', label: 'Assign automatically' }, ...options]}
+          />
+        </Field>
+
         <div className="field" style={{ justifyContent: 'flex-end', gap: 'var(--s-3)' }}>
           <Switch checked={draft.featured} onChange={(v) => set('featured', v)} label="Featured" />
           <Switch checked={draft.published} onChange={(v) => set('published', v)} label="Published" />
@@ -169,7 +199,10 @@ export default function ProjectsPage() {
           <p className="dim">Drag to reorder. Order applies to the site and the README.</p>
         </div>
         {!editing && (
-          <Button variant="primary" onClick={() => setEditing({ ...BLANK })}>
+          <Button
+            variant="primary"
+            onClick={() => setEditing({ ...BLANK, shape: nextShape(projects) })}
+          >
             New project
           </Button>
         )}
@@ -178,6 +211,7 @@ export default function ProjectsPage() {
       {editing && (
         <Editor
           initial={editing}
+          projects={projects}
           onCancel={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -234,6 +268,7 @@ export default function ProjectsPage() {
                 </div>
 
                 <div className="row-actions">
+                  {project.shape && <span className="pill">{labelOf(project.shape)}</span>}
                   {!project.published && <span className="pill">Draft</span>}
                   {project.featured && <span className="pill">Featured</span>}
                   <Button size="sm" variant="ghost" onClick={() => setEditing(project)}>

@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => {
     alias: {
       // Resolve shared tokens package path directly.
       '@portfolio/tokens': fileURLToPath(new URL('../../packages/tokens', import.meta.url)),
+      '@portfolio/shapes': fileURLToPath(new URL('../../packages/shapes', import.meta.url)),
     },
   },
   server: {

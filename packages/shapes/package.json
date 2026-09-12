@@ -1,0 +1,11 @@
+{
+  "name": "@portfolio/shapes",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The catalogue of objects a project can appear as, and the rule for handing them out. Consumed by both the website, which renders them, and the admin panel, which assigns them, so the two can never disagree about which ten exist.",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": ["index.js"]
+}

@@ -148,12 +148,12 @@ app.post('/projects', async (c) => {
     const row = await c.env.DB.prepare(
       `INSERT INTO projects
         (slug, title, summary, description, screenshot, tech, live_url, repo_url,
-         accent, featured, published, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`
+         accent, shape, featured, published, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`
     )
       .bind(
         slug, str(b.title), str(b.summary), str(b.description), str(b.screenshot),
-        json(b.tech), str(b.liveUrl), str(b.repoUrl), str(b.accent) || 'iris',
+        json(b.tech), str(b.liveUrl), str(b.repoUrl), str(b.accent) || 'iris', str(b.shape),
         bool(b.featured ?? true), bool(b.published ?? true), next?.n ?? 0
       )
       .first();
@@ -176,6 +176,7 @@ app.patch('/projects/:id', async (c) => {
   const mapped = {
     ...body,
     live_url: body.liveUrl,
+    shape: body.shape,
     repo_url: body.repoUrl,
     sort_order: body.sortOrder,
   };
@@ -184,7 +185,7 @@ app.patch('/projects/:id', async (c) => {
     'projects',
     {
       slug: str, title: str, summary: str, description: str, screenshot: str,
-      tech: json, live_url: str, repo_url: str, accent: str,
+      tech: json, live_url: str, repo_url: str, accent: str, shape: str,
       featured: bool, published: bool, sort_order: int,
     },
     mapped,

@@ -32,7 +32,7 @@ export function scramble(el, text = '', { duration = 650, delay = 0 } = {}) {
     else el._scrambleStop = null;
   };
 
-  frame = requestAnimationFrame(tick);
+  tick(performance.now());
   const stop = () => {
     cancelAnimationFrame(frame);
     el._scrambleStop = null;

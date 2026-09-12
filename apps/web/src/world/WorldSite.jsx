@@ -228,7 +228,7 @@ export default function WorldSite({ site = {} }) {
           onWarm={handleWarm}
         />
       )}
-      <WorkPage projects={site.projects} content={site.content} />
+      <WorkPage projects={site.projects} content={site.content} profile={site.profile} />
       <Hud profile={site.profile} content={site.content} />
       <WorldLoader ready={ready} steps={loadSteps} name={site.profile?.name} />
     </ScrollProvider>

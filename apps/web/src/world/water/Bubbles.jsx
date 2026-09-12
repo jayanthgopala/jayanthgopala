@@ -8,10 +8,12 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Object3D } from 'three';
-import { PLANE } from './GlyphWater.jsx';
+import { BUBBLES } from './device.js';
 
-const COUNT = 64;
-const SPAN = PLANE * 1.25;
+
+const COUNT = BUBBLES;
+// Field the bubbles drift through, comfortably wider than the objects.
+const SPAN = 4.4;
 
 const scratch = new Object3D();
 

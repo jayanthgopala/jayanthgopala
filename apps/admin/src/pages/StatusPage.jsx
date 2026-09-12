@@ -165,7 +165,7 @@ export default function StatusPage() {
             />
           </Field>
 
-          <Field label="Timezone" hint="IANA name, e.g. Asia/Kolkata. Shows local time on the card.">
+          <Field label="Timezone" hint="IANA name, e.g. Asia/Banglore. Shows local time on the card.">
             <Input value={draft.timezone} onChange={(v) => set('timezone', v)} />
           </Field>
         </div>

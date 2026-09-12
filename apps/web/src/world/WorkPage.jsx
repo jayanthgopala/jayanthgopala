@@ -2,13 +2,66 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useWorldScroll } from './scroll/ScrollProvider.jsx';
 import { scramble } from '../crystals/scramble.js';
 import { copy, externalUrl, mediaUrl } from '../lib/api.js';
+import { sound } from './lib/sound.js';
 import WaterStage from './water/WaterStage.jsx';
-import { labelsFor } from './water/glyph.js';
+import { shapeFor } from './water/shapes.js';
 
 // The project index, shown as water in the shape of each project's initial.
 // Scrolling moves between projects; clicking opens the one on screen.
 
 const pad = (n) => String(n).padStart(2, '0');
+
+/**
+ * Viewports of scroll spent on the introduction before the first project.
+ *
+ * More than one because a single screen goes past in one flick — the reader
+ * gets no chance to notice there was anything to read.
+ */
+const ABOUT_SPAN = 1.6;
+
+/**
+ * How hard the page pulls toward where the scroll actually is, per second.
+ *
+ * Lenis smooths the document's scroll, but the object's position was being read
+ * straight off it, so a flick still stepped through several projects in a few
+ * frames. Following the scroll rather than tracking it exactly is what makes
+ * the objects glide, and it also means a fast flick has to travel through the
+ * introduction instead of skipping over it.
+ */
+const FOLLOW = 4.2;
+
+/**
+ * Ceiling on how fast the page may travel, in projects per second.
+ *
+ * Damping alone does not solve a hard flick: an exponential follow moves
+ * fastest exactly when the gap is largest, so a throw from the top of the page
+ * crossed the introduction in about a tenth of a second — read as skipping it.
+ * Capping the rate means a flick still arrives quickly but has to pass through
+ * everything on the way, which is the only way the introduction can be sure of
+ * being seen.
+ */
+const MAX_RATE = 1.6;
+
+/**
+ * How long the wheel must be quiet before the page settles onto a project, in
+ * milliseconds.
+ *
+ * Without this the page simply rests wherever the scroll was left — 2.37 of the
+ * way along, say — so the object sits slightly off centre and never counts as
+ * having arrived anywhere. Settling is what gives the labels a moment to be
+ * drawn for.
+ */
+const SETTLE_AFTER = 150;
+
+/**
+ * How long the page is held still once the introduction appears, so it can
+ * finish arriving before it can be scrolled away from.
+ *
+ * Matches the last line's delay plus its duration. It is deliberately the only
+ * moment on this page that takes the scroll away from the reader, and it is
+ * over before a second has passed.
+ */
+const ABOUT_HOLD = 860;
 
 const smoothstep = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -24,6 +77,16 @@ const FORCE_DEMO =
   DEV &&
   typeof window !== 'undefined' &&
   new URLSearchParams(window.location.search).has('demo');
+
+// Stands in when the API has nothing to give, so the opening is not an empty
+// frame with a heading on it while the work is being looked at locally.
+const DEMO_PROFILE = {
+  name: 'Jayanth Gopala V',
+  role: 'Software Engineer',
+  location: 'Asia / banglore',
+  description:
+    'I build systems that hold up when they are leaned on — schedulers that deliver exactly once, content that compiles to immutable bundles, search that answers while the slowest shard is still thinking. Mostly backend, mostly distributed, and increasingly the rendering that puts a face on it.',
+};
 
 const DEMO_PROJECTS = [
   {
@@ -85,25 +148,122 @@ function useReducedMotion() {
 function Decoded({ as: Tag = 'span', text, className, arrival, delay = 0 }) {
   const ref = useRef(null);
 
+  // One effect, and a layout one.
+  //
+  // Painting the finished text here and starting the scramble from a passive
+  // effect meant the browser drew the real name first and only then began
+  // garbling it — the effect played backwards. Running before paint means the
+  // glyphs are what lands, and the name is what they resolve into.
   useLayoutEffect(() => {
-    if (ref.current) ref.current.textContent = text;
-  }, [text]);
-
-  useEffect(() => {
-    if (arrival === 0) return undefined;
-    return scramble(ref.current, text, { delay });
+    const el = ref.current;
+    if (!el) return undefined;
+    if (!arrival) {
+      el.textContent = text;
+      return undefined;
+    }
+    return scramble(el, text, { delay });
   }, [arrival, text, delay]);
 
   return <Tag ref={ref} className={className} aria-label={text} />;
 }
 
+const stamp = (value) => {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return null;
+  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()}`;
+};
+
+/**
+ * The instrument labels around the object.
+ *
+ * Everything shown is the project's own data rather than invented telemetry —
+ * the style is borrowed, the readings are not, which keeps it from reading as
+ * decoration pretending to be information.
+ */
+function Readout({ project, number, total, hint, boxRef }) {
+  const date = stamp(project.updatedAt || project.createdAt);
+  const stack = project.tech?.length || 0;
+
+  // Keyed on the index by its caller, so this remounts per project and the
+  // decode runs once, on arrival.
+  const arrival = 1;
+
+  return (
+    <div className="w-readout" ref={boxRef} aria-hidden="true">
+      {/* pathLength normalises every path to 1, so one dash rule draws them all
+          at the same rate regardless of how long each actually is. */}
+      <svg className="w-readout-lines" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <path pathLength="1" d="M 46 34 L 38 21 L 26 21" />
+        <path pathLength="1" d="M 62 39 L 74 39" />
+        <path pathLength="1" d="M 60 62 L 72 70" />
+      </svg>
+
+      <p className="w-readout-code">
+        <Decoded
+          text={`PORTFOLIO_CO_${pad(number)}`}
+          arrival={arrival}
+          delay={560}
+        />
+        <Decoded
+          as="span"
+          className="w-readout-name"
+          text={(project.title || 'Untitled').toUpperCase()}
+          arrival={arrival}
+          delay={660}
+        />
+      </p>
+
+      <p className="w-readout-stat">
+        <span>STACK</span> {pad(stack)}
+        <br />
+        <span>IDX</span> {pad(number)} / {pad(total)}
+      </p>
+
+      <p className="w-readout-cta">
+        {date && <span className="w-readout-date">D {date}</span>}
+        <span className="w-readout-go">{hint}</span>
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The written opening. Text only, deliberately — it is the one place on this
+ * page that is read rather than looked at, and giving it an object of its own
+ * would make it compete with the work it introduces.
+ */
+function About({ profile, content, boxRef, shown }) {
+  const name = profile.name || '';
+  const role = profile.role || '';
+  const body = profile.description || profile.headline || '';
+
+  return (
+    <section
+      className={`w-about${shown ? ' is-in' : ''}`}
+      ref={boxRef}
+      aria-label="About"
+    >
+      <p className="w-about-rule">////// {copy(content, 'world.aboutEyebrow', 'About')}</p>
+      {name && <h2 className="w-about-name">{name}</h2>}
+      {role && <p className="w-about-role">{role}</p>}
+      {body && <p className="w-about-body">{body}</p>}
+
+      <p className="w-about-meta">
+        {profile.location && <span>{profile.location}</span>}
+        <span>{copy(content, 'world.aboutNext', 'Scroll for selected work')}</span>
+      </p>
+    </section>
+  );
+}
+
 // Everything a project has to say, revealed only on request.
 function Detail({ project, number, onClose }) {
-  const [arrival, setArrival] = useState(0);
+  // Mounted fresh each time a project is opened, so the decode runs once from
+  // the first paint rather than being triggered after one.
+  const arrival = 1;
   const closeRef = useRef(null);
 
   useEffect(() => {
-    setArrival((n) => n + 1);
     closeRef.current?.focus();
   }, [project]);
 
@@ -189,17 +349,30 @@ function Detail({ project, number, onClose }) {
   );
 }
 
-export default function WorkPage({ projects = [], content = {} }) {
-  const { cut, page, setPageHeight } = useWorldScroll();
+export default function WorkPage({ projects = [], content = {}, profile = {} }) {
+  const { cut, page, setPageHeight, lenis } = useWorldScroll();
   const layerRef = useRef(null);
   const [live, setLive] = useState(false);
   const [mounted, setMounted] = useState(false);
+  // The introduction waits for the cut to finish rather than riding in on it.
+  // Mounting it earlier started its arrival while the page was still opening,
+  // so on a slow cut the text was already there before the page was.
+  const [opened, setOpened] = useState(false);
   const [index, setIndex] = useState(0);
+  // Which project has actually come to rest under the camera, or null while one
+  // is still travelling. The labels exist only for the former, so they are
+  // drawn on arrival rather than dragged along for the ride.
+  const [arrived, setArrived] = useState(null);
   const [open, setOpen] = useState(null);
   // Continuous scroll position through the list. The integer part selects which
-  // two letters exist; the fraction drives the slide, read every frame by the
+  // two objects exist; the fraction drives the slide, read every frame by the
   // stage so the motion tracks the wheel instead of replaying a fixed tween.
   const position = useRef(0);
+  // Where the object sits on screen, in 0..1, written by the stage each frame
+  // and read back here to place the labels on it.
+  const anchor = useRef({ x: 0.5, y: 1.6, whole: false });
+  const readoutRef = useRef(null);
+  const aboutRef = useRef(null);
   const reduced = useReducedMotion();
 
   const list = useMemo(() => {
@@ -211,13 +384,15 @@ export default function WorkPage({ projects = [], content = {} }) {
     return real;
   }, [projects]);
 
-  // Shortest prefix that tells each project apart from the others.
-  const letters = useMemo(() => labelsFor(list), [list]);
+  // Each project's object, falling back by position so one that has not been
+  // given a shape in the admin still renders as something.
+  const shapes = useMemo(() => list.map((p, i) => shapeFor(p, i)), [list]);
 
-  // One viewport of scroll per project, so the letters change at a readable
+  // One viewport of scroll per project, so the objects change at a readable
   // rate rather than flicking past.
   useEffect(() => {
-    const apply = () => setPageHeight(Math.max(1, list.length) * window.innerHeight);
+    const apply = () =>
+      setPageHeight((Math.max(1, list.length) + ABOUT_SPAN) * window.innerHeight);
     apply();
     window.addEventListener('resize', apply);
     return () => window.removeEventListener('resize', apply);
@@ -229,9 +404,18 @@ export default function WorkPage({ projects = [], content = {} }) {
     let frame = 0;
     let isLive = false;
     let hasStage = false;
+    let hasOpened = false;
     let shown = 0;
+    let settledAt = null;
+    let restingAt = null;
+    let stillSince = 0;
+    let eased = null; // Damped follower of the raw scroll position.
+    let last = performance.now();
 
-    const tick = () => {
+    const tick = (now) => {
+      const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000));
+      last = now;
+
       const c = cut.current;
       const layer = layerRef.current;
 
@@ -245,20 +429,99 @@ export default function WorkPage({ projects = [], content = {} }) {
         setLive(nextLive);
       }
 
-      const nextStage = c >= 0.15;
+      const nextStage = c >= 0.04;
       if (nextStage !== hasStage) {
         hasStage = nextStage;
         setMounted(nextStage);
       }
 
+      // Waits for the cut to be genuinely finished, not nearly: stopping the
+      // scroll at 0.92 would interrupt the settle that carries it the rest of
+      // the way.
+      const nextOpened = c >= 0.995;
+      if (nextOpened !== hasOpened) {
+        hasOpened = nextOpened;
+        setOpened(nextOpened);
+      }
+
       const step = Math.max(1, window.innerHeight);
-      const raw = Math.min(
-        Math.max(list.length - 1, 0),
-        Math.max(0, page.current / step)
-      );
+      const lastIndex = Math.max(list.length - 1, 0);
+
+      // Pinned to the introduction until the cut has actually finished.
+      //
+      // The cut is rate limited to about 1.8 seconds however fast the wheel is
+      // turned, but the page offset answers the scroll immediately. Anyone
+      // scrolling briskly therefore carried the page past the introduction
+      // while the transition was still catching up, and it was already behind
+      // them by the time it was allowed to appear.
+      const scrolled = nextOpened
+        ? Math.min(lastIndex, page.current / step - ABOUT_SPAN)
+        : -ABOUT_SPAN;
+
+      // Has the wheel actually stopped?
+      if (restingAt === null || Math.abs(scrolled - restingAt) > 0.002) {
+        restingAt = scrolled;
+        stillSince = now;
+      }
+
+      // Once it has, aim at the nearest whole project rather than at the exact
+      // place the scroll was abandoned. The introduction is left alone: it is
+      // not a project and should not be snapped to one.
+      const settle = now - stillSince > SETTLE_AFTER && scrolled > -0.4;
+      const target = settle
+        ? Math.min(lastIndex, Math.max(0, Math.round(scrolled)))
+        : scrolled;
+
+      // Exponential follow, framed in dt so the glide is the same length at any
+      // refresh rate. It always starts at the introduction rather than at
+      // wherever the scroll has already reached: the first objects take a moment
+      // to build, and anything scrolled during that wait would otherwise land
+      // the reader straight on the last project.
+      if (eased === null) eased = -ABOUT_SPAN;
+      const pull = (target - eased) * (1 - Math.exp(-FOLLOW * dt));
+      const limit = MAX_RATE * dt;
+      eased += Math.max(-limit, Math.min(limit, pull));
+      const raw = eased;
       position.current = raw;
 
-      const whole = Math.floor(raw);
+      // The introduction reads off the damped position too, so it cannot be
+      // skipped by a flick the objects are still gliding through.
+      const about = aboutRef.current;
+      if (about) {
+        const gone = smoothstep(-ABOUT_SPAN + 0.1, -0.15, raw);
+        const arriving = smoothstep(0.9, 0.99, c);
+        about.style.opacity = ((1 - gone) * arriving).toFixed(3);
+        // Keeps the centring the stylesheet set. Writing a bare translate here
+        // replaced it, which is what pushed the introduction off its middle.
+        about.style.transform =
+          `translate(-50%, -50%) translateY(${(-gone * 12).toFixed(2)}vh)`;
+        about.style.visibility = gone >= 1 || arriving <= 0 ? 'hidden' : 'visible';
+      }
+
+      // Labels ride the object rather than the viewport.
+      const labels = readoutRef.current;
+      if (labels) {
+        const { x, y } = anchor.current;
+        labels.style.setProperty('--ax', `${(x * 100).toFixed(2)}%`);
+        labels.style.setProperty('--ay', `${(y * 100).toFixed(2)}%`);
+      }
+
+      // Arrival is "the whole object is on screen", which the stage works out
+      // from the camera. Waiting for the scroll to come to rest instead meant
+      // the labels held off until everything had stopped moving, long after
+      // there was plainly an object there to name.
+      const nearest = Math.round(raw);
+      const showing = raw > -0.25 && anchor.current.whole;
+      const nextSettled = showing ? Math.min(Math.max(nearest, 0), lastIndex) : null;
+      if (nextSettled !== settledAt) {
+        // Only on the way in. Leaving one behind is the same transition from
+        // the other side, and sounding it again would double every move.
+        if (nextSettled !== null) sound.arrive(nextSettled);
+        settledAt = nextSettled;
+        setArrived(nextSettled);
+      }
+
+      const whole = Math.max(0, Math.floor(raw));
       if (whole !== shown) {
         shown = whole;
         setIndex(whole);
@@ -270,6 +533,25 @@ export default function WorkPage({ projects = [], content = {} }) {
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [cut, page, reduced, list.length]);
+
+  // The introduction takes most of a second to arrive, which was long enough to
+  // scroll straight past it. The page is held for exactly that long, once, the
+  // first time it is shown.
+  const held = useRef(false);
+  useEffect(() => {
+    if (!opened || held.current || reduced) return undefined;
+    held.current = true;
+
+    const instance = lenis?.current;
+    if (!instance) return undefined;
+
+    instance.stop();
+    const id = setTimeout(() => instance.start(), ABOUT_HOLD);
+    return () => {
+      clearTimeout(id);
+      instance.start();
+    };
+  }, [opened, reduced, lenis]);
 
   const onOpen = useCallback(() => {
     // Mid-slide the letter on screen is the nearer of the two, not the one the
@@ -291,19 +573,41 @@ export default function WorkPage({ projects = [], content = {} }) {
         <WaterStage
           active={live && !open}
           calm={reduced}
-          letters={letters}
+          shapes={shapes}
           index={index}
           position={position}
+          anchor={anchor}
           onOpen={onOpen}
+        />
+      )}
+
+      {mounted && (
+        <About
+          profile={DEV && !profile.name ? DEMO_PROFILE : profile}
+          content={content}
+          boxRef={aboutRef}
+          shown={opened}
         />
       )}
 
       {list.length === 0 && <p className="w-work-empty">No projects published yet.</p>}
 
       {list.length > 0 && !open && (
-        <p className="w-water-hint" aria-hidden="true">
-          {copy(content, 'world.jarHint', 'Scroll to browse · Click to open')}
-        </p>
+        <>
+          {arrived !== null && list[arrived] && (
+            <Readout
+              boxRef={readoutRef}
+              key={arrived}
+              project={list[arrived]}
+              number={arrived + 1}
+              total={list.length}
+              hint={copy(content, 'world.jarGo', 'Click to explore')}
+            />
+          )}
+          <p className="w-water-hint" aria-hidden="true">
+            {copy(content, 'world.jarHint', 'Scroll to browse · Drag to turn')}
+          </p>
+        </>
       )}
 
       {open && (

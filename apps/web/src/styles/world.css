@@ -647,3 +647,248 @@
   .w-water-ring { transition: none; }
   .w-detail { animation: none; }
 }
+
+/* ── Instrument labels ─────────────────────────────────────────────────────
+   Borrowed from survey drawings: a short leader line from a label to the thing
+   it names. Held in one square box centred on the object so the lines and the
+   text stay in register at any viewport shape. */
+
+.w-readout {
+  position: absolute;
+  /* Centred on the object, which the stage reports each frame, not on the
+     viewport — the labels name the thing, so they travel with it. */
+  top: var(--ay, 50%);
+  left: var(--ax, 50%);
+  width: min(72vh, 92vw);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  font-size: clamp(0.56rem, 0.72vw, 0.7rem);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(31, 38, 43, 0.78);
+  animation: w-readout-in 420ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes w-readout-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.w-readout-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.w-readout-lines path {
+  fill: none;
+  stroke: rgba(31, 38, 43, 0.42);
+  stroke-width: 0.25;
+  vector-effect: non-scaling-stroke;
+  /* Normalised by pathLength=1, so every leader draws at the same rate. */
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 1;
+  animation: w-leader-draw 620ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.w-readout-lines path:nth-child(2) { animation-delay: 90ms; }
+.w-readout-lines path:nth-child(3) { animation-delay: 170ms; }
+
+@keyframes w-leader-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+.w-readout p { margin: 0; }
+
+.w-readout-code {
+  position: absolute;
+  left: 2%;
+  top: 16%;
+  max-width: 24%;
+  line-height: 1.5;
+}
+
+.w-readout-name {
+  display: block;
+  font-weight: 600;
+  color: var(--w-ink);
+  overflow-wrap: anywhere;
+}
+
+.w-readout-stat {
+  position: absolute;
+  left: 75%;
+  top: 35%;
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+.w-readout-stat span { color: rgba(63, 72, 85, 0.6); }
+
+.w-readout-cta {
+  position: absolute;
+  left: 73%;
+  top: 66%;
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+.w-readout-date { display: block; color: rgba(63, 72, 85, 0.6); }
+
+.w-readout-go {
+  display: block;
+  padding-bottom: 0.4em;
+  border-bottom: 1px solid rgba(31, 38, 43, 0.42);
+  font-weight: 600;
+  color: var(--w-ink);
+}
+
+/* Narrow screens have no room beside the object; the labels move out of its way
+   rather than sitting on top of it. */
+@media (max-width: 700px) {
+  .w-readout { width: 94vw; }
+  .w-readout-lines { display: none; }
+  .w-readout-code { left: 0; top: 2%; max-width: 60%; }
+  .w-readout-stat { left: auto; right: 0; top: 2%; text-align: right; }
+  .w-readout-cta { left: 0; top: auto; bottom: 8%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .w-readout { animation: none; }
+}
+
+/* ── Written opening ───────────────────────────────────────────────────────
+   The one part of this page that is read rather than looked at. Text only, and
+   deliberately so: giving it an object of its own would set it competing with
+   the work it introduces. */
+
+.w-about {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(38rem, 88vw);
+  box-sizing: border-box;
+  transform: translate(-50%, -50%);
+  text-align: left;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.w-about-rule {
+  margin: 0 0 1.6em;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: rgba(63, 72, 85, 0.6);
+}
+
+.w-about-name {
+  margin: 0;
+  font: 700 clamp(1.4rem, 3.4vw, 2.4rem) / 1.15 var(--w-mono);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--w-ink);
+}
+
+.w-about-role {
+  margin: 0.6em 0 0;
+  font-size: var(--w-meta);
+  letter-spacing: var(--w-track);
+  text-transform: uppercase;
+  color: rgba(31, 38, 43, 0.62);
+}
+
+.w-about-body {
+  margin: 2em 0 0;
+  max-width: 34em;
+  font-size: 0.86rem;
+  line-height: 1.75;
+  color: rgba(31, 38, 43, 0.84);
+}
+
+.w-about-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6em 2.2em;
+  margin: 2.6em 0 0;
+  padding-top: 1.4em;
+  border-top: 1px solid rgba(63, 72, 85, 0.2);
+  font-size: var(--w-meta);
+  letter-spacing: var(--w-track);
+  text-transform: uppercase;
+  color: rgba(63, 72, 85, 0.62);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .w-about { transition: none; }
+}
+
+/* The introduction arrives after the background has established itself, rather
+   than landing with it — the smear needs a moment to read as a place before
+   there is anything to read in it. */
+.w-about > * { opacity: 0; }
+
+/* Runs when the page has finished opening, not when the section is created —
+   mounting it early is what lets it be there before it is needed. */
+.w-about.is-in > * {
+  animation: w-about-line 520ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.w-about.is-in .w-about-rule  { animation-delay: 40ms; }
+.w-about.is-in .w-about-name  { animation-delay: 110ms; }
+.w-about.is-in .w-about-role  { animation-delay: 170ms; }
+.w-about.is-in .w-about-body  { animation-delay: 230ms; }
+.w-about.is-in .w-about-meta  { animation-delay: 300ms; }
+
+@keyframes w-about-line {
+  from { opacity: 0; transform: translateY(0.9em); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .w-about > * { animation: none; opacity: 1; }
+}
+
+/* Each label waits for its own leader to reach it. The line is drawn from the
+   object outward, so the text arriving first would be the effect backwards. */
+.w-readout-code,
+.w-readout-stat,
+.w-readout-cta {
+  animation: w-readout-label 420ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.w-readout-code { animation-delay: 540ms; }
+.w-readout-stat { animation-delay: 640ms; }
+.w-readout-cta  { animation-delay: 740ms; }
+
+@keyframes w-readout-label {
+  from { opacity: 0; transform: translateY(0.5em); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* The underline beneath the call to action draws with it rather than being
+   there waiting for it. */
+.w-readout-go {
+  background-image: linear-gradient(rgba(31, 38, 43, 0.42), rgba(31, 38, 43, 0.42));
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 0% 1px;
+  border-bottom: 0;
+  animation: w-readout-rule 460ms cubic-bezier(0.22, 0.61, 0.36, 1) 900ms both;
+}
+
+@keyframes w-readout-rule {
+  to { background-size: 100% 1px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .w-readout-code,
+  .w-readout-stat,
+  .w-readout-cta,
+  .w-readout-go,
+  .w-readout-lines path { animation: none; }
+  .w-readout-lines path { stroke-dashoffset: 0; }
+  .w-readout-go { background-size: 100% 1px; }
+}
