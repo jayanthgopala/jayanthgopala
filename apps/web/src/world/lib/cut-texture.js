@@ -120,3 +120,15 @@ export function createCutTexture(seed = 4051) {
   texture.needsUpdate = true;
   return texture;
 }
+
+let shared = null;
+
+/**
+ * One mask for the session, built on first use and never disposed. Building it
+ * is a few tens of milliseconds of CPU; sharing it lets the ring cut have it
+ * made during idle time instead of in the middle of a scroll.
+ */
+export function sharedCutTexture() {
+  if (!shared) shared = createCutTexture();
+  return shared;
+}

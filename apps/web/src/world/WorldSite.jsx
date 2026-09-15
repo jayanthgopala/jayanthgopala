@@ -4,6 +4,7 @@ import { windState } from './lib/wind.js';
 import { sound } from './lib/sound.js';
 import Stage from './Stage.jsx';
 import WorkPage from './WorkPage.jsx';
+import RingsSection from './rings/RingsSection.jsx';
 import WorldLoader from './WorldLoader.jsx';
 import MinimalLink from './MinimalLink.jsx';
 import { loadBakedWorld } from './lib/baked.js';
@@ -37,7 +38,7 @@ function useActiveAct() {
 // Ambient sound toggle.
 export function SoundToggle({ className = '' } = {}) {
   const [on, setOn] = useState(() => sound.enabled);
-  const { flight, cut } = useWorldScroll();
+  const { flight, cut, ringCut } = useWorldScroll();
 
   // Buffer the pad track up front so the first toggle starts immediately.
   useEffect(() => {
@@ -65,20 +66,25 @@ export function SoundToggle({ className = '' } = {}) {
     let frame = 0;
     let last = performance.now();
     let previous = cut.current;
+    let previousRing = ringCut.current;
 
     const tick = (now) => {
       const dt = Math.max(0.001, (now - last) / 1000);
       last = now;
       const progress = cut.current;
+      const ring = ringCut.current;
       sound.air(windState.cursorForce, flight.current);
-      sound.cut(progress, (progress - previous) / dt);
+      // One whoosh voice serves both cuts; whichever is under way drives it.
+      if (progress < 1 || ring <= 0) sound.cut(progress, (progress - previous) / dt);
+      else sound.ringCut(ring, (ring - previousRing) / dt);
       previous = progress;
+      previousRing = ring;
       frame = requestAnimationFrame(tick);
     };
 
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [on, flight, cut]);
+  }, [on, flight, cut, ringCut]);
 
   const toggle = () => {
     if (sound.enabled) sound.stop();
@@ -118,7 +124,8 @@ function Hud({ profile = {}, content = {} }) {
 
       <footer className="w-hud-bottom">
         <SoundToggle />
-        <span className={`w-hint${act.id === 'work' ? ' is-away' : ''}`}>Scroll to travel</span>      </footer>
+        <span className={`w-hint${act.id === 'work' ? ' is-away' : ''}`}>Scroll to travel</span>
+      </footer>
     </div>
   );
 }
@@ -174,11 +181,18 @@ export default function WorldSite({ site = {} }) {
   const [framesReady, setFramesReady] = useState(false);
   const [iglooReady, setIglooReady] = useState(false);
   const [warmed, setWarmed] = useState(false);
+  // The ring scene is compiled and drawn once behind the loading screen, so
+  // nothing about it has to load while the reader is scrolling.
+  const [ringsReady, setRingsReady] = useState(false);
+  // Likewise the project water: every object prepared before the site opens.
+  const [projectsReady, setProjectsReady] = useState(false);
 
-  const ready = framesReady && iglooReady && warmed;
+  const ready = framesReady && iglooReady && warmed && projectsReady && ringsReady;
 
   const handleIglooReady = useCallback(() => setIglooReady(true), []);
   const handleWarm = useCallback(() => setWarmed(true), []);
+  const handleRingsReady = useCallback(() => setRingsReady(true), []);
+  const handleProjectsReady = useCallback(() => setProjectsReady(true), []);
 
   // Preload baked height and texture assets before mounting stage.
   useEffect(() => {
@@ -217,6 +231,8 @@ export default function WorldSite({ site = {} }) {
     { label: 'Building the world', done: framesReady },
     { label: 'Bringing in the igloo', done: iglooReady },
     { label: 'Compiling shaders', done: warmed },
+    { label: 'Preparing the projects', done: projectsReady },
+    { label: 'Preparing the rings', done: ringsReady },
   ];
 
   return (
@@ -229,7 +245,13 @@ export default function WorldSite({ site = {} }) {
           onWarm={handleWarm}
         />
       )}
-      <WorkPage projects={site.projects} content={site.content} profile={site.profile} />
+      <WorkPage
+        projects={site.projects}
+        content={site.content}
+        profile={site.profile}
+        onReady={handleProjectsReady}
+      />
+      <RingsSection socials={site.socials} content={site.content} onReady={handleRingsReady} />
       <Hud profile={site.profile} content={site.content} />
       <WorldLoader ready={ready} steps={loadSteps} name={site.profile?.name} />
     </ScrollProvider>

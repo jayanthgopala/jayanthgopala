@@ -368,4 +368,14 @@ export function shapeGeometry(id) {
   return dense;
 }
 
+/**
+ * Whether a shape is an open surface rather than a closed volume. Open ones
+ * must render both faces or they show holes from behind; closed ones only
+ * need their front, which halves the transmission work.
+ */
+export function isOpenShape(id) {
+  const key = BUILDERS[id] ? id : SHAPE_IDS[0];
+  return key === 'flower' || key === 'dna';
+}
+
 export { SHAPES, SHAPE_IDS, shapeFor } from '@portfolio/shapes';

@@ -7,14 +7,25 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Color, DoubleSide, MeshPhysicalMaterial } from 'three';
-import { shapeGeometry } from './shapes.js';
+import { Color, DoubleSide, FrontSide, MeshPhysicalMaterial } from 'three';
+import { isOpenShape, shapeGeometry } from './shapes.js';
+import { sound } from '../lib/sound.js';
 
 /** Radians per second an object turns on its own. */
 const IDLE_SPIN = 0.16;
 
 /** How quickly a flick bleeds off after release, per second. */
 const SPIN_DECAY = 0.055;
+
+/**
+ * Frames an object is drawn even while out of view.
+ *
+ * During the About section the objects sit below the frame, so frustum culling
+ * skipped them and their buffers, shader and transmission pass were only set up
+ * on the frame the first project slid in — which is where it stalled. Drawing
+ * them for a moment first gets all of that done while the reader is on About.
+ */
+const WARM_FRAMES = 40;
 
 const FIELD = /* glsl */ `
 attribute vec3 aSmooth;
@@ -63,8 +74,8 @@ function makeMaterial(uniforms) {
     // specular, which is why the page has tone in it.
     attenuationColor: new Color('#f4fafd'),
     attenuationDistance: 12,
-    iridescence: 0.05,
-    iridescenceIOR: 1.25,
+    // No iridescence: at 0.05 it was invisible, but it still costs a thin-film
+    // evaluation on every pixel of the object.
     specularIntensity: 1,
     clearcoat: 0.45,
     clearcoatRoughness: 0.06,
@@ -124,9 +135,32 @@ export default function ObjectWater({ sim, shape, focus, spin, calm = false }) {
   });
 
   const geometry = useMemo(() => shapeGeometry(shape), [shape]);
+
+  // Warm again whenever the shape changes, so the next object's buffers are on
+  // the GPU before it scrolls into view.
+  const warm = useRef(0);
+  useEffect(() => {
+    warm.current = 0;
+  }, [geometry]);
   const material = useMemo(() => makeMaterial(uniforms.current), []);
 
-  useEffect(() => () => material.dispose(), [material]);
+  // Double-sided transmission renders the object twice; only open surfaces
+  // need it. Closed shapes draw their front faces and let thickness stand in
+  // for the far side.
+  useEffect(() => {
+    const side = isOpenShape(shape) ? DoubleSide : FrontSide;
+    if (material.side !== side) {
+      material.side = side;
+      material.needsUpdate = true;
+    }
+  }, [material, shape]);
+
+  useEffect(() => {
+    return () => {
+      material.dispose();
+      sound.waterPhysics({ focus: 0 });
+    };
+  }, [material]);
 
   useEffect(() => {
     uniforms.current.uIdleAmp.value = calm ? 0.02 : 0.06;
@@ -135,6 +169,11 @@ export default function ObjectWater({ sim, shape, focus, spin, calm = false }) {
   }, [calm]);
 
   useFrame((_, dt) => {
+    if (mesh.current && warm.current < WARM_FRAMES) {
+      warm.current += 1;
+      mesh.current.frustumCulled = warm.current >= WARM_FRAMES;
+    }
+
     const step = Math.min(dt, 0.05);
     const u = uniforms.current;
     u.uTime.value += step;
@@ -173,7 +212,18 @@ export default function ObjectWater({ sim, shape, focus, spin, calm = false }) {
       mesh.current.rotation.x = own.x;
       mesh.current.rotation.y = own.y;
     }
+
+    const foc = focus?.current ?? 1;
+    if (foc > 0.4) {
+      const angSpeed = Math.hypot(own.vx, own.vy);
+      sound.waterPhysics({
+        angSpeed,
+        rotX: own.x,
+        rotY: own.y,
+        focus: foc,
+      });
+    }
   });
 
-  return <mesh ref={mesh} geometry={geometry} material={material} />;
+  return <mesh ref={mesh} geometry={geometry} material={material} frustumCulled={false} />;
 }

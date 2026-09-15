@@ -8,16 +8,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Environment, Lightformer } from '@react-three/drei';
+import { Environment, Lightformer, PerformanceMonitor } from '@react-three/drei';
 import { Color, NoToneMapping, Vector2, Vector3 } from 'three';
 import { ICE_PAGE } from '../lib/ice-page.js';
 import Backdrop from './Backdrop.jsx';
 import ObjectWater from './ObjectWater.jsx';
 import { shapeGeometry } from './shapes.js';
-import Bubbles from './Bubbles.jsx';
 import { RippleSim } from './ripples.js';
 import { sound } from '../lib/sound.js';
-import { ENV_SIZE, MAX_DPR, SIM_SIZE } from './device.js';
+import { ENV_SIZE, MIN_DPR, SIM_SIZE, START_DPR, TRANSMISSION_SCALE } from './device.js';
 
 
 // Anything the backdrop fails to cover should still be ice, never the black
@@ -57,8 +56,69 @@ function planeUv(origin, direction, offsetY, out) {
   return out.x >= 0 && out.x <= 1 && out.y >= 0 && out.y <= 1;
 }
 
-function Scene({ pointer, calm, shapes, index, position, spin, anchor, overObject }) {
+/**
+ * Frames drawn after the shaders have linked before the stage reports itself
+ * prepared. A little past ObjectWater's own warm-up, so every object has been
+ * drawn uncull'd and its buffers are on the GPU by then.
+ */
+const WARM_REPORT_FRAMES = 45;
+
+const NO_FOCUS = { current: 0 };
+
+/**
+ * One of every shape the projects use, drawn out of frame while the site is
+ * still on its loading screen. Their geometry is built, uploaded and drawn once
+ * here, so no project's object has anything left to load when it scrolls in.
+ */
+function WarmShapes({ sim, shapes }) {
+  const ids = useMemo(() => [...new Set(shapes)], [shapes]);
+  return (
+    <group position={[0, 40, 0]}>
+      {ids.map((id) => (
+        <ObjectWater key={id} sim={sim} shape={id} focus={NO_FOCUS} calm />
+      ))}
+    </group>
+  );
+}
+
+function Scene({ pointer, calm, shapes, index, position, spin, anchor, overObject, warming, onWarm }) {
   const { gl, camera, size } = useThree();
+  const scene = useThree((s) => s.scene);
+  const warmWork = useRef({ compiled: false, frames: 0, reported: false });
+
+  // Compile every shader in parallel where the browser supports it, then let a
+  // few frames draw before reporting ready — drawing before the programs link
+  // would force a synchronous link and stall the loading screen.
+  useEffect(() => {
+    let alive = true;
+    const id = requestAnimationFrame(() => {
+      let pending = null;
+      try {
+        pending = gl.compileAsync ? gl.compileAsync(scene, camera) : gl.compile(scene, camera);
+      } catch {
+        pending = null;
+      }
+      Promise.resolve(pending)
+        .catch(() => {})
+        .then(() => {
+          if (alive) warmWork.current.compiled = true;
+        });
+    });
+    return () => {
+      alive = false;
+      cancelAnimationFrame(id);
+    };
+  }, [gl, scene, camera]);
+
+  useFrame(() => {
+    const w = warmWork.current;
+    if (w.reported || !w.compiled) return;
+    w.frames += 1;
+    if (w.frames >= WARM_REPORT_FRAMES) {
+      w.reported = true;
+      onWarm?.();
+    }
+  });
 
   const sim = useMemo(() => {
     const s = new RippleSim(SIM_SIZE);
@@ -202,6 +262,7 @@ function Scene({ pointer, calm, shapes, index, position, spin, anchor, overObjec
           const speed = Math.hypot(r.uv.x - r.last.x, r.uv.y - r.last.y);
           if (speed > 0.0006) {
             sim.impulse(r.uv.x, r.uv.y, Math.min(0.32, speed * 8), 0.05);
+            sound.waterRipple(speed, r.uv.x, r.uv.y);
           }
         }
 
@@ -293,14 +354,21 @@ function Scene({ pointer, calm, shapes, index, position, spin, anchor, overObjec
           <ObjectWater sim={sim} shape={next} focus={nextFocus} spin={spin} calm={calm} />
         </group>
       )}
-      <Bubbles calm={calm} />
+
+      {warming && <WarmShapes sim={sim} shapes={shapes} />}
     </>
   );
 }
 
 export default function WaterStage({
-  active, calm = false, shapes, index, position, anchor, onOpen,
+  active, calm = false, shapes, index, position, anchor, onOpen, warming = false, onWarm,
 }) {
+  // Resolution follows the frame rate: dropped a step when frames run long,
+  // raised back when there is room, so a slow machine stays fluid. Not while
+  // preparing, whose frames are heavy on purpose and say nothing about later.
+  const [dpr, setDpr] = useState(START_DPR);
+  const warmingRef = useRef(warming);
+  warmingRef.current = warming;
   // Written by the scene each frame; read by the pointer handlers, which run
   // outside the canvas and have no other way to know what is under the cursor.
   const overObject = useRef(false);
@@ -388,9 +456,12 @@ export default function WaterStage({
     >
       <Canvas
         frameloop={active ? 'always' : 'never'}
-        dpr={[1, MAX_DPR]}
+        dpr={dpr}
         camera={{ fov: 32, position: [0, 0, 7.2], near: 0.1, far: 40 }}
-        onCreated={({ gl }) => gl.setClearColor(CLEAR, 1)}
+        onCreated={({ gl }) => {
+          gl.setClearColor(CLEAR, 1);
+          gl.transmissionResolutionScale = TRANSMISSION_SCALE;
+        }}
         gl={{
           antialias: true,
           alpha: false,
@@ -398,7 +469,15 @@ export default function WaterStage({
           toneMapping: NoToneMapping,
         }}
       >
+        <PerformanceMonitor
+          flipflops={3}
+          onDecline={() => !warmingRef.current && setDpr((d) => Math.max(MIN_DPR, Math.round((d - 0.25) * 100) / 100))}
+          onIncline={() => !warmingRef.current && setDpr((d) => Math.min(START_DPR, Math.round((d + 0.25) * 100) / 100))}
+          onFallback={() => !warmingRef.current && setDpr(MIN_DPR)}
+        />
         <Scene
+          warming={warming}
+          onWarm={onWarm}
           overObject={overObject}
           anchor={anchor}
           spin={spin}

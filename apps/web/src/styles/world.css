@@ -145,6 +145,109 @@
    you to travel somewhere you have already arrived. */
 .w-hint.is-away { visibility: hidden; }
 
+/* Leaving for the rings: the project labels fade with the cut instead of
+   vanishing on its first frame. */
+.w-work .w-readout,
+.w-work .w-water-hint { transition: opacity 320ms ease; }
+
+.w-work.is-leaving .w-readout,
+.w-work.is-leaving .w-water-hint { opacity: 0; }
+
+/* Ring descent after the project page. Hidden until its cut starts; the canvas
+   is transparent where the cut has not reached, so the page shows through. */
+.w-rings {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  visibility: hidden;
+  pointer-events: none;
+  font-family: var(--w-mono);
+  color: var(--w-ink);
+}
+
+.w-rings.is-cutting { visibility: visible; }
+
+.w-rings-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.w-rings-stage canvas { pointer-events: none; }
+
+.w-rings-hud {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(72px, 13vh, 130px);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  opacity: 0;
+  transition: opacity 600ms ease;
+  text-transform: uppercase;
+  letter-spacing: var(--w-track);
+  font-size: var(--w-meta);
+  white-space: nowrap;
+}
+
+.w-rings.is-room .w-rings-hud {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.w-rings-eyebrow,
+.w-rings-count {
+  margin: 0;
+  opacity: 0.55;
+}
+
+.w-rings-switch {
+  display: flex;
+  align-items: center;
+  gap: clamp(20px, 6vw, 72px);
+}
+
+.w-rings-arrow {
+  padding: 8px 10px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 1.2rem;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.w-rings-arrow:hover,
+.w-rings-arrow:focus-visible { opacity: 1; }
+.w-rings-arrow.is-prev:hover { transform: translateX(-3px); }
+.w-rings-arrow.is-next:hover { transform: translateX(3px); }
+
+/* Bracketed label: four corner ticks drawn with gradients. */
+.w-rings-link {
+  min-width: 9ch;
+  padding: 10px 20px;
+  color: inherit;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  background:
+    linear-gradient(currentColor, currentColor) top left / 9px 1px no-repeat,
+    linear-gradient(currentColor, currentColor) top left / 1px 9px no-repeat,
+    linear-gradient(currentColor, currentColor) top right / 9px 1px no-repeat,
+    linear-gradient(currentColor, currentColor) top right / 1px 9px no-repeat,
+    linear-gradient(currentColor, currentColor) bottom left / 9px 1px no-repeat,
+    linear-gradient(currentColor, currentColor) bottom left / 1px 9px no-repeat,
+    linear-gradient(currentColor, currentColor) bottom right / 9px 1px no-repeat,
+    linear-gradient(currentColor, currentColor) bottom right / 1px 9px no-repeat;
+  transition: letter-spacing 260ms ease;
+}
+
+.w-rings-link:hover,
+.w-rings-link:focus-visible { letter-spacing: 0.18em; }
+
 /* Fullscreen canvas stage wrapper */
 .w-stage {
   position: fixed;

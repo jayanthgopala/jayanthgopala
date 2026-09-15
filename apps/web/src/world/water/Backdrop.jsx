@@ -8,9 +8,9 @@
 // material with depth rather than a flat fill: a drifting smear, and frost that
 // glazes over a patch and clears again.
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { FrontSide, ShaderMaterial, Vector2, Vector3, Vector4 } from 'three';
+import { BackSide, FrontSide, ShaderMaterial, Vector2, Vector3, Vector4 } from 'three';
 import { ICE_PAGE } from '../lib/ice-page.js';
 import { GLAZE_ACTIVE } from './device.js';
 
@@ -35,6 +35,7 @@ uniform float uDpr;
 uniform float uTime;
 uniform float uSmear;
 uniform float uScroll;
+uniform float uDots; // 1 draws the dot lattice, 0 leaves it out
 uniform vec4 uGlaze[${GLAZE}]; // xy = screen uv, z = radius, w = strength
 
 uniform vec3 uIceBase;
@@ -87,9 +88,14 @@ float fbm(vec2 p) {
 float smear(vec2 p, float t) {
   // A slow, wide warp. Large amplitude over a low frequency is what bends the
   // bands into swells instead of shredding them into wisps.
+  //
+  // One noise sample per axis rather than a three-octave stack: the warp is
+  // deliberately low frequency, so the extra octaves added nothing visible, and
+  // this shader runs over the whole screen twice a frame (once for the page,
+  // once more for the refraction pass behind the object).
   vec2 warp = vec2(
-    fbm(p * 0.42 + vec2(t * 0.055, t * -0.038)),
-    fbm(p * 0.51 + vec2(t * -0.047, t * 0.031))
+    vnoise(p * 0.42 + vec2(t * 0.055, t * -0.038)),
+    vnoise(p * 0.51 + vec2(t * -0.047, t * 0.031))
   );
 
   vec2 q = p + (warp - 0.5) * 2.6;
@@ -115,7 +121,7 @@ void main() {
 
   vec2 cell = px - uIceDotSize.y * floor(px / uIceDotSize.y + 0.5);
   float dotMask = 1.0 - smoothstep(uIceDotSize.x - 0.5, uIceDotSize.x + 0.5, length(cell));
-  c = mix(c, uIceDot.rgb, uIceDot.a * dotMask);
+  c = mix(c, uIceDot.rgb, uIceDot.a * dotMask * uDots);
 
   vec2 halfSize = uViewport * 0.5;
   float r = clamp(length(px - halfSize) / length(halfSize), 0.0, 1.0);
@@ -159,7 +165,7 @@ void main() {
     // the page — bright spots — rather than as anything forming on it. What
     // frost actually does is scatter: it flattens whatever is behind it, so
     // that is all this does, with the grain breaking up the edge.
-    float grain = fbm(delta * 34.0 + frost.xy * 40.0);
+    float grain = vnoise(delta * 34.0 + frost.xy * 40.0);
     float veil = fall * frost.w * (0.6 + grain * 0.4);
     c = mix(c, vec3(dot(c, vec3(0.3333))), veil * 0.3);
   }
@@ -177,21 +183,29 @@ const DEPTH = 9;
 /** Comfortably past the frustum at this depth, at any viewport shape. */
 const SPAN = 120;
 
-export default function Backdrop({ scroll }) {
+/**
+ * @param followCamera For a scene whose camera travels (the ring shaft): the
+ *   same screen-space ground is drawn on a sphere kept around the camera,
+ *   instead of on a plane behind a camera that never moves.
+ */
+export default function Backdrop({ scroll, followCamera = false }) {
   const { size, viewport } = useThree();
+  const meshRef = useRef(null);
 
   const material = useMemo(
     () =>
       new ShaderMaterial({
         vertexShader: VERT,
         fragmentShader: FRAG,
-        side: FrontSide,
+        side: followCamera ? BackSide : FrontSide,
         uniforms: {
           uViewport: { value: new Vector2(1, 1) },
           uDpr: { value: 1 },
           uTime: { value: 0 },
           uSmear: { value: 0.11 },
           uScroll: { value: 0 },
+          // The ring shaft wants the ground without its dot lattice.
+          uDots: { value: followCamera ? 0 : 1 },
           uGlaze: { value: Array.from({ length: GLAZE }, () => new Vector4()) },
           uIceBase: { value: rgb(ICE_PAGE.base) },
           uIceDot: { value: rgba([...ICE_PAGE.dot.color, ICE_PAGE.dot.alpha]) },
@@ -205,7 +219,7 @@ export default function Backdrop({ scroll }) {
           uWashClear: { value: ICE_PAGE.wash.clearAt },
         },
       }),
-    []
+    [followCamera]
   );
 
   useEffect(() => () => material.dispose(), [material]);
@@ -225,7 +239,9 @@ export default function Backdrop({ scroll }) {
     []
   );
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
+    if (followCamera && meshRef.current) meshRef.current.position.copy(state.camera.position);
+
     const dt = Math.min(delta, 0.05);
     const u = material.uniforms;
     u.uTime.value += dt;
@@ -266,6 +282,17 @@ export default function Backdrop({ scroll }) {
   // through as a black screen. The pattern is drawn in screen space from
   // gl_FragCoord, so the plane's own dimensions never mattered; it only has to
   // be larger than the frustum, which this is at any aspect.
+  // A sphere kept centred on the travelling camera. The pattern is drawn from
+  // gl_FragCoord, so it lands on the same pixels as the project page whatever
+  // the geometry; it only has to surround the camera.
+  if (followCamera) {
+    return (
+      <mesh ref={meshRef} material={material} renderOrder={-10} frustumCulled={false}>
+        <sphereGeometry args={[30, 32, 16]} />
+      </mesh>
+    );
+  }
+
   return (
     <mesh
       position={[0, 0, -DEPTH]}

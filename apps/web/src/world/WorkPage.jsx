@@ -8,8 +8,6 @@ import { sound } from './lib/sound.js';
 import GlassCloseButton from './GlassCloseButton.jsx';
 import DetailBackdrop from './DetailBackdrop.jsx';
 import ExploreTextLens from './ExploreTextLens.jsx';
-import { SoundToggle } from './WorldSite.jsx';
-
 // The project index, shown as water in the shape of each project's initial.
 // Scrolling moves between projects; clicking opens the one on screen.
 
@@ -370,8 +368,8 @@ function Detail({ project, number, onClose }) {
   );
 }
 
-export default function WorkPage({ projects = [], content = {}, profile = {} }) {
-  const { cut, page, setPageHeight, lenis } = useWorldScroll();
+export default function WorkPage({ projects = [], content = {}, profile = {}, onReady }) {
+  const { cut, page, setPageHeight, lenis, ringCut } = useWorldScroll();
   const layerRef = useRef(null);
   const [live, setLive] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -385,6 +383,21 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
   // drawn on arrival rather than dragged along for the ride.
   const [arrived, setArrived] = useState(null);
   const [open, setOpen] = useState(null);
+  // Leaving for the rings: 0 here, 1 the ring cut is under way (labels off, no
+  // input), 2 the rings cover the page (water paused).
+  const [leave, setLeave] = useState(0);
+  // Once the rings have covered the page for a few seconds, the water canvas is
+  // released to free its GPU memory; scrolling back brings it straight back.
+  const [dropWater, setDropWater] = useState(false);
+
+  useEffect(() => {
+    if (leave < 3) {
+      setDropWater(false);
+      return undefined;
+    }
+    const id = setTimeout(() => setDropWater(true), 2500);
+    return () => clearTimeout(id);
+  }, [leave]);
 
   // Pause world scroll when project detail is open
   useEffect(() => {
@@ -418,6 +431,32 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
   // given a shape in the admin still renders as something.
   const shapes = useMemo(() => list.map((p, i) => shapeFor(p, i)), [list]);
 
+  // The water stage is mounted with the site and prepared behind its loading
+  // screen — every shape built and drawn once — then left paused until the
+  // reader actually arrives, so no project object loads mid-scroll.
+  const [warming, setWarming] = useState(true);
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+  const reported = useRef(false);
+
+  const handleWaterWarm = useCallback(() => {
+    if (reported.current) return;
+    reported.current = true;
+    setWarming(false);
+    onReadyRef.current?.();
+  }, []);
+
+  // Nothing to prepare without projects; and a ceiling, so a machine that
+  // cannot finish never holds the loading screen.
+  useEffect(() => {
+    if (list.length === 0) handleWaterWarm();
+  }, [list.length, handleWaterWarm]);
+
+  useEffect(() => {
+    const id = setTimeout(handleWaterWarm, 10000);
+    return () => clearTimeout(id);
+  }, [handleWaterWarm]);
+
   // One viewport of scroll per project, so the objects change at a readable
   // rate rather than flicking past.
   useEffect(() => {
@@ -438,6 +477,7 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
     let shown = 0;
     let settledAt = null;
     let eased = null; // Damped follower of the raw scroll position.
+    let leaving = 0;
     let last = performance.now();
 
     const tick = (now) => {
@@ -445,8 +485,17 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
       last = now;
 
       const c = cut.current;
-      const layer = layerRef.current;
 
+      const r = ringCut.current;
+      // 1: cut begun (labels fade, no input). 2: half covered, so the water
+      // freezes and stops competing with the rings for the GPU. 3: covered.
+      const nextLeave = r >= 1 ? 3 : r >= 0.5 ? 2 : r > 0.02 ? 1 : 0;
+      if (nextLeave !== leaving) {
+        leaving = nextLeave;
+        setLeave(nextLeave);
+      }
+
+      const layer = layerRef.current;
       if (layer) {
         layer.style.opacity = (reduced ? c : smoothstep(0.22, 0.55, c)).toFixed(3);
       }
@@ -527,7 +576,7 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
 
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [cut, page, reduced, list.length]);
+  }, [cut, page, ringCut, reduced, list.length]);
 
   const onOpen = useCallback(() => {
     // Mid-slide the letter on screen is the nearer of the two, not the one the
@@ -541,13 +590,15 @@ export default function WorkPage({ projects = [], content = {}, profile = {} }) 
   return (
     <section
       ref={layerRef}
-      className={`w-work${live ? ' is-live' : ''}${open ? ' has-detail' : ''}`}
-      inert={!live}
+      className={`w-work${live ? ' is-live' : ''}${open ? ' has-detail' : ''}${leave > 0 ? ' is-leaving' : ''}`}
+      inert={!live || leave > 0}
       aria-label="Selected work"
     >
-      {mounted && list.length > 0 && (
+      {list.length > 0 && !dropWater && (
         <WaterStage
-          active={live && !open}
+          active={(live && !open && leave < 2) || warming}
+          warming={warming}
+          onWarm={handleWaterWarm}
           calm={reduced}
           shapes={shapes}
           index={index}
