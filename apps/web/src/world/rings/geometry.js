@@ -1,8 +1,8 @@
 import { BufferAttribute, BufferGeometry } from 'three';
 
 // Procedural shapes for the ring descent: the curved glass blocks the rings are
-// built from, a seeded random source, and the point clouds the social marks
-// are made of.
+// built from, a seeded random source, and the solid water bodies the social
+// marks are made of.
 
 export function mulberry32(seed) {
   let s = seed >>> 0;
@@ -114,39 +114,49 @@ function roundRect(g, x, y, w, h, r) {
 
 // Drawn from primitives on a 256px canvas, white on transparent. Only the
 // silhouette matters: it is sampled into points, never shown as pixels.
-function drawIcon(g, icon, label) {
+export function drawIcon(g, icon, label) {
   g.fillStyle = '#fff';
   g.strokeStyle = '#fff';
   g.lineJoin = 'round';
 
   switch (icon) {
     case 'github': {
+      // The Octocat mark: a disc with the cat cut out of it — a broad head with
+      // two pointed ears, a neck running out through the bottom of the disc,
+      // and the tail curling up on the left.
       g.beginPath();
-      g.arc(128, 128, 116, 0, Math.PI * 2);
+      g.arc(128, 128, 118, 0, Math.PI * 2);
       g.fill();
       g.globalCompositeOperation = 'destination-out';
       g.beginPath();
-      g.ellipse(128, 112, 56, 48, 0, 0, Math.PI * 2);
+      g.ellipse(128, 118, 62, 54, 0, 0, Math.PI * 2);
       g.fill();
+      // Ears, with their tips softened by a round-joined stroke.
+      g.lineWidth = 8;
+      g.lineJoin = 'round';
+      for (const side of [-1, 1]) {
+        g.beginPath();
+        g.moveTo(128 + side * 58, 104);
+        g.lineTo(128 + side * 50, 50);
+        g.lineTo(128 + side * 16, 72);
+        g.closePath();
+        g.fill();
+        g.stroke();
+      }
+      // Neck, widening slightly as it runs out of the bottom.
       g.beginPath();
-      g.moveTo(80, 96);
-      g.lineTo(84, 44);
-      g.lineTo(118, 68);
+      g.moveTo(104, 160);
+      g.lineTo(152, 160);
+      g.lineTo(157, 256);
+      g.lineTo(99, 256);
       g.closePath();
       g.fill();
-      g.beginPath();
-      g.moveTo(176, 96);
-      g.lineTo(172, 44);
-      g.lineTo(138, 68);
-      g.closePath();
-      g.fill();
-      roundRect(g, 102, 140, 52, 120, 18);
-      g.fill();
-      g.lineWidth = 14;
+      // Tail.
+      g.lineWidth = 18;
       g.lineCap = 'round';
       g.beginPath();
-      g.moveTo(102, 196);
-      g.quadraticCurveTo(70, 200, 58, 168);
+      g.moveTo(104, 206);
+      g.quadraticCurveTo(66, 212, 52, 176);
       g.stroke();
       break;
     }
@@ -231,8 +241,15 @@ function drawIcon(g, icon, label) {
 }
 
 /**
- * `count` points filling a social mark, as a flat slab `size` wide centred on
- * the origin. Returned as xyz triples.
+ * `count` beads filling a social mark, as a slab `size` wide centred on the
+ * origin. Returned as xyz triples.
+ *
+ * Packed on a hexagonal lattice rather than sampled at random. Random sampling
+ * of the silhouette clumps in places and leaves holes in others, and at bead
+ * size that reads as a lumpy approximation of the mark; a lattice with a little
+ * jitter covers it evenly, so the edge comes out clean and the shape is the
+ * shape rather than a suggestion of it. Three layers through the depth give the
+ * slab body without softening that edge.
  */
 export function iconPoints(icon, label, count, size = 1.55, seed = 1) {
   const S = 256;
@@ -243,33 +260,63 @@ export function iconPoints(icon, label, count, size = 1.55, seed = 1) {
   drawIcon(g, icon, label);
 
   const data = g.getImageData(0, 0, S, S).data;
-  const hits = [];
-  for (let y = 0; y < S; y += 1) {
-    for (let x = 0; x < S; x += 1) {
-      if (data[(y * S + x) * 4 + 3] > 140) hits.push(x, y);
-    }
-  }
+  const inside = (x, y) => {
+    const ix = x | 0;
+    const iy = y | 0;
+    return ix >= 0 && iy >= 0 && ix < S && iy < S && data[(iy * S + ix) * 4 + 3] > 140;
+  };
+
+  let area = 0;
+  for (let i = 3; i < data.length; i += 4) if (data[i] > 140) area += 1;
 
   const rand = mulberry32(seed);
   const out = new Float32Array(count * 3);
-  const pairs = hits.length / 2;
 
-  for (let i = 0; i < count; i += 1) {
-    if (pairs === 0) {
+  if (area === 0) {
+    for (let i = 0; i < count; i += 1) {
       const a = rand() * Math.PI * 2;
       const r = Math.sqrt(rand()) * size * 0.5;
       out[i * 3] = Math.cos(a) * r;
       out[i * 3 + 1] = Math.sin(a) * r;
       out[i * 3 + 2] = (rand() - 0.5) * 0.1;
-      continue;
     }
-    const j = Math.floor(rand() * pairs) * 2;
-    const x = (hits[j] + rand()) / S - 0.5;
-    const y = 0.5 - (hits[j + 1] + rand()) / S;
-    out[i * 3] = x * size;
-    out[i * 3 + 1] = y * size;
-    // Roughly gaussian depth, so the slab has a body rather than a hard face.
-    out[i * 3 + 2] = (rand() + rand() + rand() - 1.5) * 0.05;
+    return out;
+  }
+
+  // Spacing that lands close to `count` beads over the silhouette's area once
+  // the layers are counted in. Floored, so a tiny mark cannot ask for a lattice
+  // finer than the raster it was measured on.
+  const LAYERS = 3;
+  const spacing = Math.max(1.2, Math.sqrt((area * LAYERS) / count));
+  const rowStep = spacing * 0.866; // equilateral rows
+
+  const cells = [];
+  let row = 0;
+  for (let y = rowStep * 0.5; y < S; y += rowStep) {
+    const offset = (row & 1) * spacing * 0.5;
+    for (let x = spacing * 0.5 + offset; x < S; x += spacing) {
+      if (inside(x, y)) cells.push(x, y);
+    }
+    row += 1;
+  }
+
+  const found = cells.length / 2;
+  const jitter = spacing * 0.22;
+  const depth = size * 0.085;
+
+  for (let i = 0; i < count; i += 1) {
+    // Each cell is filled once per layer before any is used twice, so the
+    // layers stay even however the count divides.
+    const cell = (i % found) * 2;
+    const layer = Math.floor(i / found) % LAYERS;
+
+    const x = cells[cell] + (rand() - 0.5) * jitter;
+    const y = cells[cell + 1] + (rand() - 0.5) * jitter;
+
+    out[i * 3] = (x / S - 0.5) * size;
+    out[i * 3 + 1] = (0.5 - y / S) * size;
+    out[i * 3 + 2] =
+      (LAYERS === 1 ? 0 : (layer / (LAYERS - 1) - 0.5) * depth) + (rand() - 0.5) * depth * 0.22;
   }
 
   return out;

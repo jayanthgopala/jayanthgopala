@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { BackSide, Color, ShaderMaterial, SphereGeometry, Vector3 } from 'three';
-import { LOOK } from '../lib/lighting.js';
+import { LOOK, SUN_DIR } from '../lib/lighting.js';
 
 // Procedural dynamic cloud dome shader
 const CLOUD_SHADER = /* glsl */ `
@@ -16,6 +16,8 @@ const CLOUD_SHADER = /* glsl */ `
   uniform float uOpacity;
   uniform float uHorizonFade;
   uniform vec3 uSunDir;
+  uniform vec3 uGlow;
+  uniform float uStretch;
 
   float hash( vec2 p ) {
     return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 );
@@ -50,6 +52,8 @@ const CLOUD_SHADER = /* glsl */ `
     if ( d.y <= 0.0 ) discard;
 
     vec2 p = d.xz / max( d.y, 0.06 );
+    // Long across the view and short in depth, so they read as streaks.
+    p.x /= uStretch;
 
     float f = 0.0;
     f += 0.50 * fbm( p * uScale.x + uTime * uSpeed.x * vec2( 1.00,  0.22 ) );
@@ -63,7 +67,14 @@ const CLOUD_SHADER = /* glsl */ `
     float sunDot = max( 0.0, dot( d, uSunDir ) );
     float sunAura = pow( sunDot, 12.0 );
     float sunCore = pow( sunDot, 46.0 );
-    vec3 sunRimCol = vec3( 1.0, 0.97, 0.90 );
+
+    // Sunward clouds catch the low light on their undersides; the thin edges
+    // take it most, the dense cores stay in their own shade.
+    float sunward = pow( sunDot, 2.2 );
+    float thin = 1.0 - smoothstep( uCoverage, 0.9, f );
+    col = mix( col, uGlow, sunward * ( 0.45 + 0.55 * thin ) );
+
+    vec3 sunRimCol = mix( vec3( 1.0, 0.97, 0.90 ), uGlow, 0.35 );
     col = mix( col, sunRimCol, ( sunAura * 0.40 + sunCore * 0.25 ) * ( 1.0 - a * 0.40 ) );
 
     // cloud gently veils the sun so it stays a soft atmospheric glow
@@ -92,14 +103,8 @@ export default function Clouds() {
   const material = useMemo(() => {
     const lit = new Color(`rgb(${C.lit.join(',')})`);
     const shade = new Color(`rgb(${C.shade.join(',')})`);
-    const sunPos = LOOK.sun || [0.235, 0.88];
-    const sunAngle = (sunPos[0] - 0.5) * 2 * Math.PI;
-    const sunElev = (1 - sunPos[1]) * (Math.PI / 2);
-    const sunDir = new Vector3(
-      Math.cos(sunElev) * Math.cos(sunAngle),
-      Math.sin(sunElev),
-      Math.cos(sunElev) * Math.sin(sunAngle)
-    ).normalize();
+    const sunDir = new Vector3(...SUN_DIR).normalize();
+    const glow = new Color(`rgb(${(C.glow || C.lit).join(',')})`);
 
     return new ShaderMaterial({
       vertexShader: CLOUD_VERT,
@@ -115,6 +120,8 @@ export default function Clouds() {
         uOpacity: { value: C.opacity },
         uHorizonFade: { value: C.horizonFade },
         uSunDir: { value: sunDir },
+        uGlow: { value: glow },
+        uStretch: { value: C.stretch || 1 },
       },
       side: BackSide,
       transparent: true,

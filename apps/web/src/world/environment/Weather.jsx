@@ -12,7 +12,7 @@ import {
   UnsignedByteType,
   Vector3,
 } from 'three';
-import { MOUND_AT, TERRAIN_SIZE, TERRAIN_CENTER_Z, heightAt } from '../lib/terrain.js';
+import { MOUND_AT, TERRAIN_SIZE, TERRAIN_CENTER_Z, WATER_Y, heightAt } from '../lib/terrain.js';
 import { LOOK } from '../lib/lighting.js';
 import { SHARED_WIND_GLSL, updateWindState } from '../lib/wind.js';
 
@@ -78,6 +78,9 @@ function buildHeightTexture() {
 
 const SUN_DIR = new Vector3(...LOOK.key.position).normalize();
 
+/** Render layer the mist lives on; Stage enables it on the main camera. */
+export const MIST_LAYER = 1;
+
 // Mist vertex shader
 const MIST_VERT = /* glsl */ `
   uniform sampler2D uHeight;
@@ -101,8 +104,9 @@ const MIST_VERT = /* glsl */ `
 
     vec2 huv = ( worldP.xz - uTerrainOrigin ) / uTerrainSize;
     vec2 hs = texture2D( uHeight, huv ).rg * ${HEIGHT_MAX.toFixed(1)};
-    float ground = hs.r;
-    float regional = hs.g;
+    // Over the fjord the mist lies on the water, not on the flooded floor.
+    float ground = max( hs.r, ${WATER_Y.toFixed(1)} );
+    float regional = max( hs.g, ${WATER_Y.toFixed(1)} );
 
     // Positive in depressions and valley hollows, negative on crests
     vDepression = regional - ground;
@@ -141,6 +145,7 @@ const MIST_FRAG = /* glsl */ `
   uniform float uNoiseScale;
   uniform float uCoverage;
   uniform vec4 uDepthBand;   // near-in, near-full, far-full, far-out
+  uniform vec3 uTint;
   uniform float uSeed;
 
   varying vec3 vWorldPos;
@@ -257,6 +262,7 @@ const MIST_FRAG = /* glsl */ `
     vec3 col = mix( colShadow, colBase, smoothstep( 0.0, 0.45, lit ) );
     col = mix( col, colLit, lit * mix( 0.25, 0.85, thin ) );
     col = mix( col, vec3( 0.80, 0.85, 0.92 ), smoothstep( 260.0, 900.0, distCam ) * 0.45 );
+    col *= uTint;
 
     gl_FragColor = vec4( col, alpha );
   }
@@ -299,6 +305,7 @@ function MistLayer({
           },
           uTerrainSize: { value: [TERRAIN_SIZE, TERRAIN_SIZE] },
           uSunDir: { value: SUN_DIR },
+          uTint: { value: new Vector3(...LOOK.mist.color) },
           uTime: { value: 0 },
           uLayerHeight: { value: layerHeight },
           uLayerSpeed: { value: layerSpeed },
@@ -323,6 +330,9 @@ function MistLayer({
       position={[-20, 0, centerZ]}
       renderOrder={1}
       frustumCulled={false}
+      // Own layer, which the main camera sees and the water's mirror does not:
+      // mist lying on the surface would otherwise reflect as a smear under it.
+      onUpdate={(mesh) => mesh.layers.set(MIST_LAYER)}
     />
   );
 }

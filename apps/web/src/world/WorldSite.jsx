@@ -1,3 +1,4 @@
+import './lib/quiet-three.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ScrollProvider, { useWorldScroll } from './scroll/ScrollProvider.jsx';
 import { windState } from './lib/wind.js';

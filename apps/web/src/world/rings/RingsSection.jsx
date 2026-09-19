@@ -26,17 +26,33 @@ const DEMO_SOCIALS = [
  */
 const WARM_MS = 8000;
 
-const pad = (n) => String(n).padStart(2, '0');
-
 // mailto: and anything else already carrying a scheme goes through untouched.
 const hrefFor = (url = '') => {
   const raw = String(url).trim();
   return /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : externalUrl(raw);
 };
 
+// Opened from a click on the glass case, as the link itself would open it:
+// mail in place, everything else in a new tab.
+function openLink(item) {
+  const href = hrefFor(item.url);
+  if (href.startsWith('mailto:')) {
+    window.location.href = href;
+  } else {
+    window.open(href, '_blank', 'noopener,noreferrer');
+  }
+}
+
 export default function RingsSection({ socials = [], content = {}, onReady }) {
   const { ringCut, ringFall, ringReady } = useWorldScroll();
   const labelRef = useRef(null);
+  // Written by the stage every frame: is the pointer over the glass case?
+  const overCase = useRef(false);
+  // -1, 0 or 1: which arrow the pointer is on, for the mark to lean toward.
+  const nudge = useRef(0);
+  // Whether a press is in progress, so the cursor can show the drag.
+  const holding = useRef(false);
+  const currentRef = useRef(null);
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
 
@@ -76,8 +92,11 @@ export default function RingsSection({ socials = [], content = {}, onReady }) {
     let frame = 0;
     let isCutting = false;
     let isRoom = false;
+    let isOver = false;
+    let wasHeld = false;
 
     const tick = () => {
+      // Shown from the ring cut on: the room is where the site ends.
       const nextCutting = ringCut.current > 0.0005;
       if (nextCutting !== isCutting) {
         isCutting = nextCutting;
@@ -88,13 +107,28 @@ export default function RingsSection({ socials = [], content = {}, onReady }) {
       if (nextRoom !== isRoom) {
         isRoom = nextRoom;
         setRoom(nextRoom);
+        // The chamber settling into view, given its own note.
+        if (nextRoom) sound.arrive(0);
+      }
+
+      // Over the chamber the cursor is a hand: the mark can be dragged round,
+      // and a click opens the current link. Closed while a drag is under way.
+      const nextOver = isRoom && overCase.current;
+      const nextHeld = nextOver && holding.current;
+      if (nextOver !== isOver || nextHeld !== wasHeld) {
+        isOver = nextOver;
+        wasHeld = nextHeld;
+        document.body.style.cursor = nextOver ? (nextHeld ? 'grabbing' : 'grab') : '';
       }
 
       frame = requestAnimationFrame(tick);
     };
 
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      if (isOver) document.body.style.cursor = '';
+    };
   }, [ringCut, ringFall]);
 
   // Prepared: stop rendering hidden, let the scroll through to the cut, and
@@ -116,6 +150,7 @@ export default function RingsSection({ socials = [], content = {}, onReady }) {
   const step = useCallback(
     (dir) => {
       if (list.length < 2) return;
+      sound.link();
       setIndex((i) => (i + dir + list.length) % list.length);
     },
     [list.length]
@@ -136,7 +171,47 @@ export default function RingsSection({ socials = [], content = {}, onReady }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [room, step]);
 
+  // In the room, a click inside the glass case opens the current link; a
+  // click anywhere else switches link: the left half of the screen goes back,
+  // the right half forward. Links and buttons keep their own clicks, and a
+  // press that turned into a drag is not a click.
+  useEffect(() => {
+    if (!room) return undefined;
+    let down = null;
+
+    const onDown = (event) => {
+      down = { x: event.clientX, y: event.clientY };
+      holding.current = true;
+    };
+
+    const onUp = (event) => {
+      holding.current = false;
+      if (!down) return;
+      const moved = Math.hypot(event.clientX - down.x, event.clientY - down.y);
+      down = null;
+      if (moved > 8) return;
+      if (event.target instanceof Element && event.target.closest('a, button, input, [role="button"]')) return;
+      if (overCase.current && currentRef.current) {
+        sound.glassPress(1);
+        openLink(currentRef.current);
+        return;
+      }
+      step(event.clientX < window.innerWidth / 2 ? -1 : 1);
+    };
+
+    window.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [room, step]);
+
   const current = list[index] || null;
+  currentRef.current = current;
+  // The neighbours either side, shown faded beside the current label.
+  const prev = list.length > 1 ? list[(index - 1 + list.length) % list.length] : null;
+  const next = list.length > 1 ? list[(index + 1) % list.length] : null;
 
   // Written directly rather than rendered, so the scramble never fights React
   // over the text node.
@@ -168,21 +243,39 @@ export default function RingsSection({ socials = [], content = {}, onReady }) {
           ringFall={ringFall}
           socials={list}
           index={index}
+          nudge={nudge}
           words={words}
           reduced={reduced}
           onWarm={handleWarm}
+          overCase={overCase}
         />
       )}
 
       {current && (
         <nav className="w-rings-hud" aria-label={copy(content, 'world.contactNav', 'Links')}>
-          <p className="w-rings-eyebrow">{copy(content, 'world.contactEyebrow', '/// Get in touch')}</p>
-
           <div className="w-rings-switch">
             {list.length > 1 && (
-              <button type="button" className="w-rings-arrow is-prev" onClick={() => step(-1)} aria-label="Previous link">
-                ←
+              <button
+                type="button"
+                className="w-rings-arrow is-prev"
+                onClick={() => step(-1)}
+                onPointerEnter={() => {
+                  nudge.current = -1;
+                }}
+                onPointerLeave={() => {
+                  nudge.current = 0;
+                }}
+                aria-label="Previous link"
+              >
+                <span className="w-rings-line" aria-hidden="true" />
+                <span className="w-rings-word" aria-hidden="true">{copy(content, 'world.prev', 'Prev')}</span>
               </button>
+            )}
+
+            {prev && (
+              <span className="w-rings-side" aria-hidden="true">
+                {prev.label}
+              </span>
             )}
 
             <a
@@ -195,18 +288,30 @@ export default function RingsSection({ socials = [], content = {}, onReady }) {
               <span ref={labelRef} aria-hidden="true" />
             </a>
 
+            {next && (
+              <span className="w-rings-side" aria-hidden="true">
+                {next.label}
+              </span>
+            )}
+
             {list.length > 1 && (
-              <button type="button" className="w-rings-arrow is-next" onClick={() => step(1)} aria-label="Next link">
-                →
+              <button
+                type="button"
+                className="w-rings-arrow is-next"
+                onClick={() => step(1)}
+                onPointerEnter={() => {
+                  nudge.current = 1;
+                }}
+                onPointerLeave={() => {
+                  nudge.current = 0;
+                }}
+                aria-label="Next link"
+              >
+                <span className="w-rings-word" aria-hidden="true">{copy(content, 'world.next', 'Next')}</span>
+                <span className="w-rings-line" aria-hidden="true" />
               </button>
             )}
           </div>
-
-          {list.length > 1 && (
-            <p className="w-rings-count">
-              {pad(index + 1)} / {pad(list.length)}
-            </p>
-          )}
         </nav>
       )}
     </section>

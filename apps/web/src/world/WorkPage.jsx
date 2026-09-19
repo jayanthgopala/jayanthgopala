@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useWorldScroll } from './scroll/ScrollProvider.jsx';
+import { SEGMENTS } from './chapters.js';
 import { scramble } from '../crystals/scramble.js';
 import { copy, externalUrl, mediaUrl } from '../lib/api.js';
 import WaterStage from './water/WaterStage.jsx';
@@ -43,6 +44,13 @@ const FOLLOW = 4.2;
  * being seen.
  */
 const MAX_RATE = 1.6;
+
+/**
+ * How close, in projects, the page has to come to a stop before the scroll is
+ * let on to the next one. Near enough that the object has landed and its labels
+ * are up; not so near that a steady wheel waits on the last of the glide.
+ */
+const ARRIVED = 0.08;
 
 const smoothstep = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -369,7 +377,7 @@ function Detail({ project, number, onClose }) {
 }
 
 export default function WorkPage({ projects = [], content = {}, profile = {}, onReady }) {
-  const { cut, page, setPageHeight, lenis, ringCut } = useWorldScroll();
+  const { cut, page, setPageHeight, lenis, ringCut, pageLeash } = useWorldScroll();
   const layerRef = useRef(null);
   const [live, setLive] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -479,6 +487,13 @@ export default function WorkPage({ projects = [], content = {}, profile = {}, on
     let eased = null; // Damped follower of the raw scroll position.
     let leaving = 0;
     let last = performance.now();
+    const leash = { lo: 0, hi: 0, snap: null };
+    const lastStop = ABOUT_SPAN + Math.max(list.length - 1, 0);
+    // Stops in page screens: the introduction, then one per project.
+    const stopAbove = (u) => (u < 0 ? 0 : u < ABOUT_SPAN ? ABOUT_SPAN : Math.floor(u - ABOUT_SPAN) + 1 + ABOUT_SPAN);
+    const stopBelow = (u) => (u <= ABOUT_SPAN ? 0 : Math.ceil(u - ABOUT_SPAN) - 1 + ABOUT_SPAN);
+    const stopNearest = (u) =>
+      u < ABOUT_SPAN / 2 ? 0 : Math.min(lastStop, Math.max(ABOUT_SPAN, ABOUT_SPAN + Math.round(u - ABOUT_SPAN)));
 
     const tick = (now) => {
       const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000));
@@ -537,6 +552,32 @@ export default function WorkPage({ projects = [], content = {}, profile = {}, on
       const raw = eased;
       position.current = raw;
 
+      // Keep the scroll within a stop of what is on screen (see ScrollProvider).
+      if (list.length === 0 || nextLeave > 0) {
+        pageLeash.current = null;
+      } else {
+        const base = (SEGMENTS.world + SEGMENTS.cut) * step;
+        // The cut's own settle lands 2px into the page.
+        const toPx = (u) => (u <= 0 ? base + 2 : base + u * step);
+        if (c < 0.999) {
+          // Until the page has fully opened, nothing past the introduction.
+          leash.lo = -Infinity;
+          leash.hi = toPx(0);
+          leash.snap = null;
+        } else {
+          const at = raw + ABOUT_SPAN;
+          leash.hi = at >= lastStop - ARRIVED ? Infinity : toPx(stopAbove(at + ARRIVED));
+          leash.lo = at <= ARRIVED ? -Infinity : toPx(stopBelow(at - ARRIVED));
+          const u = page.current / step;
+          if (u > 0.01 && u < lastStop) {
+            leash.snap = toPx(stopNearest(u));
+          } else {
+            leash.snap = null;
+          }
+        }
+        pageLeash.current = leash;
+      }
+
       // Reveal introduction promptly once the page finishes opening
       const about = aboutRef.current;
       if (about) {
@@ -575,8 +616,11 @@ export default function WorkPage({ projects = [], content = {}, profile = {}, on
     };
 
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [cut, page, ringCut, reduced, list.length]);
+    return () => {
+      cancelAnimationFrame(frame);
+      pageLeash.current = null;
+    };
+  }, [cut, page, ringCut, pageLeash, reduced, list.length]);
 
   const onOpen = useCallback(() => {
     // Mid-slide the letter on screen is the nearer of the two, not the one the

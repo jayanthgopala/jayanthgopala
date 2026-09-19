@@ -29,7 +29,7 @@ export const CUT_PARALLAX = 0.4;
 
 // Ring descent after the last project, in screen heights: a short lead past the
 // last project, the cut into the shaft, the fall, and the room it lands in.
-export const RINGS = { lead: 0.6, cut: 1.2, fall: 4.8, room: 1.15 };
+export const RINGS = { lead: 0.6, cut: 1.2, fall: 5.6, room: 1.15 };
 
 /**
  * The camera's whole descent, as one curve: straight in at the top of the
@@ -42,8 +42,9 @@ const DESCENT_POINTS = [
   [FALL_TOP, 0],
   [RING_Y[0], 0],
   [RING_Y[Math.floor(RING_Y.length / 2)], 0.12],
-  [RING_Y[RING_Y.length - 1], 0.45],
-  [ROOM_VIEW.y + 0.5, 2.0],
+  [RING_Y[RING_Y.length - 1], 0.3],
+  // Out of the shaft, sweeping down and back until level over the lake.
+  [ROOM_VIEW.y + 1.6, 2.2],
   [ROOM_VIEW.y, ROOM_VIEW.z],
 ];
 
@@ -64,9 +65,10 @@ function descentAt(y) {
   return 1;
 }
 
-/** Where along the descent the camera passes the middle ring and the last. */
-export const DESCENT_U_MID = descentAt(RING_Y[Math.floor(RING_Y.length / 2)]);
+/** Where along the descent the camera passes the last ring. */
 export const DESCENT_U_LAST = descentAt(RING_Y[RING_Y.length - 1]);
+/** Just clear of the last ring: the gaze stays down the shaft until here. */
+export const DESCENT_U_TURN = descentAt(RING_Y[RING_Y.length - 1] - 0.8);
 
 /** Descent position from fall progress: eased in and out across the dive. */
 export function descentU(fall) {
@@ -125,8 +127,12 @@ export function scrollState(scroll, vh, out = {}, pageHeight = 0) {
 }
 
 // Camera position waypoints across scroll progress
+// The opening frame is low over the water in front of the igloo, its door to
+// the right and the sun going down in the gap beyond; scrolling retreats up
+// and back from there.
 const CAMERA_POINTS = [
-  [7.9, 57.8, 399.5],
+  [22, 26, 362],
+  [-2, 52, 418],
   [12.2, 77.5, 453],
   [18, 112, 524],
   [22, 155, 588],
@@ -135,7 +141,8 @@ const CAMERA_POINTS = [
 
 // Camera look-at target waypoints across scroll progress
 const TARGET_POINTS = [
-  [-24.4, 42.8, 250],
+  [-10, 22.5, 252],
+  [-18, 34, 250],
   [-25, 43.5, 250.5],
   [-26, 45, 251],
   [-27, 47, 251.5],

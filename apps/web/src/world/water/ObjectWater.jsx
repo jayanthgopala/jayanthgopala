@@ -37,12 +37,27 @@ uniform float uRippleAmp;
 uniform float uIdleAmp;
 uniform float uImpactAmp;
 
+#ifdef PLANAR_FIELD
+uniform float uFieldScale;
+#endif
+
+#ifdef MORPH_BLOB
+// 0 the object's own shape, 1 melted into a single rounded drop.
+uniform float uMelt;
+#endif
+
 // Where a point on the object reads the shared ripple field. Derived from the
 // position rather than the geometry's own UVs: a torus knot and an icosahedron
 // unwrap very differently, and the field should behave the same on both.
+// Flat objects (the contact marks) read it straight across their face instead,
+// so a touch ripples out from exactly where it landed.
 vec2 fieldUv(vec3 p) {
+#ifdef PLANAR_FIELD
+  return p.xy * uFieldScale + 0.5;
+#else
   vec3 n = normalize(p);
   return vec2(atan(n.z, n.x) * 0.1591549 + 0.5, n.y * 0.5 + 0.5);
+#endif
 }
 
 float surfaceAt(vec3 p) {
@@ -62,7 +77,11 @@ float surfaceAt(vec3 p) {
 }
 `;
 
-function makeMaterial(uniforms) {
+/**
+ * The project objects' water. Shared with the contact marks, which pass
+ * `planar` to read the ripple field flat across their face.
+ */
+export function makeWaterMaterial(uniforms, { planar = false, edge = null, morph = false } = {}) {
   const material = new MeshPhysicalMaterial({
     color: new Color('#ffffff'),
     roughness: 0.04,
@@ -83,6 +102,13 @@ function makeMaterial(uniforms) {
     transparent: true,
     side: DoubleSide,
   });
+
+  // Added to the material's own defines, never in place of them: replacing
+  // them drops PHYSICAL, and without it the transmission shader cannot compile.
+  if (planar) material.defines = { ...material.defines, PLANAR_FIELD: '' };
+  // `morph`: the body can melt into one rounded drop (uMelt), so two shapes
+  // can be swapped while both are the same drop and the water re-forms.
+  if (morph) material.defines = { ...material.defines, MORPH_BLOB: '' };
 
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
@@ -112,6 +138,52 @@ function makeMaterial(uniforms) {
       // Displaced along the welded normal, never the face normal, so coincident
       // vertices of a faceted shape move together and no cracks open up.
       .replace('#include <begin_vertex>', 'vec3 transformed = position + aSmooth * height;');
+
+    if (morph) {
+      shader.vertexShader = shader.vertexShader
+        // Blend the lighting normal toward the drop's as it melts.
+        .replace(
+          '#include <defaultnormal_vertex>',
+          /* glsl */ `
+          float meltK = uMelt * uMelt * (3.0 - 2.0 * uMelt);
+          vec3 dropDir = normalize(position * vec3(1.0, 1.0, 2.4) + vec3(0.0, 0.0, 1e-4));
+          objectNormal = normalize(mix(objectNormal, normalize(dropDir * vec3(1.0, 1.0, 2.3)), meltK));
+          #include <defaultnormal_vertex>
+          `
+        )
+        // Every point of the surface drawn onto a wobbling pebble of water.
+        .replace(
+          'vec3 transformed = position + aSmooth * height;',
+          /* glsl */ `
+          vec3 transformed = position + aSmooth * height;
+          float dropWobble = 1.0
+            + 0.09 * sin(dropDir.x * 5.0 + uTime * 3.1) * sin(dropDir.y * 4.0 - uTime * 2.6)
+            + 0.05 * sin(dropDir.z * 6.0 + uTime * 2.2);
+          vec3 drop = dropDir * vec3(0.46, 0.46, 0.2) * dropWobble;
+          transformed = mix(transformed, drop, meltK);
+          `
+        );
+    }
+
+    // On a near-white ground clear water has nothing to show and disappears.
+    // `edge` darkens it toward its silhouette, the way a body of water in a
+    // bright studio reads by its dark rim.
+    if (edge) {
+      shader.uniforms.uEdgeColor = { value: new Color(edge.color) };
+      shader.uniforms.uEdgeAmount = { value: edge.amount };
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform vec3 uEdgeColor;\nuniform float uEdgeAmount;')
+        .replace(
+          '#include <opaque_fragment>',
+          /* glsl */ `
+          {
+            float edgeFres = pow(1.0 - clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0), 2.5);
+            outgoingLight = mix(outgoingLight, uEdgeColor, edgeFres * uEdgeAmount);
+          }
+          #include <opaque_fragment>
+          `
+        );
+    }
   };
 
   return material;
@@ -142,7 +214,7 @@ export default function ObjectWater({ sim, shape, focus, spin, calm = false }) {
   useEffect(() => {
     warm.current = 0;
   }, [geometry]);
-  const material = useMemo(() => makeMaterial(uniforms.current), []);
+  const material = useMemo(() => makeWaterMaterial(uniforms.current), []);
 
   // Double-sided transmission renders the object twice; only open surfaces
   // need it. Closed shapes draw their front faces and let thickness stand in

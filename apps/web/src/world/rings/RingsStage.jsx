@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { PerformanceMonitor } from '@react-three/drei';
+import { Environment, Lightformer, PerformanceMonitor } from '@react-three/drei';
 import {
   Color,
   HalfFloatType,
@@ -35,12 +35,12 @@ const RING_DPR = Math.min(
 );
 import IceBackdrop from '../water/Backdrop.jsx';
 import { FALL_TOP, FOG, RING_Y } from './layout.js';
-import { DESCENT_CURVE, DESCENT_U_LAST, DESCENT_U_MID, FALL_PAST_LAST, descentU } from '../chapters.js';
+import { DESCENT_CURVE, DESCENT_U_LAST, DESCENT_U_TURN, FALL_PAST_LAST, descentU } from '../chapters.js';
 import { COMPOSITE_FRAGMENT, COMPOSITE_VERTEX } from './composite.js';
 import GlassRing from './GlassRing.jsx';
 import { Drift, Membrane, Tunnel } from './RingGlow.jsx';
 import RingRoom from './RingRoom.jsx';
-import SocialParticles from './SocialParticles.jsx';
+import ParticleMark from './ParticleMark.jsx';
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 const smooth = (a, b, x) => {
@@ -53,8 +53,19 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const UP = new Vector3(0, 1, 0);
 const DOWN_UP = new Vector3(0, 0, -1);
 const STRAIGHT_DOWN = new Vector3(0, -1, 0);
-// Direction from the room view position to the pedestal it faces.
-const ROOM_LOOK = new Vector3(0, -0.35, -3.8).normalize();
+// Direction from the lake view to the mark: very slightly upward, so the
+// horizon sits below centre and the mark floats against the sky and mountains.
+const ROOM_LOOK = new Vector3(0, 0.27, -6.0).normalize();
+
+/** How far the room view drifts with the cursor, sideways and up and down. */
+// Kept small: a slight parallax, not the camera wandering about the room.
+const SWAY_X = 0.08;
+const SWAY_Y = 0.05;
+
+// Fog in the shaft is the page's pale ice; over the lake it becomes a light
+// cold mist and draws right back, so the ice runs out to the mountains.
+const FOG_SHAFT = new Color(FOG);
+const FOG_ROOM = new Color('#ffffff');
 
 /**
  * Camera path, from the fall progress.
@@ -69,6 +80,7 @@ const ROOM_LOOK = new Vector3(0, -0.35, -3.8).normalize();
  */
 function Director({ fall, ringCut, levels }) {
   const camera = useThree((s) => s.camera);
+  const scene = useThree((s) => s.scene);
   const pos = useMemo(() => new Vector3(), []);
   const target = useMemo(() => new Vector3(), []);
   const up = useMemo(() => new Vector3(), []);
@@ -78,7 +90,20 @@ function Director({ fall, ringCut, levels }) {
   const curveUp = useMemo(() => new Vector3(), []);
   const lastY = useRef(null);
 
-  useFrame(({ clock }) => {
+  // Cursor sway in the room: the target the pointer asks for, and where the
+  // camera has eased to so far. Read from the window, since the canvas takes
+  // no pointer events of its own.
+  const sway = useRef({ tx: 0, ty: 0, x: 0, y: 0 });
+  useEffect(() => {
+    const onMove = (event) => {
+      sway.current.tx = (event.clientX / window.innerWidth) * 2 - 1;
+      sway.current.ty = -((event.clientY / window.innerHeight) * 2 - 1);
+    };
+    window.addEventListener('pointermove', onMove, { passive: true });
+    return () => window.removeEventListener('pointermove', onMove);
+  }, []);
+
+  useFrame(({ clock }, delta) => {
     const f = fall.current;
     const t = clock.elapsedTime;
 
@@ -90,8 +115,9 @@ function Director({ fall, ringCut, levels }) {
 
     // Descent along the curve.
     const u = descentU(f);
-    // How far the gaze has turned toward the room: from the middle ring on.
-    const w = smooth(DESCENT_U_MID, 1, u);
+    // How far the gaze has turned toward the lake. It stays straight down the
+    // shaft until the camera is clear of the last ring, then levels out.
+    const w = smooth(DESCENT_U_TURN, 1, u);
 
     if (u > 0) {
       DESCENT_CURVE.getPointAt(u, curvePos);
@@ -107,6 +133,15 @@ function Director({ fall, ringCut, levels }) {
       target.lerp(curveTarget, k);
       up.lerp(curveUp, k);
     }
+
+    // In the room the camera drifts with the cursor — left and right, up and
+    // down — eased so it floats rather than tracks, while still facing the mark.
+    const s = sway.current;
+    const ease = 1 - Math.exp(-Math.min(delta, 0.05) * 2.5);
+    s.x += (s.tx - s.x) * ease;
+    s.y += (s.ty - s.y) * ease;
+    pos.x += s.x * SWAY_X * w;
+    pos.y += s.y * SWAY_Y * w;
 
     camera.position.copy(pos);
     camera.up.copy(up.normalize());
@@ -129,7 +164,17 @@ function Director({ fall, ringCut, levels }) {
     L.spin = through * Math.PI * 0.6;
     L.room = smooth(FALL_PAST_LAST - 0.15, FALL_PAST_LAST + 0.02, f);
     L.halo = smooth(FALL_PAST_LAST, FALL_PAST_LAST + 0.18, f);
-    L.show = smooth(FALL_PAST_LAST + 0.08, 1, f);
+    // The mark gathers early enough to glow up through the last ring.
+    L.show = smooth(FALL_PAST_LAST - 0.2, FALL_PAST_LAST + 0.05, f);
+
+    // The room is a darker grey than the shaft, and seen from further back, so
+    // its fog both deepens and draws away as the camera arrives.
+    if (scene.fog) {
+      scene.fog.color.copy(FOG_SHAFT).lerp(FOG_ROOM, L.room);
+      // No fog at all in the room.
+      scene.fog.near = lerp(1.5, 400, L.room);
+      scene.fog.far = lerp(9.5, 800, L.room);
+    }
 
     // How close the camera is to passing through a ring, for the radial blur.
     const onAxis = 1 - smooth(0.2, 1.2, pos.z);
@@ -180,6 +225,7 @@ function Composite({ ringCut, levels, reduced }) {
         uReduced: { value: reduced ? 1 : 0 },
         uRing: { value: 0 },
         uTime: { value: 0 },
+        uOut: { value: 0 },
       },
       vertexShader: COMPOSITE_VERTEX,
       fragmentShader: COMPOSITE_FRAGMENT,
@@ -318,7 +364,7 @@ function Warmup({ onWarm }) {
   return null;
 }
 
-export default function RingsStage({ active, ringCut, ringFall, socials, index, words, reduced = false, onWarm }) {
+export default function RingsStage({ active, ringCut, ringFall, socials, index, words, reduced = false, onWarm, overCase, nudge }) {
   const warmed = useRef(false);
   // Resolution may only adapt once prepared and while the cut is not on screen:
   // resizing clears the canvas for a frame, which read as a flicker mid-cut.
@@ -335,7 +381,10 @@ export default function RingsStage({ active, ringCut, ringFall, socials, index, 
     f: 0, form: 0, spin: 0, room: 0, halo: 0, show: 0, prox: 0,
     near: RING_Y.map(() => 0),
   });
-
+  // Where the pointer meets the chamber's glass. The case raycasts it; the
+  // particles inside read it, rather than casting a second ray for the same
+  // answer.
+  const touch = useMemo(() => ({ point: new Vector3(0, -999, 0), amt: 0 }), []);
   return (
     <div className="w-rings-stage">
       <Canvas
@@ -351,8 +400,33 @@ export default function RingsStage({ active, ringCut, ringFall, socials, index, 
         {/* No environment map: the glass lights itself in its shader, so the
             cubemap only ever lit the floor. Plain lights do that for free. Kept
             dim — the grade passes everything under 0.7 through untouched. */}
-        <ambientLight intensity={0.55} />
-        <directionalLight position={[2.5, 6, 3]} intensity={0.8} color="#f4f8ff" />
+        {/* High-key: the room is a white sweep, so the fill is generous and the
+            key is soft. What shapes the beads is the Environment, not these. */}
+        <ambientLight intensity={0.75} />
+        <directionalLight position={[2.5, 6, 3]} intensity={0.7} color="#ffffff" />
+        <directionalLight position={[-3, 2, 4]} intensity={0.35} color="#eef4ff" />
+
+        {/* The ice mark only shows what it reflects and bends, so it needs hard
+            light to catch: cold bright strips, and the warm sun low to the
+            left. Small and rendered once, so it costs almost nothing. */}
+        {/* A studio for the water to reflect: a dark blue-grey surround, so
+            its edges go dark, bright white strip lights down both sides for
+            the hard highlights, and big soft white sources above and in front. */}
+        {/* The project page's own studio lighting, so the marks are the same
+            water in the same light: bright narrow strips against a darker
+            surround, an offset second pair, an overhead sheet, and a cool fill
+            from behind. */}
+        <Environment resolution={MODEST ? 128 : 256} frames={1}>
+          {/* Darker than the project page's surround: this room is near white,
+              so the water's reflections need the dark to show against it. */}
+          <color attach="background" args={['#3c4a5a']} />
+          <Lightformer form="rect" intensity={7.5} color="#ffffff" scale={[0.42, 14, 1]} position={[-3.1, 0, 2.8]} rotation-y={Math.PI / 2} />
+          <Lightformer form="rect" intensity={5.2} color="#eaf4ff" scale={[0.32, 14, 1]} position={[3.1, 0.4, 2.2]} rotation-y={-Math.PI / 2} />
+          <Lightformer form="rect" intensity={3.4} color="#ffffff" scale={[0.18, 9, 1]} position={[-1.5, -0.6, 3.4]} rotation-y={Math.PI / 2} />
+          <Lightformer form="rect" intensity={2.8} color="#f2f8ff" scale={[0.16, 9, 1]} position={[1.9, 0.8, 3.2]} rotation-y={-Math.PI / 2} />
+          <Lightformer form="rect" intensity={3.2} color="#ffffff" scale={[9, 3.5, 1]} position={[0, 4.5, 1.5]} rotation-x={Math.PI / 2} />
+          <Lightformer form="ring" intensity={1.6} color="#cfe0f2" scale={7} position={[0, -1.5, -6]} />
+        </Environment>
 
         {/* The project page's own ice ground — base, dots, glow, wash, drifting
             smear and frost — so the rings sit on exactly the same white. */}
@@ -370,10 +444,17 @@ export default function RingsStage({ active, ringCut, ringFall, socials, index, 
 
         <Tunnel levels={levels} />
         <Drift count={MODEST ? 160 : 360} />
-        <RingRoom levels={levels} words={words} />
+        <RingRoom levels={levels} words={words} hover={overCase} touch={touch} />
 
         {socials.length > 0 && (
-          <SocialParticles socials={socials} index={index} levels={levels} reduced={reduced} />
+          <ParticleMark
+            socials={socials}
+            index={index}
+            levels={levels}
+            reduced={reduced}
+            touch={touch}
+            nudge={nudge}
+          />
         )}
 
         <PerformanceMonitor

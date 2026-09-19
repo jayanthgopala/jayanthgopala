@@ -25,6 +25,10 @@ export default function ScrollProvider({ children, locked = false }) {
   const ringNear = useRef(false); // Close enough to the rings to mount them
   const ringReady = useRef(false); // Ring scene prepared; until then the page ends at the last project
   const pageHeightRef = useRef(0);
+  // Set by WorkPage while its about/project stops are on screen: { lo, hi, snap }
+  // in document scroll px. The scroll may not run past the stops either side of
+  // what is displayed, and at rest it settles on `snap`. Null anywhere else.
+  const pageLeash = useRef(null);
 
   const [vh, setVh] = useState(() => (typeof window === 'undefined' ? 800 : window.innerHeight));
   const [pageHeight, setPageHeight] = useState(0);
@@ -47,6 +51,25 @@ export default function ScrollProvider({ children, locked = false }) {
       smoothWheel: !reduce,
       lerp: reduce ? 1 : 0.07,
       wheelMultiplier: 0.9,
+      // A fast flick on the project page used to carry the scroll several
+      // stops ahead of the page, which then slid past the introduction and the
+      // projects half seen. Each wheel delta is trimmed so the target never
+      // passes the next stop until the page has actually arrived at it.
+      virtualScroll: (data) => {
+        const leash = pageLeash.current;
+        if (!leash || !data.event.type.includes('wheel')) return true;
+        const from = instance.targetScroll;
+        let d = data.deltaY;
+        if (d > 0 && from + d > leash.hi) d = Math.max(0, leash.hi - from);
+        else if (d < 0 && from + d < leash.lo) d = Math.min(0, leash.lo - from);
+        if (d === 0) {
+          // Lenis would hand a zero delta back to the browser to scroll natively.
+          if (data.event.cancelable) data.event.preventDefault();
+          return false;
+        }
+        data.deltaY = d;
+        return true;
+      },
     });
 
     lenis.current = instance;
@@ -60,9 +83,12 @@ export default function ScrollProvider({ children, locked = false }) {
     const RELEASE = 3.6;
 
     let last = performance.now();
-    const state = { journey: 0, cut: 0, page: 0, ringCut: 0, ringFall: 0, ringNear: false };
+    const state = {
+      journey: 0, cut: 0, page: 0, ringCut: 0, ringFall: 0, ringNear: false,
+    };
 
     const IDLE_MS = 1200;
+    const PAGE_IDLE_MS = 450;
     const COMMIT = 0.5;
     const CUT_MIN_SECONDS = 1.2;
     // The fall follows the scroll with exponential easing, so it glides into
@@ -96,6 +122,17 @@ export default function ScrollProvider({ children, locked = false }) {
         if (instance.scroll > ringFrom) {
           instance.scrollTo(ringFrom, { immediate: true, force: true });
           scrollState(ringFrom, vhNow, state, pageHeightRef.current);
+        }
+      }
+
+      // Backstop for scrolling Lenis does not smooth (touch, keys, reduced motion).
+      const leash = pageLeash.current;
+      if (leash) {
+        const s = instance.scroll;
+        const held = s > leash.hi + 1 ? leash.hi : s < leash.lo - 1 ? leash.lo : null;
+        if (held !== null) {
+          instance.scrollTo(held, { immediate: true, force: true });
+          scrollState(held, vhRef.current, state, pageHeightRef.current);
         }
       }
 
@@ -133,7 +170,8 @@ export default function ScrollProvider({ children, locked = false }) {
         if (!settling && lastScroll < passPx && s >= passPx && s < endPx - 2) {
           settling = true;
           instance.scrollTo(endPx, {
-            duration: reduce ? 0 : 1.6,
+            // Unhurried enough to take in the view down on the room on the way.
+            duration: reduce ? 0 : 2.4,
             immediate: reduce,
             easing: easeInOut,
             onComplete: () => {
@@ -147,6 +185,29 @@ export default function ScrollProvider({ children, locked = false }) {
       page.current = state.page;
       total.current =
         instance.limit > 0 ? Math.min(1, Math.max(0, instance.scroll / instance.limit)) : 0;
+
+      // Resting between two stops on the project page leaves half of each
+      // object on screen, so once the wheel goes quiet it glides to the nearer.
+      const snapTo = pageLeash.current?.snap;
+      if (
+        !settling &&
+        snapTo != null &&
+        time - lastInput > PAGE_IDLE_MS &&
+        Math.abs(instance.velocity) < 0.2 &&
+        Math.abs(instance.scroll - snapTo) > 1
+      ) {
+        settling = true;
+        const gap = Math.abs(instance.scroll - snapTo) / vhRef.current;
+        instance.scrollTo(snapTo, {
+          duration: reduce ? 0 : 0.5 + gap * 0.8,
+          immediate: reduce,
+          easing: easeInOut,
+          onComplete: () => {
+            settling = false;
+          },
+        });
+        if (reduce) settling = false;
+      }
 
       // Auto-settle transition if scroll is paused mid-way
       if (
@@ -229,17 +290,31 @@ export default function ScrollProvider({ children, locked = false }) {
   const value = useMemo(
     () => ({
       progress, velocity, flight, cut, page, total, intro, lenis, setPageHeight,
-      ringCut, ringFall, ringNear, ringReady,
+      ringCut, ringFall, ringNear, ringReady, pageLeash,
     }),
     []
   );
 
+  // Development only: a handle for inspecting scenes from the console or an
+  // automated browser, where a background tab gets too few frames to scroll
+  // anywhere. Never present in a production build.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return undefined;
+    window.__worldScroll = value;
+    return () => {
+      delete window.__worldScroll;
+    };
+  }, [value]);
+
   // World and cut, the project page up to the ring cut, then the cut, the fall
-  // and the room. The last screen of that is the viewport itself.
+  // and the room the site ends in, plus the viewport itself — the page's last
+  // screen of scroll is the viewport, and without it the room would be cut
+  // short of its own length.
   const extent =
     (SEGMENTS.world + SEGMENTS.cut) * vh +
     ringsStart(pageHeight, vh) +
-    (RINGS.cut + RINGS.fall + RINGS.room) * vh;
+    (RINGS.cut + RINGS.fall + RINGS.room) * vh +
+    vh;
 
   return (
     <ScrollContext.Provider value={value}>

@@ -1,12 +1,12 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Vector2 } from 'three';
-import { buildTerrainGeometry, MOUND_AT, TERRAIN_SIZE } from '../lib/terrain.js';
+import { Vector2, Vector3, Vector4 } from 'three';
+import { buildTerrainGeometry, TERRAIN_SIZE, WATER_Y } from '../lib/terrain.js';
 import { iceMapsFor } from '../lib/baked.js';
-import { LOOK } from '../lib/lighting.js';
+import { LOOK, SUN_DIR } from '../lib/lighting.js';
+import { reflectPass, revealAt, revealDiscard } from '../lib/reveal.js';
 import { SHARED_WIND_GLSL, updateWindState } from '../lib/wind.js';
 import { useWorldScroll } from '../scroll/ScrollProvider.jsx';
-import { INTRO } from '../chapters.js';
 
 // Snow, rock, and crack tiling parameters
 const SNOW_TILE = 62;
@@ -80,6 +80,14 @@ const FOG_EDDY_STRENGTH = 34.0;
 
 // Injects world-space position varying into vertex and fragment shaders
 const worldSpace = (shader) => {
+  shader.uniforms.uReflecting = reflectPass;
+  shader.uniforms.uSunDir = { value: new Vector3(...SUN_DIR) };
+  shader.uniforms.uHaze = { value: new Vector3(...(LOOK.haze || [0.84, 0.89, 0.95])) };
+  shader.uniforms.uMistColor = { value: new Vector3(...LOOK.mist.color) };
+  shader.uniforms.uMistMax = { value: LOOK.mist.amount ?? 0.12 };
+  shader.uniforms.uHazeAmount = { value: LOOK.hazeAmount ?? 0.28 };
+  const alpen = LOOK.alpen.enabled ? LOOK.alpen : { color: [0, 0, 0], intensity: 0 };
+  shader.uniforms.uAlpen = { value: new Vector4(...alpen.color, alpen.intensity) };
   shader.vertexShader = `varying vec3 vFogWorld;
      ${shader.vertexShader}`.replace(
     '#include <begin_vertex>',
@@ -89,6 +97,13 @@ const worldSpace = (shader) => {
 
   shader.fragmentShader = `varying vec3 vFogWorld;
      uniform float uTime;
+     uniform float uReflecting;
+     uniform vec3 uSunDir;
+     uniform vec3 uHaze;
+     uniform vec3 uMistColor;
+     uniform float uMistMax;
+     uniform float uHazeAmount;
+     uniform vec4 uAlpen;
      uniform vec2 uCursorPos;
      uniform float uCursorForce;
      ${GROUND_FOG_GLSL}
@@ -138,7 +153,7 @@ const groundFog = (shader, windUniforms) => {
 
   shader.fragmentShader = shader.fragmentShader.replace(
     '#include <fog_fragment>',
-    `{
+    `if ( uReflecting < 0.5 ) {
        vec3 toFrag = vFogWorld - cameraPosition;
        float dist = length( toFrag );
        vec3 dir = toFrag / max( dist, 1e-4 );
@@ -191,8 +206,8 @@ const groundFog = (shader, windUniforms) => {
          totalFog += stepMist * iglooClearance;
        }
 
-       float mist = clamp( totalFog * 0.015, 0.0, 0.12 );
-       vec3 mistColor = vec3( 1.0, 1.0, 1.0 );
+       float mist = clamp( totalFog * 0.015, 0.0, uMistMax );
+       vec3 mistColor = uMistColor;
        gl_FragColor.rgb = mix(
          gl_FragColor.rgb,
          mistColor,
@@ -236,8 +251,7 @@ const screeAndSnow = (shader) => {
 
      // Base snow color with soft directional sun brightening
      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.930, 0.955, 0.985 ), lay * 0.45 );
-     vec3 sunLightDir = vec3( 0.3722, 0.6464, -0.6660 );
-     float sunFace = clamp( dot( wGeo, sunLightDir ), 0.0, 1.0 );
+     float sunFace = clamp( dot( wGeo, uSunDir ), 0.0, 1.0 );
      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0 ), smoothstep( 0.30, 0.92, sunFace ) * 0.22 );
      roughnessFactor = 0.96;
 
@@ -286,17 +300,41 @@ const screeAndSnow = (shader) => {
      // Subtle alpine blue-gray shading on steep couloirs
      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.68, 0.74, 0.82 ), bare * 0.35 * bareFade );
 
+     // Dark rock breaking through the snow on the ranges' steep faces, only
+     // where the look asks for it (the alpenglow looks carry exposed rock).
+     // Dark, warm-brown stone; the crag map only varies it, since the map
+     // itself is pale ice-rock and would read as more snow in the dusk light.
+     float rockGrain = dot( rockAlbedo, vec3( 0.299, 0.587, 0.114 ) );
+     vec3 rockTone = vec3( 0.052, 0.041, 0.035 ) * ( 0.55 + 0.9 * rockGrain );
+     // The far ranges are past the detail fades above, so their rock comes
+     // from slope and height alone, broken up so ribs and buttresses show.
+     float steepFace = 1.0 - smoothstep( 0.52, 0.72, wGeo.y );
+     float rangeHigh = smoothstep( 30.0, 90.0, vFogWorld.y );
+     float ribs = smoothstep( 0.46, 0.6, hillBed * 0.5 + hillFig * 0.5 + steepFace * 0.18 );
+     float rangeRock = steepFace * rangeHigh * ribs * rockZone;
+     float rockShow = clamp( max( paintedRock * 0.9 + body * 0.55, rangeRock * 1.4 ), 0.0, 0.95 ) * step( 0.001, uAlpen.w );
+     diffuseColor.rgb = mix( diffuseColor.rgb, rockTone, rockShow );
+
+     // Alpenglow: sunlit slopes high on the ranges take the low sun's colour.
+     float alpenHigh = smoothstep( 45.0, 260.0, vFogWorld.y );
+     diffuseColor.rgb += uAlpen.rgb * uAlpen.w * smoothstep( 0.15, 0.85, sunFace ) * alpenHigh * ( 1.0 - rockShow * 0.6 );
+
+     // The waterline: snow soaked dark just above the surface, and the short
+     // drop of the shelf edge showing as blue ice rather than snow.
+     float aboveWater = vFogWorld.y - ${WATER_Y.toFixed(1)};
+     float wet = 1.0 - smoothstep( 0.0, 1.8, aboveWater );
+     float iceEdge = ( 1.0 - smoothstep( 0.55, 0.9, wGeo.y ) ) * ( 1.0 - smoothstep( 0.8, 4.5, aboveWater ) );
+     diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.50, 0.70, 0.86 ), iceEdge * 0.7 );
+     diffuseColor.rgb *= mix( 1.0, 0.7, wet );
+     roughnessFactor = mix( roughnessFactor, 0.35, max( wet, iceEdge * 0.6 ) );
+
      // Atmospheric depth haze on distant mountains
-     float distHaze = smoothstep( 280.0, 1400.0, snowDist ) * 0.28;
-     diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.84, 0.89, 0.95 ), distHaze );
+     float distHaze = smoothstep( 280.0, 1400.0, snowDist ) * uHazeAmount;
+     diffuseColor.rgb = mix( diffuseColor.rgb, uHaze, distHaze );
 
      normal = normalize( normal );`
   );
 };
-
-// Opening reveal slab dimensions
-const SLAB_HALF = 34;
-const REVEAL_CELL = 2.5;
 
 // Discards fragments outside expanding reveal front
 const slabReveal = (shader, uReveal) => {
@@ -304,23 +342,7 @@ const slabReveal = (shader, uReveal) => {
   shader.fragmentShader = `uniform float uReveal;
      ${shader.fragmentShader}`.replace(
     /\}\s*$/,
-    `
-     {
-       float k = uReveal * uReveal;
-       vec2 d = abs( vFogWorld.xz - vec2( ${MOUND_AT[0].toFixed(1)}, ${MOUND_AT[1].toFixed(1)} ) );
-
-       // Quantized block frontier
-       float cellSize = ${REVEAL_CELL.toFixed(1)};
-       vec2 cell = floor( d / cellSize );
-       vec2 cc = ( cell + 0.5 ) * cellSize;
-       float reach = length( cc );
-
-       float jitter = fract( sin( dot( cell, vec2( 127.1, 311.7 ) ) ) * 43758.5453 );
-       float front = mix( ${SLAB_HALF.toFixed(1)}, 4200.0, k );
-       float outside = reach - front * ( 0.96 + 0.07 * jitter );
-
-       if ( outside > 0.0 ) discard;
-     }
+    `${revealDiscard('vFogWorld')}
    }`
   );
 };
@@ -344,7 +366,7 @@ export default function Terrain() {
     uCursorForce.current.value = ws.cursorForce;
 
     if (uReveal.current.value < 1) {
-      uReveal.current.value = Math.min(1, intro.current / INTRO.tail);
+      uReveal.current.value = revealAt(intro.current);
     }
   });
 

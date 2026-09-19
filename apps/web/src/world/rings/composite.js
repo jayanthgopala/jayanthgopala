@@ -32,6 +32,8 @@ export const COMPOSITE_FRAGMENT = /* glsl */ `
   uniform sampler2D tScene;
   uniform sampler2D tCut;
   uniform float uCut;
+  // The ending: the ring scene cutting away again, back to the world underneath.
+  uniform float uOut;
   uniform float uAspect;
   uniform float uReduced;
   uniform float uRing;
@@ -108,7 +110,7 @@ export const COMPOSITE_FRAGMENT = /* glsl */ `
   }
 
   void main() {
-    float p = uCut;
+    float p = min( uCut, 1.0 - uOut );
     vec2 uv = vUv;
     float jitter = hash21( gl_FragCoord.xy + fract( uTime ) * 61.0 );
 
@@ -126,8 +128,13 @@ export const COMPOSITE_FRAGMENT = /* glsl */ `
     vec2 uvTex = vec2( ( uv.x - 0.5 ) * uAspect + 0.5, uv.y );
     vec3 blk = texture2D( tCut, uvTex ).rgb;
 
+    // The ending opens the other way up: the world is revealed from the bottom
+    // of the screen to the top, so the wipe, its drag and the slide all flip.
+    float dirY = uOut > 0.0 ? -1.0 : 1.0;
+    float wipeY = uOut > 0.0 ? 1.0 - uv.y : uv.y;
+
     float slope = 0.2 * uAspect;
-    float x = uv.y + ( uv.x + ( blk.b * 2.0 - 1.0 ) * 0.4 ) * slope;
+    float x = wipeY + ( uv.x + ( blk.b * 2.0 - 1.0 ) * 0.4 ) * slope;
     float xn = ( x + 0.4 * slope ) / ( 1.0 + 1.8 * slope );
 
     float blurField = sweep( xn, 2.0, p );
@@ -141,7 +148,7 @@ export const COMPOSITE_FRAGMENT = /* glsl */ `
     float fibre = vnoise( vec2( uv.x * 6.0 + 7.3, uv.y * 120.0 ) );
     vec2 drag = vec2(
       streak * STRETCH * ( 0.35 + fibre ) * ( seam + 0.5 * wake ),
-      SMEAR * wake
+      SMEAR * wake * dirY
     );
 
     float r = 0.0;
@@ -161,7 +168,7 @@ export const COMPOSITE_FRAGMENT = /* glsl */ `
     vec3 scene = vec3( 0.0 );
     if ( cut > 0.0 ) {
       float q = 1.0 - p;
-      vec2 at = uv + vec2( streak * STRETCH * 0.12 * seam, PARALLAX * q * q + DISPLACE * ( 1.0 - shove ) );
+      vec2 at = uv + vec2( streak * STRETCH * 0.12 * seam, ( PARALLAX * q * q + DISPLACE * ( 1.0 - shove ) ) * dirY );
       scene = grade( smearScene( at, drag * 0.5, SPREAD * modulator * ( 1.0 - blurField ), jitter ) );
     }
 

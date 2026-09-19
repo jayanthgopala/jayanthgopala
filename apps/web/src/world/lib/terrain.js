@@ -401,8 +401,96 @@ function erodedHeight(x, z) {
   );
 }
 
+/**
+ * The fjord's surface. The eroded valley floor already dips under it in front
+ * of the igloo and in the channel behind, so flooding it leaves the igloo on
+ * its shelf with open water around — no re-bake needed.
+ */
+export const WATER_Y = 12;
+
+// Shore shaping: ground near the waterline is pushed away from it, up into a
+// low shelf or down under the surface, so the land meets the water with a
+// short drop — the edge of sea ice — rather than a long wet slope.
+const SHORE_CENTRE = WATER_Y - 0.3;
+const SHORE_LIFT = 1.2;
+const SHORE_EDGE = 0.8;
+const SHORE_REACH = 3;
+
+function shore(h) {
+  const t = h - SHORE_CENTRE;
+  if (Math.abs(t) > SHORE_REACH * 3) return h;
+  const envelope = Math.exp(-(t * t) / (SHORE_REACH * SHORE_REACH));
+  return h + SHORE_LIFT * Math.tanh(t / SHORE_EDGE) * envelope;
+}
+
+/**
+ * Open water between the igloo's shelf and the camera. The ridge that ran
+ * across here hid the fjord from the opening view; sinking it leaves the igloo
+ * on a shelf a short way out from its walls, with water all along the front.
+ */
+function frontWater(x, z, h) {
+  if (z < 260 || z > 400) return h;
+  const d = Math.hypot(x - MOUND_AT[0], z - MOUND_AT[1]);
+  const k =
+    smoothstep(40, 54, d) *
+    smoothstep(262, 280, z) *
+    (1 - smoothstep(372, 398, z)) *
+    (1 - smoothstep(190, 270, Math.abs(x + 10)));
+  if (k <= 0) return h;
+  // An uneven bed, shallow in places, so the shore shaping leaves a few low
+  // ice islands standing in it rather than one clean trench.
+  const bed = WATER_Y - 3.5 + noise(x * 0.028 + 7.1, z * 0.028 - 3.3) * 3.2;
+  return h + (Math.min(h, bed) - h) * k;
+}
+
+/**
+ * The igloo stands on a low shelf of sea ice rather than a hill: land around
+ * it is pressed down to a few units above the water, keeping only a trace of
+ * its relief, so from the water it reads as a flat slab with a short edge.
+ */
+const SHELF_TOP = WATER_Y + 1.6;
+const SHELF_KEEP = 0.12;
+
+function shelf(x, z, h) {
+  if (h <= SHELF_TOP) return h;
+  const d = Math.hypot(x - MOUND_AT[0], z - MOUND_AT[1]);
+  const k = 1 - smoothstep(105, 150, d);
+  if (k <= 0) return h;
+  const pressed = SHELF_TOP + (h - SHELF_TOP) * SHELF_KEEP;
+  return h + (pressed - h) * k;
+}
+
+/**
+ * A valley cut through the far ranges on the sun's bearing from the opening
+ * view, so the sun goes down low between two ranges instead of behind one.
+ * Measured from where the opening camera stands.
+ */
+export const VALLEY_FROM = [22, 362];
+export const VALLEY_U = 0.265;
+const VALLEY_AZIMUTH = (VALLEY_U - 0.5) * 2 * Math.PI;
+const VALLEY_CORE = 0.04; // radians either side at full depth
+const VALLEY_EDGE = 0.24; // radians where the flanks rejoin the range
+
+function valley(x, z, h) {
+  const dx = x - VALLEY_FROM[0];
+  const dz = z - VALLEY_FROM[1];
+  const dist = Math.hypot(dx, dz);
+  if (dist < 380 || h <= WATER_Y) return h;
+  let off = Math.abs(Math.atan2(dz, dx) - VALLEY_AZIMUTH);
+  if (off > Math.PI) off = 2 * Math.PI - off;
+  if (off > VALLEY_EDGE) return h;
+  const k = (1 - smoothstep(VALLEY_CORE, VALLEY_EDGE, off)) * smoothstep(380, 700, dist);
+  // Pressed toward a low floor that rises gently with distance.
+  const floor = WATER_Y + 6 + dist * 0.012;
+  return h + (Math.min(h, floor + (h - floor) * 0.12) - h) * k;
+}
+
 // Resolves final ground height including igloo pad and drift banking
 export function heightAt(x, z) {
+  return shore(shelf(x, z, frontWater(x, z, valley(x, z, padded(x, z)))));
+}
+
+function padded(x, z) {
   const dx = x - MOUND_AT[0];
   const dz = z - MOUND_AT[1];
   const d = Math.hypot(dx, dz);

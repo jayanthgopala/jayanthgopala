@@ -209,7 +209,9 @@ export function Tunnel({ levels }) {
     // Only once the camera is inside the shaft: seen from outside, the haze
     // reads as vertical streaks down the frame.
     const f = levels.current.f;
-    const level = smooth(0.12, 0.3, f) * (1 - smooth(FALL_PAST_LAST - 0.04, FALL_PAST_LAST + 0.1, f));
+    // Gone before the camera clears the last ring: still fading as it glided
+    // into the room, this wider tube read as a second jar around the glass case.
+    const level = smooth(0.12, 0.3, f) * (1 - smooth(FALL_PAST_LAST - 0.2, FALL_PAST_LAST - 0.06, f));
     material.uniforms.uTime.value = clock.elapsedTime;
     material.uniforms.uLevel.value = level;
     if (ref.current) ref.current.visible = level > 0.001;

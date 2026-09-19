@@ -103,6 +103,7 @@ export default function CameraRig({ begin = true }) {
     target.current.x += pointer.current.x * AIM_PARALLAX * lean;
     target.current.y += pointer.current.y * AIM_PARALLAX * 0.45 * lean;
 
+    // The first frame is snapped rather than swung into place.
     if (!started.current) {
       smoothedTarget.current.copy(target.current);
       started.current = true;

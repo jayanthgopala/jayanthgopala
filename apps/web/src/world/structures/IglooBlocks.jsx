@@ -6,8 +6,73 @@ import { heightAt } from '../lib/terrain.js';
 import { loadIgloo } from '../../igloo/Igloo.js';
 import { BlockPhysics } from '../../igloo/BlockPhysics.js';
 import { IglooInteraction } from '../../igloo/IglooInteraction.js';
-import { LOOK } from '../lib/lighting.js';
+import { LOOK, SUN_DIR } from '../lib/lighting.js';
 import { sound } from '../lib/sound.js';
+
+/** Where the igloo stands in the world, and which way its entrance faces. */
+export const IGLOO_AT = [-30, 252];
+export const IGLOO_YAW = 1.24;
+
+// Assembly, kept for a future arrival: each block waits its turn (lowest
+// courses first), then takes this much of the build to fly in from its scattered
+// start. Nothing drives it now that the site ends in the contact room.
+const ASSEMBLE_SPAN = 0.4;
+const ASSEMBLE_STAGGER = 0.6;
+
+/**
+ * Scattered starts for the assembly: every block somewhere above and outside
+ * its place, tumbling, with a turn that follows its height in the dome.
+ */
+function assemblyPlan(physics, radius) {
+  const n = physics.count;
+  const start = new Float32Array(n * 3);
+  const spin = new Float32Array(n * 3);
+  const delay = new Float32Array(n);
+  let seed = 7919;
+  const rand = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i < n; i += 1) {
+    const y = physics.rest[i * 3 + 1];
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+
+  for (let i = 0; i < n; i += 1) {
+    const o = i * 3;
+    const level = (physics.rest[o + 1] - minY) / Math.max(1e-3, maxY - minY);
+    delay[i] = ASSEMBLE_STAGGER * (level * 0.8 + rand() * 0.2);
+    const out = radius * (0.5 + rand());
+    // Offsets from the block's own place.
+    start[o] = physics.outward[o] * out + (rand() - 0.5) * radius * 0.8;
+    start[o + 1] = radius * (0.9 + rand() * 1.6);
+    start[o + 2] = physics.outward[o + 2] * out + (rand() - 0.5) * radius * 0.8;
+    for (let k = 0; k < 3; k += 1) spin[o + k] = (rand() - 0.5) * 6;
+  }
+  return { start, spin, delay };
+}
+
+/** Places every block along its flight home for a build progress of 0..1. */
+function placeAssembly(physics, plan, building) {
+  const { start, spin, delay } = plan;
+  for (let i = 0; i < physics.count; i += 1) {
+    const o = i * 3;
+    const t = Math.min(1, Math.max(0, (building - delay[i]) / ASSEMBLE_SPAN));
+    // Fast out of the scatter, settling gently into place.
+    const away = (1 - t) ** 3;
+    for (let k = 0; k < 3; k += 1) {
+      physics.offset[o + k] = start[o + k] * away;
+      physics.rot[o + k] = spin[o + k] * away;
+      physics.vel[o + k] = 0;
+      physics.rotVel[o + k] = 0;
+    }
+    physics.push[i] = 0;
+  }
+}
 
 // Interactive measurement network nodes and thresholds
 const MAX_NODES = 5;
@@ -33,7 +98,7 @@ const FOOTPRINT = 30;
 const SEAT_ARC = 24;
 const SEAT_BANDS = 4;
 
-function seatHeight(ax, az) {
+export function seatHeight(ax, az) {
   let top = -Infinity;
   for (let b = 0; b < SEAT_BANDS; b += 1) {
     const r = FOOTPRINT * (0.72 + (0.28 * b) / (SEAT_BANDS - 1));
@@ -49,6 +114,21 @@ function seatHeight(ax, az) {
 const worldVec = new Vector3();
 const projA = new Vector3();
 const projB = new Vector3();
+
+// Ice light terms in linear RGB: light scattered through the blocks, the rim,
+// and the lamp's glow through the joints. Only the sunset looks (the ones with
+// a sunward sky glow) carry them, so the overcast igloo stays as it was.
+const iceTerms = (on) => {
+  const rgb = (c) => c.map((v) => (on ? v : 0).toFixed(3)).join(', ');
+  return {
+    through: rgb([0.035, 0.07, 0.12]),
+    rim: rgb([0.26, 0.34, 0.5]),
+    seam: rgb([0.42, 0.3, 0.18]),
+    roughness: on ? 0.42 : 0.8,
+    env: on ? 0.75 : 0.45,
+  };
+};
+const ICE = iceTerms(Boolean(LOOK.sky.glow));
 
 // Custom ice shader customization: edge bevels, settled snow, sun facing, and internal illumination
 const iceShader = (shader) => {
@@ -99,7 +179,7 @@ const iceShader = (shader) => {
           'roughnessFactor = mix( roughnessFactor, 0.72, glossEdge * 0.35 );',
           'float bevel = smoothstep( 0.55, 1.00, vEdge );',
           'normal = normalize( mix( normal, vCorner, bevel * 0.75 ) );',
-          'vec3 sunDir = vec3( 0.3722, 0.6464, -0.6660 );',
+          `vec3 sunDir = vec3( ${SUN_DIR.map((c) => c.toFixed(4)).join(', ')} );`,
           'vec3 wNrm = inverseTransformDirection( normalize( vNormal ), viewMatrix );',
           'float sunDot = dot( wNrm, sunDir );',
           'float sunFace = clamp( sunDot, 0.0, 1.0 );',
@@ -117,6 +197,16 @@ const iceShader = (shader) => {
           'float archGlow = ( 0.70 + 0.30 * vExcite ) * vEntrance;',
           'float archRim = smoothstep( 0.84, 1.00, vEdge ) * archGlow;',
           'totalEmissiveRadiance += vec3( 1.00, 0.84, 0.52 ) * 4.60 * archRim;',
+          // Ice, not snow: sky light scattered through the blocks, a bright
+          // rim where the dome turns away, and the lamp leaking out through
+          // the joints between blocks as thin warm seams.
+          'float outerFace = 1.0 - innerFace;',
+          'float nv = clamp( dot( normal, normalize( vViewPosition ) ), 0.0, 1.0 );',
+          'float rim = pow( 1.0 - nv, 3.0 );',
+          `totalEmissiveRadiance += vec3( ${ICE.through} ) * outerFace * ( 0.6 + 0.4 * ( 1.0 - lying ) );`,
+          `totalEmissiveRadiance += vec3( ${ICE.rim} ) * rim * outerFace;`,
+          'float seam = smoothstep( 0.90, 1.00, vEdge ) * outerFace * ( 1.0 - lying * 0.7 );',
+          `totalEmissiveRadiance += vec3( ${ICE.seam} ) * seam;`,
         ].join('\n')
       );
 };
@@ -124,15 +214,15 @@ const iceShader = (shader) => {
 // Applies environment lighting and shader injections to igloo material
 function gradeForWorld(material, tint) {
   material.color = new Color(tint);
-  material.roughness = 0.8;
-  material.envMapIntensity = 0.45;
+  material.roughness = ICE.roughness;
+  material.envMapIntensity = ICE.env;
   material.onBeforeCompile = iceShader;
   material.needsUpdate = true;
 }
 
 export default function IglooBlocks({
-  at = [-30, 252],
-  yaw = 1.24,
+  at = IGLOO_AT,
+  yaw = IGLOO_YAW,
   tint = '#c2d6ea',
   lift = 0,
   onReady,

@@ -36,6 +36,8 @@ uniform float uTime;
 uniform float uSmear;
 uniform float uScroll;
 uniform float uDots; // 1 draws the dot lattice, 0 leaves it out
+uniform float uDark; // 0 the page's own colour, 1 fully toned down to uDarkTint
+uniform vec3 uDarkTint;
 uniform vec4 uGlaze[${GLAZE}]; // xy = screen uv, z = radius, w = strength
 
 uniform vec3 uIceBase;
@@ -170,6 +172,10 @@ void main() {
     c = mix(c, vec3(dot(c, vec3(0.3333))), veil * 0.3);
   }
 
+  // Toned down toward a darker grey by scaling, so the smear and frost keep
+  // their variation instead of being flattened into it.
+  c = mix(c, c * uDarkTint / max(uIceBase, vec3(0.001)), uDark);
+
   gl_FragColor = vec4(toLinear(clamp(c, 0.0, 1.0)), 1.0);
 
   #include <tonemapping_fragment>
@@ -188,7 +194,7 @@ const SPAN = 120;
  *   same screen-space ground is drawn on a sphere kept around the camera,
  *   instead of on a plane behind a camera that never moves.
  */
-export default function Backdrop({ scroll, followCamera = false }) {
+export default function Backdrop({ scroll, followCamera = false, darken }) {
   const { size, viewport } = useThree();
   const meshRef = useRef(null);
 
@@ -206,6 +212,8 @@ export default function Backdrop({ scroll, followCamera = false }) {
           uScroll: { value: 0 },
           // The ring shaft wants the ground without its dot lattice.
           uDots: { value: followCamera ? 0 : 1 },
+          uDark: { value: 0 },
+          uDarkTint: { value: rgb([0xa3, 0xab, 0xb6]) },
           uGlaze: { value: Array.from({ length: GLAZE }, () => new Vector4()) },
           uIceBase: { value: rgb(ICE_PAGE.base) },
           uIceDot: { value: rgba([...ICE_PAGE.dot.color, ICE_PAGE.dot.alpha]) },
@@ -245,6 +253,7 @@ export default function Backdrop({ scroll, followCamera = false }) {
     const dt = Math.min(delta, 0.05);
     const u = material.uniforms;
     u.uTime.value += dt;
+    u.uDark.value = darken?.current ?? 0;
     u.uViewport.value.set(size.width, size.height);
     u.uDpr.value = viewport.dpr;
     u.uScroll.value = (scroll?.current ?? 0) * 0.5;

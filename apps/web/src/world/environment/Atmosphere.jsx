@@ -31,7 +31,7 @@ export default function Atmosphere() {
         shadow-normalBias={0.85}
         shadow-radius={4}
         shadow-camera-near={1}
-        shadow-camera-far={620}
+        shadow-camera-far={900}
         shadow-camera-left={-430}
         shadow-camera-right={430}
         shadow-camera-top={430}

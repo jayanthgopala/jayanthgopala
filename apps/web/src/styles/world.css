@@ -167,6 +167,14 @@
 
 .w-rings.is-cutting { visibility: visible; }
 
+/* The mark is spun by dragging anywhere, and a drag across the room otherwise
+   sweeps a selection through the labels and leaves them highlighted. */
+.w-rings,
+.w-hud {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .w-rings-stage {
   position: absolute;
   inset: 0;
@@ -247,6 +255,109 @@
 
 .w-rings-link:hover,
 .w-rings-link:focus-visible { letter-spacing: 0.18em; }
+
+/* The switcher as the room frames it: the row spans the screen so the arrows
+   can sit either side of the mark at mid height, and the neighbouring labels
+   stand faded beside the bracketed one. */
+.w-rings-hud {
+  left: 0;
+  right: 0;
+  transform: none;
+}
+
+.w-rings.is-room .w-rings-hud { pointer-events: none; }
+.w-rings.is-room .w-rings-hud a,
+.w-rings.is-room .w-rings-hud button { pointer-events: auto; }
+
+.w-rings-switch { gap: clamp(18px, 3vw, 44px); }
+
+.w-rings-side {
+  min-width: 9ch;
+  text-align: center;
+  font-size: 0.92em;
+  opacity: 0.32;
+}
+
+.w-rings-arrow {
+  position: fixed;
+  top: 46%;
+  padding: 14px 10px;
+  font-size: inherit;
+  opacity: 0.7;
+}
+
+.w-rings-arrow.is-prev { left: max(16px, calc(50% - min(30vw, 420px))); }
+.w-rings-arrow.is-next { right: max(16px, calc(50% - min(30vw, 420px))); }
+
+.w-rings-line {
+  position: relative;
+  display: block;
+  width: clamp(40px, 5vw, 72px);
+  height: 1px;
+  background: currentColor;
+}
+
+.w-rings-line::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  border-top: 1px solid currentColor;
+}
+
+.w-rings-arrow.is-prev .w-rings-line::after {
+  left: 0;
+  border-left: 1px solid currentColor;
+  transform: rotate(-45deg);
+}
+
+.w-rings-arrow.is-next .w-rings-line::after {
+  right: 0;
+  border-right: 1px solid currentColor;
+  transform: rotate(45deg);
+}
+
+@media (max-width: 600px) {
+  .w-rings-side { display: none; }
+}
+
+/* In the white studio: thin grey type, no shadow. The room is a sweep now, so
+   type that needed a glow behind it to survive the ice only muddies it. */
+.w-rings-hud {
+  bottom: clamp(36px, 7vh, 84px);
+  color: #3f4954;
+}
+
+/* The current link carries the row: wider tracking and a little more size
+   than its neighbours, which sit back as context rather than as choices. */
+.w-rings-link {
+  font-weight: 500;
+  font-size: 1.06em;
+  letter-spacing: 0.26em;
+  transition: letter-spacing 320ms var(--w-ease, ease), color 320ms ease;
+}
+
+.w-rings-link:hover,
+.w-rings-link:focus-visible { letter-spacing: 0.34em; }
+
+/* The neighbours sit back, but not so far they vanish into the light pooling
+   on the floor behind them. */
+.w-rings-side {
+  opacity: 0.45;
+  font-size: 0.82em;
+  letter-spacing: 0.3em;
+}
+
+.w-rings-arrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #3f4954;
+}
 
 /* Fullscreen canvas stage wrapper */
 .w-stage {

@@ -2,11 +2,14 @@ import { Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { AdaptiveEvents, Preload } from '@react-three/drei';
 import Atmosphere from './environment/Atmosphere.jsx';
-import Sky from './environment/Sky.jsx';
+import Sky, { SunDisc } from './environment/Sky.jsx';
 import Clouds from './environment/Clouds.jsx';
 import Terrain from './environment/Terrain.jsx';
 import Scree from './environment/Scree.jsx';
-import Weather from './environment/Weather.jsx';
+import Weather, { MIST_LAYER } from './environment/Weather.jsx';
+import Water from './environment/Water.jsx';
+import Floes from './environment/Floes.jsx';
+import Shore from './structures/Shore.jsx';
 import Lattice from './environment/Lattice.jsx';
 import IglooBlocks from './structures/IglooBlocks.jsx';
 import CameraRig from './camera/CameraRig.jsx';
@@ -131,18 +134,24 @@ export default function Stage({ onIglooReady, begin = false, warm = false, onWar
           stencil: false,
         }}
         camera={{ fov: 42, near: 4, far: 2600, position: [0, 62, 330] }}
-        onCreated={({ gl }) => {
+        onCreated={({ gl, camera }) => {
           gl.toneMappingExposure = EXPOSURE;
+          // The mist lives on its own layer so the water's mirror leaves it out.
+          camera.layers.enable(MIST_LAYER);
         }}
       >
         <Suspense fallback={null}>
           <Sky />
           <Clouds />
+          <SunDisc />
           <Terrain />
           <Scree />
           <Weather />
+          <Water />
+          <Floes />
           <Atmosphere />
-          <IglooBlocks at={[-30, 252]} tint="#c2d6ea" onReady={onIglooReady} />
+          <IglooBlocks at={[-30, 252]} tint={LOOK.sky.glow ? '#c4d8ee' : '#c2d6ea'} onReady={onIglooReady} />
+          <Shore />
           <Preload all />
         </Suspense>
 

@@ -1,7 +1,12 @@
 import { useLayoutEffect, useMemo } from 'react';
 import { useThree } from '@react-three/fiber';
-import { LOOK } from '../lib/lighting.js';
+import { LOOK, sunVector } from '../lib/lighting.js';
 import {
+  AdditiveBlending,
+  Mesh,
+  PlaneGeometry,
+  ShaderMaterial,
+  Vector3,
   CanvasTexture,
   SRGBColorSpace,
   LinearFilter,
@@ -226,6 +231,20 @@ const auroraAt = (u, vs) => {
   return Math.min(1, (auroraShafts(u) * 0.85 + wash) * vert * bias * AUR.strength);
 };
 
+// Warm light the low sun throws across the sky: strongest on its bearing and
+// near the horizon, fading around the sky and upward. Zero for looks without it.
+const GLOW = LOOK.sky.glow;
+const glowAt = (u, vs) => {
+  if (!GLOW || !SUN) return 0;
+  let du = Math.abs(u - SUN[0]);
+  if (du > 0.5) du = 1.0 - du;
+  const across = (du * 2 * Math.PI) / LOOK.sky.glowWidth;
+  const up = (1 - vs) / LOOK.sky.glowHeight;
+  return Math.min(1, Math.exp(-across * across) * Math.exp(-Math.pow(up, 1.4)) * LOOK.sky.glowStrength);
+};
+
+const SUN_COLOR = LOOK.sunColor || [255, 250, 240];
+
 // Sun disc, inner corona, and atmospheric halo bloom
 const sunBloomAt = (u, vs) => {
   if (!SUN) return 0;
@@ -263,6 +282,8 @@ export default function Sky() {
         const i = (y * W + x) * 4;
 
         const c = [base[0], base[1], base[2]];
+        const glow = glowAt(u, v);
+        for (let k = 0; k < 3; k += 1) c[k] += (GLOW ? GLOW[k] - c[k] : 0) * glow;
         const aur = auroraAt(u, v);
         const cloud = LOOK.paintedCloud.enabled ? sampleField(clouds, u, v) : 0;
 
@@ -281,7 +302,6 @@ export default function Sky() {
 
         const sun = sunBloomAt(u, v);
         if (sun > 0) {
-          const SUN_COLOR = [255, 250, 240];
           for (let k = 0; k < 3; k += 1) {
             c[k] += (SUN_COLOR[k] - c[k]) * sun * 0.55;
           }
@@ -337,6 +357,8 @@ export function makeWinterSkyEnv() {
 
       if (v < 0.5) {
         c = skyRamp(v / 0.5);
+        const glow = glowAt(u, v / 0.5);
+        if (glow > 0) c = c.map((n, k) => n + (GLOW[k] - n) * glow);
 
         const aur = auroraAt(u, v / 0.5);
         if (aur > 0) {
@@ -347,7 +369,6 @@ export function makeWinterSkyEnv() {
 
         const sun = sunBloomAt(u, v / 0.5);
         if (sun > 0) {
-          const SUN_COLOR = [255, 250, 240];
           for (let k = 0; k < 3; k += 1) {
             c[k] += (SUN_COLOR[k] - c[k]) * sun * 0.55;
           }
@@ -373,4 +394,78 @@ export function makeWinterSkyEnv() {
   t.magFilter = LinearFilter;
   t.generateMipmaps = false;
   return t;
+}
+
+// Distance the disc is drawn at: inside the far plane, beyond every range.
+const SUN_DISTANCE = 2200;
+
+/**
+ * The sun itself, as an HDR disc that blooms, with its halo. It is placed
+ * from whichever camera is drawing it, so it sits at infinity for the view
+ * and, drawn again by the water's mirror, reflects as a column of light on
+ * the fjord. The ranges occlude it like any other far object.
+ */
+export function SunDisc() {
+  const disc = LOOK.sunDisc;
+  const mesh = useMemo(() => {
+    if (!disc) return null;
+    const dir = new Vector3(...sunVector(LOOK.sun)).normalize();
+    const radius = SUN_DISTANCE * Math.tan((disc.radius * Math.PI) / 180);
+    const half = radius * 8;
+    const material = new ShaderMaterial({
+      uniforms: {
+        uColor: { value: new Vector3(...SUN_COLOR.map((c) => c / 255)) },
+        uEdge: { value: radius / half },
+        uCore: { value: disc.core },
+        uHalo: { value: disc.halo },
+        uHaloWidth: { value: disc.haloWidth },
+      },
+      vertexShader: /* glsl */ `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        uniform vec3 uColor;
+        uniform float uEdge;
+        uniform float uCore;
+        uniform float uHalo;
+        uniform float uHaloWidth;
+        varying vec2 vUv;
+        void main() {
+          float r = length( vUv - 0.5 ) * 2.0;
+          float body = 1.0 - smoothstep( uEdge * 0.9, uEdge, r );
+          float halo = exp( -r * uHaloWidth ) * ( 1.0 - smoothstep( 0.8, 1.0, r ) );
+          gl_FragColor = vec4( uColor * ( body * uCore + halo * uHalo ), 1.0 );
+        }
+      `,
+      blending: AdditiveBlending,
+      transparent: true,
+      depthWrite: false,
+      fog: false,
+      toneMapped: false,
+    });
+    const m = new Mesh(new PlaneGeometry(half * 2, half * 2), material);
+    m.frustumCulled = false;
+    m.name = 'sun';
+    m.onBeforeRender = (renderer, scene, camera) => {
+      m.position.copy(camera.position).addScaledVector(dir, SUN_DISTANCE);
+      m.lookAt(camera.position);
+      m.updateMatrixWorld();
+    };
+    return m;
+  }, [disc]);
+
+  useLayoutEffect(
+    () => () => {
+      if (!mesh) return;
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+    },
+    [mesh]
+  );
+
+  return mesh ? <primitive object={mesh} /> : null;
 }
