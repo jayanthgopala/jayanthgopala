@@ -53,7 +53,7 @@ export async function loadIgloo({ base = '/igloo/', renderer, onProgress } = {})
     roughness: 0.82,
     metalness: 0.0,
     envMapIntensity: 0.38,
-    side: THREE.FrontSide,
+    side: THREE.DoubleSide,
     dithering: true,
   });
 

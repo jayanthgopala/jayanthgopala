@@ -80,7 +80,13 @@ const CLOUD_SHADER = /* glsl */ `
     // cloud gently veils the sun so it stays a soft atmospheric glow
     a *= mix( 1.0, 0.55, sunCore );
 
-    a *= smoothstep( 0.0, uHorizonFade, d.y );
+    // Below 0.06 the projection above is clamped and the pattern would stretch
+    // into vertical streaks, so the fade starts above that band, not at zero.
+    a *= smoothstep( 0.065, 0.065 + uHorizonFade, d.y );
+    // Clear overhead: the cloud lies in the lower sky, and the open water,
+    // mirroring straight up when looked down on, shows sky rather than a
+    // hard white cloud.
+    a *= 1.0 - 0.9 * smoothstep( 0.42, 0.78, d.y );
 
     gl_FragColor = vec4( col, a * uOpacity );
   }

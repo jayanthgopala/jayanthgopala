@@ -3,14 +3,13 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { Vector3 } from 'three';
 import { CAMERA_CURVE, INTRO, TARGET_CURVE } from '../chapters.js';
 import { useWorldScroll } from '../scroll/ScrollProvider.jsx';
-import { heightAt } from '../lib/terrain.js';
 
 // Camera controller interpolating position and look-at targets along spline curves
 const TARGET_LAMBDA = 2.0;
 const AIM_PARALLAX = 4.4;
 const GROUND_CLEARANCE = 2.4;
 const SETTLED = 0.0005;
-const INTRO_OFFSET = [-14, 176, -68];
+const INTRO_OFFSET = [0, 80, 50];
 
 // Quintic smootherstep easing
 const smootherstep = (k) => k * k * k * (k * (k * 6 - 15) + 10);
@@ -89,8 +88,9 @@ export default function CameraRig({ begin = true }) {
     }
 
     // Minimum ground clearance collision offset
-    const ground = heightAt(position.current.x, position.current.z) + GROUND_CLEARANCE;
-    if (position.current.y < ground) position.current.y = ground;
+    if (position.current.y < GROUND_CLEARANCE + 1.0) {
+      position.current.y = GROUND_CLEARANCE + 1.0;
+    }
 
     camera.position.copy(position.current);
 
@@ -103,7 +103,6 @@ export default function CameraRig({ begin = true }) {
     target.current.x += pointer.current.x * AIM_PARALLAX * lean;
     target.current.y += pointer.current.y * AIM_PARALLAX * 0.45 * lean;
 
-    // The first frame is snapped rather than swung into place.
     if (!started.current) {
       smoothedTarget.current.copy(target.current);
       started.current = true;

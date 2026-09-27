@@ -8,7 +8,7 @@
   --w-track: 0.22em;
   --w-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --w-ease: cubic-bezier(0.16, 1, 0.3, 1);
-  background: #b9c0c7;
+  background: #e5eef7;
   /* Hide scrollbar while preserving native scroll interaction */
   scrollbar-width: none;
 }
@@ -17,7 +17,7 @@
 
 /* Background matches scene atmosphere fog */
 :root[data-route='world'] body {
-  background: #b9c0c7;
+  background: #e5eef7;
 }
 
 /* Work page container */

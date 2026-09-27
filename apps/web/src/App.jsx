@@ -17,10 +17,10 @@ import { recordVisit } from './lib/visit.js';
 // Lazy load 3D world bundle to keep initial main bundle light
 const WorldSite = lazy(() => import('./world/WorldSite.jsx'));
 
-// Path-based route check for /world
+// Path-based route check for /world or /igloo
 const IS_WORLD =
   typeof window !== 'undefined' &&
-  window.location.pathname.replace(/\/+$/, '') === '/world';
+  (/^\/(world|igloo)\/?$/.test(window.location.pathname));
 
 const STATUS_POLL_MS = 60_000;
 

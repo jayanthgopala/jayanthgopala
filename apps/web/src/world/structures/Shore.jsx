@@ -1,41 +1,37 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import {
+  AdditiveBlending,
   BoxGeometry,
-  BufferGeometry,
   CanvasTexture,
-  CatmullRomCurve3,
   ConeGeometry,
   CylinderGeometry,
-  DoubleSide,
-  Float32BufferAttribute,
   IcosahedronGeometry,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   RepeatWrapping,
+  SphereGeometry,
+  SpriteMaterial,
   SRGBColorSpace,
-  TubeGeometry,
+  TorusGeometry,
   Vector3,
 } from 'three';
-import { WATER_Y, heightAt } from '../lib/terrain.js';
+import { WATER_Y, groundAt } from '../lib/terrain.js';
 import { makeNoise2D } from '../lib/noise.js';
 import { revealAt, withReveal } from '../lib/reveal.js';
 import { useWorldScroll } from '../scroll/ScrollProvider.jsx';
+import { DOCK } from '../lib/dock.js';
+import { WIND_DIR, gustAt } from '../lib/wind.js';
+import { sound } from '../lib/sound.js';
+import { createRng, ropeGeometry, screenX, snowDusted, spring } from './props.js';
 
-// The shore by the igloo's door: a lantern on a post, a crate, and a rowboat
-// tied to a line of dock posts. Everything is built here from primitives and
-// one painted wood texture — nothing is downloaded.
+// The shore by the igloo's door: a lantern on a post, and the line of dock
+// posts the runabout (Runabout.jsx) is tied to. Everything is built here from
+// primitives and one painted wood texture — nothing is downloaded.
 
 // Positions, from the door (which faces +x, toward the right of the opening
 // view) out to the water in front.
-const CRATE_AT = [2, 255.5];
 const POST_AT = [8, 259.5];
-const DOCK = [
-  [10, 277],
-  [21, 279],
-  [32, 281],
-  [43, 282.5],
-];
-const BOAT_AT = [26, 292];
 
 // Dark boulders about the shelf, snow lying on their tops: [x, z, size].
 const BOULDERS = [
@@ -46,14 +42,36 @@ const BOULDERS = [
   [15, 255, 2.3],
   [-21, 287, 1.4],
 ];
-const BOAT_YAW = 0.08;
 
-function createRng(seed) {
-  let s = seed;
-  return () => {
-    s = (s * 16807) % 2147483647;
-    return s / 2147483647;
-  };
+// The lantern swings on its chain like a pendulum: its natural rate (rad/s),
+// how quickly a swing dies away, how hard a gust leans on it, and how hard a
+// touch pushes it.
+const LAMP_RATE = 2.6;
+const LAMP_DAMP = 0.9;
+const LAMP_WIND = 1.9;
+const LAMP_PUSH = 0.028;
+const LAMP_MAX = 0.6;
+
+// The lantern's light, before its flicker.
+const LAMP_LIGHT = 760;
+
+/** A soft round glow, bright at the middle and gone by the edge. */
+function haloTexture() {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const g = canvas.getContext('2d');
+  const r = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  r.addColorStop(0, 'rgba(255, 236, 200, 1)');
+  r.addColorStop(0.18, 'rgba(255, 190, 110, 0.55)');
+  r.addColorStop(0.5, 'rgba(255, 150, 70, 0.14)');
+  r.addColorStop(1, 'rgba(255, 140, 60, 0)');
+  g.fillStyle = r;
+  g.fillRect(0, 0, size, size);
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
 }
 
 /** Weathered planks: four boards with grain, knots and dark seams. */
@@ -115,96 +133,6 @@ function woodTexture() {
   return texture;
 }
 
-/**
- * Snow settles on whatever faces up. Patched into each material along with
- * the reveal, so the props sit under the same dusting as the ground.
- */
-function snowDusted(material, uReveal, amount = 1) {
-  material.onBeforeCompile = (shader) => {
-    withReveal(shader, uReveal);
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <normal_fragment_maps>',
-      `#include <normal_fragment_maps>
-       {
-         vec3 up = inverseTransformDirection( normal, viewMatrix );
-         float settled = smoothstep( 0.55, 0.85, up.y ) * ${amount.toFixed(2)};
-         diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.92, 0.95, 0.99 ), settled );
-         roughnessFactor = mix( roughnessFactor, 0.92, settled );
-       }`
-    );
-  };
-  // Distinct cache key per dusting amount, since the amount is baked in.
-  material.customProgramCacheKey = () => `snow-${amount}`;
-  return material;
-}
-
-/**
- * A rowboat hull as one open shell: pointed at the bow, fuller at the stern,
- * the sheer rising toward both ends. Length along x, beam along z, up +y,
- * the gunwale's lowest point at y = 0.
- */
-function hullGeometry(length = 24, beam = 7.6, depth = 3) {
-  const nu = 28;
-  const nv = 14;
-  const positions = [];
-  const uvs = [];
-  const indices = [];
-
-  for (let i = 0; i <= nu; i += 1) {
-    const u = -1 + (2 * i) / nu;
-    // Fuller aft (u < 0) than forward.
-    const taper = Math.pow(Math.max(0, 1 - u * u), u < 0 ? 0.32 : 0.62);
-    const w = (beam / 2) * taper;
-    const d = depth * (1 - 0.35 * u * u);
-    const sheer = 0.5 * depth * u * u;
-    for (let j = 0; j <= nv; j += 1) {
-      const t = -Math.PI / 2 + (Math.PI * j) / nv;
-      positions.push((u * length) / 2, sheer - d * Math.cos(t) * (0.45 + 0.55 * taper), w * Math.sin(t));
-      uvs.push(i / nu * 3, j / nv);
-    }
-  }
-
-  for (let i = 0; i < nu; i += 1) {
-    for (let j = 0; j < nv; j += 1) {
-      const a = i * (nv + 1) + j;
-      const b = a + nv + 1;
-      indices.push(a, b, a + 1, b, b + 1, a + 1);
-    }
-  }
-
-  const geometry = new BufferGeometry();
-  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
-  geometry.setIndex(indices);
-  geometry.computeVertexNormals();
-  return geometry;
-}
-
-/** The hull's top edge on one side, for the gunwale rail. */
-function gunwaleCurve(side, length = 24, beam = 7.6, depth = 3) {
-  const points = [];
-  for (let i = 0; i <= 16; i += 1) {
-    const u = -1 + (2 * i) / 16;
-    const taper = Math.pow(Math.max(0, 1 - u * u), u < 0 ? 0.32 : 0.62);
-    points.push(new Vector3((u * length) / 2, 0.5 * depth * u * u, side * (beam / 2) * taper));
-  }
-  return new CatmullRomCurve3(points);
-}
-
-/** A rope hung between two points, sagging under its own weight. */
-function ropeGeometry(a, b, sag) {
-  const points = [];
-  for (let i = 0; i <= 12; i += 1) {
-    const t = i / 12;
-    const p = new Vector3().lerpVectors(a, b, t);
-    p.y -= Math.sin(Math.PI * t) * sag;
-    points.push(p);
-  }
-  return new TubeGeometry(new CatmullRomCurve3(points), 24, 0.2, 5, false);
-}
-
-const groundAt = (x, z) => heightAt(x, z);
-
 /** A lumpy stone: an icosphere pushed in and out by noise, flat shaded. */
 function boulderGeometry() {
   const noise = makeNoise2D(5813);
@@ -225,7 +153,7 @@ export default function Shore() {
   const { intro, cut } = useWorldScroll();
   const uReveal = useRef({ value: 0 });
   const lamp = useRef(null);
-  const boat = useRef(null);
+  const halo = useRef(null);
   const calm = useMemo(
     () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     []
@@ -241,11 +169,6 @@ export default function Shore() {
       new MeshStandardMaterial({ map: grain, color: '#6e5646', roughness: 0.9, metalness: 0 }),
       uReveal.current
     );
-    const hull = snowDusted(
-      new MeshStandardMaterial({ map: grain, color: '#9a7a62', roughness: 0.82, metalness: 0, side: DoubleSide }),
-      uReveal.current,
-      0.55
-    );
     const stone = snowDusted(
       new MeshStandardMaterial({ color: '#3a3431', roughness: 0.92, metalness: 0, flatShading: true }),
       uReveal.current,
@@ -257,20 +180,36 @@ export default function Shore() {
       0.5
     );
     const rope = snowDusted(
-      new MeshStandardMaterial({ color: '#8c7658', roughness: 0.95, metalness: 0 }),
+      new MeshStandardMaterial({ color: '#cbb48c', roughness: 0.95, metalness: 0 }),
       uReveal.current,
       0.3
     );
     // Lantern glass: hot enough to bloom and to throw a gold path on the water.
     const glass = new MeshStandardMaterial({
-      color: '#ffd89a',
-      emissive: '#ffae4a',
-      emissiveIntensity: 5.5,
+      color: '#ffd08a',
+      emissive: '#ff9838',
+      emissiveIntensity: 4.5,
       roughness: 0.2,
       metalness: 0,
     });
     glass.onBeforeCompile = (shader) => withReveal(shader, uReveal.current);
-    return { grain, wood, darkWood, hull, stone, iron, rope, glass };
+    // Snow lying in caps on whatever it can settle on.
+    const snow = new MeshStandardMaterial({ color: '#f1f5fb', roughness: 0.9, metalness: 0 });
+    snow.onBeforeCompile = (shader) => withReveal(shader, uReveal.current);
+    // Never drawn, only hit: a larger target round the lantern so it is
+    // easy to touch.
+    const hit = new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
+    // The glow in the cold air round the lantern: a soft warm halo, bright
+    // enough to bloom, that swings with it.
+    const halo = new SpriteMaterial({
+      map: haloTexture(),
+      color: '#ffb35c',
+      blending: AdditiveBlending,
+      transparent: true,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    return { grain, wood, darkWood, stone, iron, rope, glass, snow, hit, halo };
   }, []);
 
   const scene = useMemo(() => {
@@ -280,14 +219,6 @@ export default function Shore() {
     const postHeight = 17;
     const postTop = postBase + postHeight;
     const armLength = 5.2;
-
-    // Crate, seated on the highest of its corners so none of it floats.
-    const crate = { w: 6.2, h: 4.6, d: 4.6 };
-    let crateBase = -Infinity;
-    for (const [dx, dz] of [[-3, -2.2], [3, -2.2], [-3, 2.2], [3, 2.2], [0, 0]]) {
-      crateBase = Math.max(crateBase, groundAt(CRATE_AT[0] + dx, CRATE_AT[1] + dz));
-    }
-    crateBase -= 0.4;
 
     // Dock posts, driven into the bed and standing clear of the water.
     const rand = createRng(311);
@@ -307,13 +238,25 @@ export default function Shore() {
         ropeGeometry(new Vector3(a.x, a.top - 1.4, a.z), new Vector3(b.x, b.top - 1.4, b.z), 1.6)
       );
     }
-    // Mooring line from the second post down to the boat's bow.
-    const bow = new Vector3(BOAT_AT[0] + 11.5, WATER_Y + 2.4, BOAT_AT[1] - 0.9);
-    ropes.push(ropeGeometry(new Vector3(posts[2].x, posts[2].top - 1.8, posts[2].z), bow, 1.2));
+    // A low deck along the dock, a plank's width inshore of the posts and
+    // standing just clear of the ice, snowed over like everything else.
+    const deck = [];
+    for (let i = 0; i < posts.length - 1; i += 1) {
+      const a = posts[i];
+      const b = posts[i + 1];
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      deck.push({
+        x: (a.x + b.x) / 2,
+        z: (a.z + b.z) / 2 - 2.4,
+        length: Math.hypot(dx, dz) + 1.6,
+        yaw: -Math.atan2(dz, dx),
+      });
+    }
 
     return {
+      deck,
       post: { base: postBase, height: postHeight, top: postTop, arm: armLength },
-      crate: { ...crate, base: crateBase },
       posts,
       ropes,
     };
@@ -324,13 +267,14 @@ export default function Shore() {
       box: new BoxGeometry(1, 1, 1),
       pile: new CylinderGeometry(0.75, 0.85, 1, 10),
       cap: new CylinderGeometry(0.95, 0.8, 0.5, 10),
-      hull: hullGeometry(),
-      railL: new TubeGeometry(gunwaleCurve(1), 32, 0.26, 6, false),
-      railR: new TubeGeometry(gunwaleCurve(-1), 32, 0.26, 6, false),
       lanternCap: new ConeGeometry(1.05, 0.9, 4),
       lanternGlass: new CylinderGeometry(0.72, 0.72, 1.9, 4),
       chain: new CylinderGeometry(0.07, 0.07, 1.6, 4),
       boulder: boulderGeometry(),
+      wrap: new TorusGeometry(0.98, 0.2, 6, 14),
+      // A dome of snow with a rounded lip, for caps on posts and lids.
+      snowCap: new SphereGeometry(1, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2),
+      hitBall: new SphereGeometry(1, 8, 6),
     }),
     []
   );
@@ -339,30 +283,95 @@ export default function Shore() {
     () => () => {
       Object.values(geo).forEach((g) => g.dispose());
       scene.ropes.forEach((g) => g.dispose());
+      mats.halo.map.dispose();
       Object.values(mats).forEach((m) => m.dispose());
     },
     [geo, mats, scene]
   );
 
-  useFrame((state) => {
+  // Swing state, and a push waiting to be applied next frame.
+  const motion = useRef({ swingX: 0, swingXV: 0, swingZ: 0, swingZV: 0, pushLamp: [0, 0] });
+  const lantern = useRef(null);
+  const lampAt = useMemo(() => new Vector3(), []);
+
+  // A touch pushes the lantern the way the cursor is moving; a tap, with no
+  // movement, pushes it away from where it was touched. Returns the push.
+  const pushLamp = (e) => {
+    const clamp = (v) => Math.max(-30, Math.min(30, v));
+    let dx = e.nativeEvent?.movementX || 0;
+    let dy = e.nativeEvent?.movementY || 0;
+    if (!dx && !dy && lantern.current) {
+      lantern.current.getWorldPosition(lampAt);
+      dx = lampAt.x > e.point.x ? 14 : -14;
+    }
+    dx = clamp(dx);
+    dy = clamp(dy);
+    const m = motion.current;
+    m.pushLamp[0] += dx * LAMP_PUSH;
+    m.pushLamp[1] += dy * LAMP_PUSH * 0.6;
+    return Math.hypot(dx, dy) * LAMP_PUSH;
+  };
+  const brushLamp = (e) => {
+    e.stopPropagation();
+    pushLamp(e);
+  };
+  // Contact (the cursor arriving on it, or a tap) also knocks the lantern
+  // against its chain, as loud as the push is hard.
+  const strikeLamp = (e) => {
+    e.stopPropagation();
+    const push = pushLamp(e);
+    if (!lantern.current) return;
+    lantern.current.getWorldPosition(lampAt);
+    sound.lampTap(Math.min(1, push * 2.2), screenX(lampAt, e.camera));
+  };
+
+  useFrame((state, delta) => {
     uReveal.current.value = revealAt(intro.current);
     const t = state.clock.elapsedTime;
+    const dt = Math.min(delta, 1 / 30);
+    const m = motion.current;
+
     if (lamp.current) {
       // A candle's unsteadiness, and dark once the world is cut away.
       const flicker = calm ? 1 : 1 + Math.sin(t * 9.1) * 0.03 + Math.sin(t * 23.7) * 0.02;
-      lamp.current.intensity = 420 * flicker;
+      lamp.current.intensity = LAMP_LIGHT * flicker;
+      if (halo.current) halo.current.material.opacity = 0.55 * flicker;
       lamp.current.visible = cut.current < 0.999;
     }
-    if (boat.current && !calm) {
-      boat.current.position.y = WATER_Y + 1.0 + Math.sin(t * 0.6) * 0.14;
-      boat.current.rotation.x = Math.sin(t * 0.47 + 1.3) * 0.025;
-      boat.current.rotation.z = Math.sin(t * 0.39) * 0.012;
+    // Lantern: the breeze leans on it (a little always, a lot in a gust, with
+    // some flutter), and a touch sets it swinging. Still, with reduced motion.
+    if (lantern.current && !calm) {
+      const gust = gustAt(POST_AT[0], POST_AT[1], t);
+      const blow = (0.12 + gust) * LAMP_WIND * (1 + Math.sin(t * 3.3) * 0.18 * gust);
+      // Wind toward -x swings the bottom toward -x (negative about z); wind
+      // toward -z swings it toward -z (positive about x).
+      spring(m, 'swingZ', LAMP_RATE, LAMP_DAMP, WIND_DIR[0] * blow, dt);
+      spring(m, 'swingX', LAMP_RATE, LAMP_DAMP, -WIND_DIR[1] * blow, dt);
+      m.swingZV += m.pushLamp[0];
+      m.swingXV += m.pushLamp[1];
+      m.pushLamp[0] = 0;
+      m.pushLamp[1] = 0;
+      m.swingZ = Math.max(-LAMP_MAX, Math.min(LAMP_MAX, m.swingZ));
+      m.swingX = Math.max(-LAMP_MAX, Math.min(LAMP_MAX, m.swingX));
+      lantern.current.rotation.set(m.swingX, 0, m.swingZ);
+
+      // The hook creaks as fast as the lantern swings on it, and higher the
+      // harder the chain pulls: its weight, plus the swing's own pull (ω²).
+      const omega = Math.hypot(m.swingXV, m.swingZV);
+      lantern.current.getWorldPosition(lampAt);
+      sound.lamp({
+        speed: omega,
+        load: 1 + (omega * omega) / (LAMP_RATE * LAMP_RATE),
+        pan: screenX(lampAt, state.camera),
+        near: Math.min(1, 60 / Math.max(1, state.camera.position.distanceTo(lampAt))),
+      });
     }
   });
 
-  const { post, crate, posts, ropes } = scene;
+  const { post, posts, ropes, deck } = scene;
   const lanternX = POST_AT[0] + post.arm - 0.7;
-  const lanternY = post.top - 4.4;
+  // The lantern hangs from a hook under the arm's end and swings about it.
+  const hookY = post.top - 1.5;
 
   return (
     <group name="shore">
@@ -391,69 +400,64 @@ export default function Shore() {
           scale={[3.4, 0.6, 0.6]}
           castShadow
         />
-        {/* Lantern: chain, cap, glass and base, with the light it throws. */}
-        <mesh geometry={geo.chain} material={mats.iron} position={[lanternX, post.top - 2.3, POST_AT[1]]} />
+        {/* Snow along the arm and on the post's head */}
         <mesh
-          geometry={geo.lanternCap}
-          material={mats.iron}
-          position={[lanternX, lanternY + 1.35, POST_AT[1]]}
-          rotation={[0, Math.PI / 4, 0]}
-        />
-        <mesh
-          geometry={geo.lanternGlass}
-          material={mats.glass}
-          position={[lanternX, lanternY, POST_AT[1]]}
-          rotation={[0, Math.PI / 4, 0]}
+          geometry={geo.snowCap}
+          material={mats.snow}
+          position={[POST_AT[0] + post.arm / 2 - 0.3, post.top - 0.66, POST_AT[1]]}
+          scale={[(post.arm + 0.8) / 2, 0.4, 0.62]}
         />
         <mesh
-          geometry={geo.box}
-          material={mats.iron}
-          position={[lanternX, lanternY - 1.05, POST_AT[1]]}
-          scale={[1.3, 0.25, 1.3]}
+          geometry={geo.snowCap}
+          material={mats.snow}
+          position={[POST_AT[0], post.base + post.height, POST_AT[1]]}
+          scale={[0.95, 0.55, 0.95]}
         />
-        <pointLight
-          ref={lamp}
-          position={[lanternX, lanternY, POST_AT[1] + 0.2]}
-          color="#ffb45c"
-          intensity={420}
-          distance={80}
-          decay={2}
-        />
-      </group>
-
-      {/* Crate: board body, dark corner posts, and a lid proud of the sides. */}
-      <group position={[CRATE_AT[0], crate.base, CRATE_AT[1]]} rotation={[0, -0.18, 0]}>
-        <mesh
-          geometry={geo.box}
-          material={mats.wood}
-          position={[0, crate.h / 2, 0]}
-          scale={[crate.w, crate.h, crate.d]}
-          castShadow
-          receiveShadow
-        />
-        {[
-          [-1, -1],
-          [1, -1],
-          [-1, 1],
-          [1, 1],
-        ].map(([sx, sz]) => (
+        {/* Lantern on its hook: chain, cap, glass and base, with the light it
+            throws, all swinging together. */}
+        <group
+          ref={lantern}
+          position={[lanternX, hookY, POST_AT[1]]}
+          onPointerOver={strikeLamp}
+          onPointerMove={brushLamp}
+          onPointerDown={strikeLamp}
+        >
+          <mesh geometry={geo.chain} material={mats.iron} position={[0, -0.8, 0]} />
           <mesh
-            key={`${sx}${sz}`}
-            geometry={geo.box}
-            material={mats.darkWood}
-            position={[(sx * crate.w) / 2, crate.h / 2, (sz * crate.d) / 2]}
-            scale={[0.55, crate.h + 0.1, 0.55]}
-            castShadow
+            geometry={geo.lanternCap}
+            material={mats.iron}
+            position={[0, -1.55, 0]}
+            rotation={[0, Math.PI / 4, 0]}
           />
-        ))}
-        <mesh
-          geometry={geo.box}
-          material={mats.darkWood}
-          position={[0, crate.h + 0.25, 0]}
-          scale={[crate.w + 0.5, 0.5, crate.d + 0.5]}
-          castShadow
-          receiveShadow
-        />
+          <mesh
+            geometry={geo.snowCap}
+            material={mats.snow}
+            position={[0, -1.25, 0]}
+            scale={[0.55, 0.3, 0.55]}
+          />
+          <mesh
+            geometry={geo.lanternGlass}
+            material={mats.glass}
+            position={[0, -2.9, 0]}
+            rotation={[0, Math.PI / 4, 0]}
+          />
+          <mesh
+            geometry={geo.box}
+            material={mats.iron}
+            position={[0, -3.95, 0]}
+            scale={[1.3, 0.25, 1.3]}
+          />
+          <mesh geometry={geo.hitBall} material={mats.hit} position={[0, -2.6, 0]} scale={3.2} />
+          <sprite ref={halo} material={mats.halo} position={[0, -2.9, 0]} scale={[7, 7, 1]} />
+          <pointLight
+            ref={lamp}
+            position={[0, -2.9, 0.2]}
+            color="#ffa850"
+            intensity={LAMP_LIGHT}
+            distance={130}
+            decay={2}
+          />
+        </group>
       </group>
 
       {/* Boulders, half sunk in the shelf */}
@@ -481,32 +485,41 @@ export default function Shore() {
             castShadow
           />
           <mesh geometry={geo.cap} material={mats.wood} position={[0, p.top - p.base + 0.2, 0]} />
+          <mesh
+            geometry={geo.snowCap}
+            material={mats.snow}
+            position={[0, p.top - p.base + 0.42, 0]}
+            scale={[1.25, 0.85, 1.25]}
+          />
+          {/* Rope wound round the post where the lines are made fast */}
+          {[1.1, 1.55, 2.0].map((down) => (
+            <mesh
+              key={down}
+              geometry={geo.wrap}
+              material={mats.rope}
+              position={[0, p.top - p.base - down, 0]}
+              rotation={[Math.PI / 2, 0, down]}
+            />
+          ))}
         </group>
       ))}
       {ropes.map((g, i) => (
         <mesh key={i} geometry={g} material={mats.rope} castShadow />
       ))}
 
-      {/* Rowboat, afloat and tied off to the dock */}
-      <group ref={boat} position={[BOAT_AT[0], WATER_Y + 1.0, BOAT_AT[1]]} rotation={[0, BOAT_YAW, 0]}>
-        <mesh geometry={geo.hull} material={mats.hull} castShadow receiveShadow />
-        <mesh geometry={geo.railL} material={mats.darkWood} castShadow />
-        <mesh geometry={geo.railR} material={mats.darkWood} castShadow />
-        {/* Thwarts */}
-        {[-4.5, 2.5].map((x) => (
+      {/* The dock's deck: planks on the posts, snowed over */}
+      {deck.map((d, i) => (
+        <group key={i} position={[d.x, WATER_Y + 1.5, d.z]} rotation={[0, d.yaw, 0]}>
+          <mesh geometry={geo.box} material={mats.darkWood} scale={[d.length, 0.7, 4.2]} castShadow receiveShadow />
           <mesh
-            key={x}
-            geometry={geo.box}
-            material={mats.wood}
-            position={[x, -0.9, 0]}
-            scale={[1.6, 0.35, 6.4]}
-            castShadow
+            geometry={geo.snowCap}
+            material={mats.snow}
+            position={[0, 0.3, 0]}
+            scale={[d.length / 2, 0.55, 2.3]}
             receiveShadow
           />
-        ))}
-        {/* Snow lying in the bilge */}
-        <mesh geometry={geo.box} material={mats.wood} position={[-1, -2.1, 0]} scale={[14, 0.2, 3.2]} receiveShadow />
-      </group>
+        </group>
+      ))}
     </group>
   );
 }

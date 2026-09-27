@@ -271,10 +271,22 @@ export default function Sky() {
     const ctx = canvas.getContext('2d');
     const image = ctx.createImageData(W, H);
 
-    const clouds = buildCloudField();
+    // The painted cloud field is costly to build; only looks that paint
+    // clouds into the sky need it.
+    const clouds = LOOK.paintedCloud.enabled ? buildCloudField() : null;
 
+    let horizonRow = -1;
     for (let y = 0; y < H; y += 1) {
       const v = Math.min(1, y / (H - 1) / 0.5);
+      // Below the horizon every row is the same but for the dither, which
+      // repeats every other row: copy those instead of working them out again.
+      if (v === 1) {
+        if (horizonRow < 0) horizonRow = y;
+        else if (y - horizonRow >= 2) {
+          image.data.copyWithin(y * W * 4, (y - 2) * W * 4, (y - 1) * W * 4);
+          continue;
+        }
+      }
       const base = skyRamp(v);
 
       for (let x = 0; x < W; x += 1) {
@@ -285,7 +297,7 @@ export default function Sky() {
         const glow = glowAt(u, v);
         for (let k = 0; k < 3; k += 1) c[k] += (GLOW ? GLOW[k] - c[k] : 0) * glow;
         const aur = auroraAt(u, v);
-        const cloud = LOOK.paintedCloud.enabled ? sampleField(clouds, u, v) : 0;
+        const cloud = clouds ? sampleField(clouds, u, v) : 0;
 
         const lit = Math.pow(cloud, 0.7);
         for (let k = 0; k < 3; k += 1) {

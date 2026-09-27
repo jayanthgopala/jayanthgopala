@@ -43,6 +43,24 @@ const BLOOP = 0.06;
 const CUT_WHOOSH = 0.07;
 const CUT_SWELL = 0.05;
 
+// The lantern on its hook: the creak's level at a brisk swing, the hook's
+// ring frequency with the lantern hanging still, and a knock's level.
+const LAMP_CREAK = 0.05;
+const LAMP_CREAK_HZ = 780;
+const LAMP_TAP = 0.05;
+const LAMP_TAP_GAP = 0.09;
+
+// The runabout: water lapping the hull, the engine and the bow wash at full
+// speed, and a knock on the hull. The engine is a V8: idling at IDLE_RPM,
+// firing four times a revolution.
+const BOAT_LAP = 0.09;
+const BOAT_ENGINE = 0.07;
+const BOAT_WASH = 0.06;
+const BOAT_KNOCK = 0.12;
+const BOAT_KNOCK_GAP = 0.15;
+const IDLE_RPM = 650;
+const MAX_RPM = 4200;
+
 let ctx = null;
 let master = null;
 let voices = null;
@@ -101,6 +119,16 @@ function at(param, value, tau = 0.12) {
   param.setTargetAtTime(value, ctx.currentTime, tau);
 }
 
+/**
+ * Like at(), for values fed every frame: skips the automation event when the
+ * target has not moved, so a still scene schedules nothing.
+ */
+function glide(param, value, tau = 0.12) {
+  if (Math.abs(param.lastTarget - value) < 1e-4) return;
+  param.lastTarget = value;
+  param.setTargetAtTime(value, ctx.currentTime, tau);
+}
+
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 const ramp = (a, b, v) => {
   const t = clamp01((v - a) / (b - a));
@@ -144,6 +172,170 @@ function buildAir() {
 
   noiseSource().connect(band).connect(rolloff).connect(gain).connect(master);
   return { gain, band };
+}
+
+/**
+ * The lantern's hook creaking: iron rubbing on iron is stick-slip, so noise
+ * rung through the hook's two resonances and chopped at the rate it slips.
+ * Silent until the physics drives it (sound.lamp).
+ */
+function buildLamp() {
+  const pan = ctx.createStereoPanner();
+  pan.connect(master);
+
+  const gain = ctx.createGain();
+  gain.gain.value = 0;
+  gain.connect(pan);
+
+  const ringA = ctx.createBiquadFilter();
+  ringA.type = 'bandpass';
+  ringA.frequency.value = LAMP_CREAK_HZ;
+  ringA.Q.value = 22;
+  const ringB = ctx.createBiquadFilter();
+  ringB.type = 'bandpass';
+  ringB.frequency.value = LAMP_CREAK_HZ * 2.37;
+  ringB.Q.value = 30;
+  const ringBLevel = ctx.createGain();
+  ringBLevel.gain.value = 0.5;
+
+  const src = noiseSource();
+  src.connect(ringA).connect(gain);
+  src.connect(ringB).connect(ringBLevel).connect(gain);
+
+  // Stick-slip: the level pulses at the slip rate, which the swing sets.
+  const slip = ctx.createOscillator();
+  slip.type = 'sawtooth';
+  slip.frequency.value = 6;
+  const slipDepth = ctx.createGain();
+  slipDepth.gain.value = 0;
+  slip.connect(slipDepth).connect(gain.gain);
+  slip.start();
+
+  return { pan, gain, ringA, ringB, slip, slipDepth };
+}
+
+/**
+ * The runabout: water lapping its topsides, a V8 (two detuned saws and a
+ * sub-octave at the firing rate, through a low-pass that opens with the
+ * throttle, with the lope of its uneven firing pulsing the level) and the
+ * hiss of the bow wave. All silent until the physics drives them (sound.boat).
+ */
+function buildBoat() {
+  const pan = ctx.createStereoPanner();
+  pan.connect(master);
+
+  const lapBand = ctx.createBiquadFilter();
+  lapBand.type = 'bandpass';
+  lapBand.frequency.value = 180;
+  lapBand.Q.value = 0.9;
+  const lapLow = ctx.createBiquadFilter();
+  lapLow.type = 'lowpass';
+  lapLow.frequency.value = 420;
+  const lap = ctx.createGain();
+  lap.gain.value = 0;
+  noiseSource().connect(lapBand).connect(lapLow).connect(lap).connect(pan);
+
+  const engineTone = ctx.createBiquadFilter();
+  engineTone.type = 'lowpass';
+  engineTone.frequency.value = 140;
+  engineTone.Q.value = 1.2;
+  const engine = ctx.createGain();
+  engine.gain.value = 0;
+  engineTone.connect(engine).connect(pan);
+  const a = ctx.createOscillator();
+  a.type = 'sawtooth';
+  a.frequency.value = 38;
+  const b = ctx.createOscillator();
+  b.type = 'sawtooth';
+  b.frequency.value = 38 * 1.012;
+  const sub = ctx.createOscillator();
+  sub.type = 'sine';
+  sub.frequency.value = 19;
+  for (const osc of [a, b, sub]) {
+    osc.connect(engineTone);
+    osc.start();
+  }
+  // The lope: a V8's firing is uneven across its banks, so the level pulses
+  // at a quarter of the firing rate, strongest at idle.
+  const lope = ctx.createOscillator();
+  lope.type = 'triangle';
+  lope.frequency.value = 11;
+  const lopeDepth = ctx.createGain();
+  lopeDepth.gain.value = 0;
+  lope.connect(lopeDepth).connect(engine.gain);
+  lope.start();
+
+  const washBand = ctx.createBiquadFilter();
+  washBand.type = 'bandpass';
+  washBand.frequency.value = 1400;
+  washBand.Q.value = 0.5;
+  const wash = ctx.createGain();
+  wash.gain.value = 0;
+  noiseSource().connect(washBand).connect(wash).connect(pan);
+
+  return { pan, lap, engine, engineTone, a, b, sub, lope, lopeDepth, wash };
+}
+
+/** One contact of the lantern with its chain: tin and glass ringing out. */
+let lastTap = -1;
+function lampTap(power, panAt) {
+  const now = ctx.currentTime;
+  if (now - lastTap < LAMP_TAP_GAP) return;
+  lastTap = now;
+  fired.taps += 1;
+  const out = ctx.createStereoPanner();
+  out.pan.value = panAt * 0.8;
+  out.connect(master);
+  // Inharmonic partials, the higher ones dying first, as a struck plate does.
+  for (const [hz, share] of [[2310, 0.5], [3720, 0.3], [5890, 0.15]]) {
+    const osc = ctx.createOscillator();
+    osc.frequency.value = hz;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, LAMP_TAP * share * power), now + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.1 + 0.3 * share);
+    osc.connect(g).connect(out);
+    osc.start(now);
+    osc.stop(now + 0.45);
+  }
+}
+
+/** A hand on the hull: a low fibreglass thump and the click of contact. */
+let lastKnock = -1;
+function boatKnock(power, panAt) {
+  const now = ctx.currentTime;
+  if (now - lastKnock < BOAT_KNOCK_GAP) return;
+  lastKnock = now;
+  fired.knocks += 1;
+  const out = ctx.createStereoPanner();
+  out.pan.value = panAt * 0.8;
+  out.connect(master);
+
+  const thump = ctx.createOscillator();
+  thump.type = 'sine';
+  thump.frequency.setValueAtTime(95, now);
+  thump.frequency.exponentialRampToValueAtTime(52, now + 0.22);
+  const tg = ctx.createGain();
+  tg.gain.setValueAtTime(0.0001, now);
+  tg.gain.exponentialRampToValueAtTime(Math.max(0.0002, BOAT_KNOCK * power), now + 0.006);
+  tg.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+  thump.connect(tg).connect(out);
+  thump.start(now);
+  thump.stop(now + 0.5);
+
+  const click = ctx.createBufferSource();
+  click.buffer = noise;
+  const band = ctx.createBiquadFilter();
+  band.type = 'bandpass';
+  band.frequency.value = 650;
+  band.Q.value = 1.4;
+  const cg = ctx.createGain();
+  cg.gain.setValueAtTime(0.0001, now);
+  cg.gain.exponentialRampToValueAtTime(Math.max(0.0002, BOAT_KNOCK * 0.5 * power), now + 0.003);
+  cg.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+  click.connect(band).connect(cg).connect(out);
+  click.start(now);
+  click.stop(now + 0.06);
 }
 
 function getMusic() {
@@ -507,7 +699,21 @@ function build() {
     cut: buildCut(),
     futuristicText: buildFuturisticTextVoice(),
     water: buildWaterVoice(),
+    lamp: buildLamp(),
+    boat: buildBoat(),
   };
+  // Development only: the lantern's and the yacht's levels, for checking
+  // from an automated browser that the physics drives them.
+  if (import.meta.env.DEV) {
+    window.__soundLevels = () => ({
+      creak: voices.lamp.gain.gain.value,
+      lap: voices.boat.lap.gain.value,
+      engine: voices.boat.engine.gain.value,
+      wash: voices.boat.wash.gain.value,
+      taps: fired.taps,
+      knocks: fired.knocks,
+    });
+  }
   return true;
 }
 
@@ -852,7 +1058,7 @@ let ringLanded = false;
 
 // Telemetry and diagnostics counters
 const raw = { drive: 0, force: 0, flight: 0, progress: 0, rate: 0, strength: 0 };
-const fired = { hits: 0, bursts: 0 };
+const fired = { hits: 0, bursts: 0, taps: 0, knocks: 0 };
 
 export const sound = {
   get enabled() {
@@ -1096,6 +1302,68 @@ export const sound = {
     if (angSpeed > 0.06 && focus > 0.3) {
       triggerFluidBubble(angSpeed, focus);
     }
+  },
+
+  /**
+   * The lantern's creak, from its swing: `speed` its angular speed (rad/s),
+   * `load` the chain's pull relative to the lantern's weight, `pan` -1..1
+   * across the screen, `near` 0..1 with distance.
+   */
+  lamp({ speed = 0, load = 1, pan = 0, near = 1 } = {}) {
+    if (!on || !voices?.lamp) return;
+    const v = voices.lamp;
+    // Silent hanging still; a hook's pitch rises with the square root of the
+    // pull on it, like a string's.
+    const swing = clamp01((speed - 0.03) / 1.2);
+    const level = LAMP_CREAK * swing * near * (1 - page);
+    glide(v.gain.gain, level, 0.05);
+    glide(v.slipDepth.gain, level * 0.8, 0.05);
+    glide(v.slip.frequency, 5 + 30 * swing, 0.1);
+    const pitch = Math.sqrt(Math.max(1, load));
+    glide(v.ringA.frequency, LAMP_CREAK_HZ * pitch, 0.1);
+    glide(v.ringB.frequency, LAMP_CREAK_HZ * 2.37 * pitch, 0.1);
+    glide(v.pan.pan, pan * 0.8, 0.1);
+  },
+
+  /** A touch knocking the lantern, `power` 0..1 from the size of the push. */
+  lampTap(power = 0, pan = 0) {
+    if (!on || page >= 0.5 || power < 0.02) return;
+    lampTap(Math.min(1, power), pan);
+  },
+
+  /**
+   * The runabout, from its motion: `lap` how fast the hull moves through the
+   * water (0..1), `speed` 0 moored to 1 flat out, `throttle` 0 (engine off)
+   * to 1, `pan` -1..1 across the screen, `near` 0..1 with distance.
+   */
+  boat({ lap = 0, speed = 0, throttle = 0, pan = 0, near = 1 } = {}) {
+    if (!on || !voices?.boat) return;
+    const v = voices.boat;
+    const outside = (1 - page) * near;
+    const pace = clamp01(speed);
+    const open = clamp01(throttle);
+    glide(v.lap.gain, BOAT_LAP * clamp01(lap) * outside, 0.08);
+
+    // Revs from the throttle, and from the load of the hull once it is moving.
+    const running = open > 0;
+    const rpm = IDLE_RPM + (MAX_RPM - IDLE_RPM) * (0.55 * open + 0.45 * pace);
+    const firing = (rpm / 60) * 4;
+    const level = running ? BOAT_ENGINE * (0.35 + 0.65 * open) * outside : 0;
+    glide(v.engine.gain, level, 0.15);
+    glide(v.lopeDepth.gain, level * 0.6 * (1 - 0.8 * open), 0.15);
+    glide(v.lope.frequency, firing / 4, 0.2);
+    glide(v.a.frequency, firing / 2, 0.2);
+    glide(v.b.frequency, (firing / 2) * 1.012, 0.2);
+    glide(v.sub.frequency, firing / 4, 0.2);
+    glide(v.engineTone.frequency, 220 + 1400 * open, 0.2);
+    glide(v.wash.gain, BOAT_WASH * pace * pace * outside, 0.12);
+    glide(v.pan.pan, pan * 0.8, 0.1);
+  },
+
+  /** A touch knocking the hull, `power` 0..1 from the size of the push. */
+  boatKnock(power = 0, pan = 0) {
+    if (!on || page >= 0.5 || power < 0.02) return;
+    boatKnock(Math.min(1, power), pan);
   },
 
   // Interactive micro-droplets when cursor glides over 3D water surface

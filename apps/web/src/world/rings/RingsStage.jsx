@@ -34,7 +34,7 @@ const RING_DPR = Math.min(
   MODEST ? 1 : 1.25
 );
 import IceBackdrop from '../water/Backdrop.jsx';
-import { FALL_TOP, FOG, RING_Y } from './layout.js';
+import { FOG, LOGO_Y, RING_Y } from './layout.js';
 import { DESCENT_CURVE, DESCENT_U_LAST, DESCENT_U_TURN, FALL_PAST_LAST, descentU } from '../chapters.js';
 import { COMPOSITE_FRAGMENT, COMPOSITE_VERTEX } from './composite.js';
 import GlassRing from './GlassRing.jsx';
@@ -47,15 +47,10 @@ const smooth = (a, b, x) => {
   const t = clamp01((x - a) / (b - a));
   return t * t * (3 - 2 * t);
 };
-const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 const lerp = (a, b, t) => a + (b - a) * t;
 
 const UP = new Vector3(0, 1, 0);
 const DOWN_UP = new Vector3(0, 0, -1);
-const STRAIGHT_DOWN = new Vector3(0, -1, 0);
-// Direction from the lake view to the mark: very slightly upward, so the
-// horizon sits below centre and the mark floats against the sky and mountains.
-const ROOM_LOOK = new Vector3(0, 0.27, -6.0).normalize();
 
 /** How far the room view drifts with the cursor, sideways and up and down. */
 // Kept small: a slight parallax, not the camera wandering about the room.
@@ -73,10 +68,10 @@ const FOG_ROOM = new Color('#ffffff');
  * It opens steep over the first ring while that ring circles, and settles onto
  * the axis above it. From there it follows DESCENT_CURVE the whole way: down
  * through the first ring, easing off the axis through the rest, and sweeping
- * out into the room view in one continuous curve — no straight drop with a
- * hook at the bottom. The gaze turns from straight down toward the pedestal
- * gradually, from the middle ring on. Up is -Z while looking down so lookAt
- * never degenerates.
+ * out into the room view in one continuous arc — no straight drop with a
+ * hook at the bottom. The gaze holds the shaft's axis, so it turns from
+ * straight down onto the mark as the camera swings out, ending very slightly
+ * upward so the mark floats against the sky and mountains.
  */
 function Director({ fall, ringCut, levels }) {
   const camera = useThree((s) => s.camera);
@@ -85,9 +80,6 @@ function Director({ fall, ringCut, levels }) {
   const target = useMemo(() => new Vector3(), []);
   const up = useMemo(() => new Vector3(), []);
   const look = useMemo(() => new Vector3(), []);
-  const curvePos = useMemo(() => new Vector3(), []);
-  const curveTarget = useMemo(() => new Vector3(), []);
-  const curveUp = useMemo(() => new Vector3(), []);
   const lastY = useRef(null);
 
   // Cursor sway in the room: the target the pointer asks for, and where the
@@ -107,32 +99,27 @@ function Director({ fall, ringCut, levels }) {
     const f = fall.current;
     const t = clock.elapsedTime;
 
-    // Opening: settle from steep over the first ring onto its axis.
-    const a = easeInOut(smooth(0, 0.22, f));
-    pos.set(0, lerp(3.1, FALL_TOP, a), lerp(2.2, 0.001, a));
-    target.set(0, lerp(-1.65, -3.0, a), lerp(0.35, 0, a));
-    up.copy(DOWN_UP);
-
-    // Descent along the curve.
-    const u = descentU(f);
+    // One path the whole way: in from high above the first ring, curving
+    // down onto the shaft's axis (the ring a circle seen from above, the path
+    // dropping into its centre), through the rings and out into the room. It
+    // starts under the ring cut and carries straight on into the fall.
+    const u = descentU(f, ringCut.current);
     // How far the gaze has turned toward the lake. It stays straight down the
     // shaft until the camera is clear of the last ring, then levels out.
     const w = smooth(DESCENT_U_TURN, 1, u);
 
-    if (u > 0) {
-      DESCENT_CURVE.getPointAt(u, curvePos);
-      curvePos.x = Math.sin(t * 0.25) * 0.06 * w;
-      look.copy(STRAIGHT_DOWN).lerp(ROOM_LOOK, w).normalize();
-      curveTarget.copy(curvePos).add(look);
-      curveUp.copy(DOWN_UP).lerp(UP, w);
-
-      // Hand over from the opening to the curve over a short window, so the
-      // two never meet with a jump.
-      const k = smooth(0.2, 0.26, f);
-      pos.lerp(curvePos, k);
-      target.lerp(curveTarget, k);
-      up.lerp(curveUp, k);
-    }
+    DESCENT_CURVE.getPointAt(u, pos);
+    pos.x = Math.sin(t * 0.25) * 0.06 * w;
+    // The gaze holds a point on the shaft's axis: a little below the camera
+    // while it falls (straight down the shaft), settling on the mark as the
+    // camera swings out, so the view turns with the arc rather than pivoting.
+    const below = pos.y - 3.5;
+    const settle = smooth(LOGO_Y + 3.5, LOGO_Y - 0.5, below);
+    target.set(0, lerp(below, LOGO_Y + 0.35, settle), 0);
+    look.copy(target).sub(pos).normalize();
+    // Up is -Z while looking down, so lookAt never degenerates, and turns
+    // to world up as the gaze levels out.
+    up.copy(DOWN_UP).lerp(UP, smooth(0.12, 0.75, 1 - Math.abs(look.y)));
 
     // In the room the camera drifts with the cursor — left and right, up and
     // down — eased so it floats rather than tracks, while still facing the mark.

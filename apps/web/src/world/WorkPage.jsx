@@ -9,6 +9,7 @@ import { sound } from './lib/sound.js';
 import GlassCloseButton from './GlassCloseButton.jsx';
 import DetailBackdrop from './DetailBackdrop.jsx';
 import ExploreTextLens from './ExploreTextLens.jsx';
+import SoundToggle from './SoundToggle.jsx';
 // The project index, shown as water in the shape of each project's initial.
 // Scrolling moves between projects; clicking opens the one on screen.
 
@@ -44,13 +45,6 @@ const FOLLOW = 4.2;
  * being seen.
  */
 const MAX_RATE = 1.6;
-
-/**
- * How close, in projects, the page has to come to a stop before the scroll is
- * let on to the next one. Near enough that the object has landed and its labels
- * are up; not so near that a steady wheel waits on the last of the glide.
- */
-const ARRIVED = 0.08;
 
 const smoothstep = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -487,11 +481,9 @@ export default function WorkPage({ projects = [], content = {}, profile = {}, on
     let eased = null; // Damped follower of the raw scroll position.
     let leaving = 0;
     let last = performance.now();
-    const leash = { lo: 0, hi: 0, snap: null };
+    const leash = { lo: 0, hi: 0, snap: null, stops: [] };
     const lastStop = ABOUT_SPAN + Math.max(list.length - 1, 0);
     // Stops in page screens: the introduction, then one per project.
-    const stopAbove = (u) => (u < 0 ? 0 : u < ABOUT_SPAN ? ABOUT_SPAN : Math.floor(u - ABOUT_SPAN) + 1 + ABOUT_SPAN);
-    const stopBelow = (u) => (u <= ABOUT_SPAN ? 0 : Math.ceil(u - ABOUT_SPAN) - 1 + ABOUT_SPAN);
     const stopNearest = (u) =>
       u < ABOUT_SPAN / 2 ? 0 : Math.min(lastStop, Math.max(ABOUT_SPAN, ABOUT_SPAN + Math.round(u - ABOUT_SPAN)));
 
@@ -552,22 +544,27 @@ export default function WorkPage({ projects = [], content = {}, profile = {}, on
       const raw = eased;
       position.current = raw;
 
-      // Keep the scroll within a stop of what is on screen (see ScrollProvider).
+      // The page's stops, bounds and where to rest (see ScrollProvider): the
+      // wheel moves it one project at a time, and if it is ever left between
+      // two it eases onto the nearest.
       if (list.length === 0 || nextLeave > 0) {
         pageLeash.current = null;
       } else {
         const base = (SEGMENTS.world + SEGMENTS.cut) * step;
         // The cut's own settle lands 2px into the page.
         const toPx = (u) => (u <= 0 ? base + 2 : base + u * step);
+        // Every place the page rests, in scroll px: the introduction, then
+        // one per project. The wheel steps between them (see ScrollProvider).
+        leash.stops = [toPx(0)];
+        for (let k = 0; k < list.length; k += 1) leash.stops.push(toPx(ABOUT_SPAN + k));
         if (c < 0.999) {
           // Until the page has fully opened, nothing past the introduction.
           leash.lo = -Infinity;
           leash.hi = toPx(0);
           leash.snap = null;
         } else {
-          const at = raw + ABOUT_SPAN;
-          leash.hi = at >= lastStop - ARRIVED ? Infinity : toPx(stopAbove(at + ARRIVED));
-          leash.lo = at <= ARRIVED ? -Infinity : toPx(stopBelow(at - ARRIVED));
+          leash.hi = Infinity;
+          leash.lo = -Infinity;
           const u = page.current / step;
           if (u > 0.01 && u < lastStop) {
             leash.snap = toPx(stopNearest(u));

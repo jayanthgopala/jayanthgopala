@@ -1,5 +1,5 @@
 import { Vector3, CatmullRomCurve3 } from 'three';
-import { DIVE_START, FALL_TOP, RING_Y, ROOM_VIEW } from './rings/layout.js';
+import { FALL_TOP, RING_Y, ROOM_VIEW } from './rings/layout.js';
 
 // Camera waypoints, trajectory curves, and scroll act definitions.
 
@@ -19,7 +19,9 @@ export function actProgress(progress, act) {
 }
 
 // Scroll segments measured in screen heights
-export const SEGMENTS = { world: 0.25, cut: 1.2 };
+// The world stretch carries the boat's run and the camera flying ahead of it
+// before the cut (one scroll glides through it: see ScrollProvider).
+export const SEGMENTS = { world: 1.0, cut: 1.2 };
 
 // Cut transition milestones
 export const JOURNEY = { atCut: 0.17, end: 0.4 };
@@ -29,7 +31,9 @@ export const CUT_PARALLAX = 0.4;
 
 // Ring descent after the last project, in screen heights: a short lead past the
 // last project, the cut into the shaft, the fall, and the room it lands in.
-export const RINGS = { lead: 0.6, cut: 1.2, fall: 5.6, room: 1.15 };
+// Short, as igloo.inc's is: a brisk scroll carries from the last project down
+// the shaft into the room, and it all follows the scroll, both ways.
+export const RINGS = { lead: 0.3, cut: 0.8, fall: 2.4, room: 1.15 };
 
 /**
  * The camera's whole descent, as one curve: straight in at the top of the
@@ -39,12 +43,21 @@ export const RINGS = { lead: 0.6, cut: 1.2, fall: 5.6, room: 1.15 };
  * hook at the bottom. Points are (y, z); x stays on the axis.
  */
 const DESCENT_POINTS = [
+  // In from high above the first ring, curving down onto the axis: the ring
+  // seen from above as a circle the whole way, the path dropping into its
+  // centre (the opening, played across the ring cut).
+  [FALL_TOP + 4.6, 0.9],
+  [FALL_TOP + 2.2, 0.2],
   [FALL_TOP, 0],
   [RING_Y[0], 0],
-  [RING_Y[Math.floor(RING_Y.length / 2)], 0.12],
+  [RING_Y[Math.floor(RING_Y.length / 2)], 0.08],
   [RING_Y[RING_Y.length - 1], 0.3],
-  // Out of the shaft, sweeping down and back until level over the lake.
-  [ROOM_VIEW.y + 1.6, 2.2],
+  // Out of the shaft in one even arc, bending from falling to gliding, until
+  // level over the lake: no drop-then-hook.
+  [ROOM_VIEW.y + 3.3, 1.0],
+  [ROOM_VIEW.y + 2.0, 2.1],
+  [ROOM_VIEW.y + 1.0, 3.4],
+  [ROOM_VIEW.y + 0.35, 4.8],
   [ROOM_VIEW.y, ROOM_VIEW.z],
 ];
 
@@ -70,25 +83,25 @@ export const DESCENT_U_LAST = descentAt(RING_Y[RING_Y.length - 1]);
 /** Just clear of the last ring: the gaze stays down the shaft until here. */
 export const DESCENT_U_TURN = descentAt(RING_Y[RING_Y.length - 1] - 0.8);
 
-/** Descent position from fall progress: eased in and out across the dive. */
-export function descentU(fall) {
-  const t = Math.min(1, Math.max(0, (fall - DIVE_START) / (1 - DIVE_START)));
-  return t * t * (3 - 2 * t);
-}
+// The share of the descent played across the ring cut, in proportion to the
+// scroll each takes, so the pace carries straight on from one to the other.
+const CUT_SHARE = RINGS.cut / (RINGS.cut + RINGS.fall);
 
 /**
- * Fall progress at which the camera clears the last ring. Past it, the scroll
- * carries on into the room by itself.
+ * Descent position from the ring cut and the fall: one path at one pace,
+ * eased in under the cut and out into the room, never stopping in between.
  */
+export function descentU(fall, cut = 1) {
+  const c = Math.min(1, Math.max(0, cut));
+  const f = Math.min(1, Math.max(0, fall));
+  const q = CUT_SHARE * c + (1 - CUT_SHARE) * f;
+  return 0.5 - 0.5 * Math.cos(Math.PI * q);
+}
+
+/** Fall progress at which the camera clears the last ring. */
 export const FALL_PAST_LAST = (() => {
-  let lo = 0;
-  let hi = 1;
-  for (let i = 0; i < 32; i += 1) {
-    const mid = (lo + hi) / 2;
-    if (mid * mid * (3 - 2 * mid) < DESCENT_U_LAST) lo = mid;
-    else hi = mid;
-  }
-  return DIVE_START + (1 - DIVE_START) * ((lo + hi) / 2);
+  const q = Math.acos(1 - 2 * DESCENT_U_LAST) / Math.PI;
+  return Math.min(1, Math.max(0, (q - CUT_SHARE) / (1 - CUT_SHARE)));
 })();
 
 // Offset into the page scroll where the ring cut begins — just past the point
@@ -127,26 +140,25 @@ export function scrollState(scroll, vh, out = {}, pageHeight = 0) {
 }
 
 // Camera position waypoints across scroll progress
-// The opening frame is low over the water in front of the igloo, its door to
-// the right and the sun going down in the gap beyond; scrolling retreats up
-// and back from there.
+// The opening hero frame places the igloo centered in the landscape with a slightly
+// elevated camera looking down at the frosted dome and front-right warm entrance.
 const CAMERA_POINTS = [
-  [22, 26, 362],
-  [-2, 52, 418],
-  [12.2, 77.5, 453],
-  [18, 112, 524],
-  [22, 155, 588],
-  [27, 210, 660],
+  [-28, 20, 335],
+  [-28, 48, 400],
+  [-27, 85, 465],
+  [-25, 122, 535],
+  [-24, 168, 610],
+  [-22, 215, 680],
 ];
 
 // Camera look-at target waypoints across scroll progress
 const TARGET_POINTS = [
-  [-10, 22.5, 252],
-  [-18, 34, 250],
-  [-25, 43.5, 250.5],
-  [-26, 45, 251],
-  [-27, 47, 251.5],
-  [-28, 50, 252],
+  [-28, 8, 252],
+  [-28, 16, 252],
+  [-28, 26, 252],
+  [-28, 36, 252],
+  [-28, 45, 252],
+  [-28, 52, 252],
 ];
 
 const toVec = (p) => new Vector3(p[0], p[1], p[2]);

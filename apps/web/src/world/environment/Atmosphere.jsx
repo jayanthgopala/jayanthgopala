@@ -38,6 +38,14 @@ export default function Atmosphere() {
         shadow-camera-bottom={-430}
       />
 
+      {LOOK.fill && (
+        <directionalLight
+          position={LOOK.fill.position}
+          intensity={LOOK.fill.intensity}
+          color={LOOK.fill.color}
+        />
+      )}
+
       {/* Procedural environment map */}
       <Environment map={skyEnv} />
     </>

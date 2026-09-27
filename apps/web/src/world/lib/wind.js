@@ -44,6 +44,20 @@ export function updateWindState(state, delta) {
   return windState;
 }
 
+// Gusts: bands of stronger wind rolling down the valley along WIND_DIR, a
+// few seconds apart, bent a little across their width. 0 in the lulls, up to
+// 1 in a gust. The same field drives the drifting snow (GLSL below) and the
+// things it pushes, like the lantern, so they move together.
+export const GUST_SPEED = 24;
+
+export function gustAt(x, z, t) {
+  const along = x * WIND_DIR[0] + z * WIND_DIR[1] - t * GUST_SPEED;
+  const across = -x * WIND_DIR[1] + z * WIND_DIR[0];
+  const a = Math.pow(0.5 + 0.5 * Math.sin(along * 0.034 + Math.sin(across * 0.012) * 1.4), 6);
+  const b = Math.pow(0.5 + 0.5 * Math.sin(along * 0.021 + 2.1 + Math.sin(across * 0.02 + 1.0) * 1.1), 8);
+  return Math.min(1, a * 0.9 + b * 0.7);
+}
+
 // Shared GLSL functions injected into Terrain and Weather shaders
 export const SHARED_WIND_GLSL = /* glsl */ `
   #define SHARED_WIND_DIR vec2(-0.96, -0.28)
@@ -51,6 +65,15 @@ export const SHARED_WIND_GLSL = /* glsl */ `
   #define SHARED_EDDY_AT vec2(${IGLOO_EDDY_AT[0].toFixed(1)}, ${IGLOO_EDDY_AT[1].toFixed(1)})
   #define SHARED_EDDY_RADIUS ${IGLOO_EDDY_RADIUS.toFixed(1)}
   #define SHARED_EDDY_STRENGTH ${IGLOO_EDDY_STRENGTH.toFixed(1)}
+
+  // The gust field, as gustAt() in wind.js.
+  float sharedGust( vec2 p, float t ) {
+    float along = dot( p, SHARED_WIND_DIR ) - t * ${GUST_SPEED.toFixed(1)};
+    float across = -p.x * SHARED_WIND_DIR.y + p.y * SHARED_WIND_DIR.x;
+    float a = pow( 0.5 + 0.5 * sin( along * 0.034 + sin( across * 0.012 ) * 1.4 ), 6.0 );
+    float b = pow( 0.5 + 0.5 * sin( along * 0.021 + 2.1 + sin( across * 0.02 + 1.0 ) * 1.1 ), 8.0 );
+    return min( 1.0, a * 0.9 + b * 0.7 );
+  }
 
   // Evaluates wind warp displacement with turbulence, obstacle eddy, and cursor swirl
   vec2 evaluateWindWarp(vec3 p, float t, float speedFactor, vec2 cursorPos, float cursorForce) {

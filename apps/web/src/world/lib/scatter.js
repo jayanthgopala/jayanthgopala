@@ -1,5 +1,5 @@
 import { IcosahedronGeometry, Vector3 } from 'three';
-import { heightAt, MOUND_AT } from './terrain.js';
+import { groundAt, MOUND_AT } from './terrain.js';
 import { makeNoise2D, makeFbm } from './noise.js';
 
 // Procedural stone and rock scatter generation for terrain
@@ -81,14 +81,14 @@ const clusterAt = (x, z) => Math.min(1, Math.max(0, (clusterFbm(x * 0.014, z * 0
 // Slope gradient estimator
 function slopeAt(x, z) {
   const e = 2.4;
-  const dx = heightAt(x + e, z) - heightAt(x - e, z);
-  const dz = heightAt(x, z + e) - heightAt(x, z - e);
+  const dx = groundAt(x + e, z) - groundAt(x - e, z);
+  const dz = groundAt(x, z + e) - groundAt(x, z - e);
   return Math.hypot(dx, dz) / (2 * e);
 }
 
 // Add smaller satellite pebbles around main position
 function withSatellites(out, x, z, roll, rng) {
-  out.push({ x, z, y: heightAt(x, z), rng: roll, scale: 1 });
+  out.push({ x, z, y: groundAt(x, z), rng: roll, scale: 1 });
 
   const extra = Math.floor(rng() * 3.4);
   for (let k = 0; k < extra; k += 1) {
@@ -96,7 +96,7 @@ function withSatellites(out, x, z, roll, rng) {
     const d = 0.8 + rng() * 4.2;
     const sx = x + Math.cos(a) * d;
     const sz = z + Math.sin(a) * d;
-    out.push({ x: sx, z: sz, y: heightAt(sx, sz), rng: rng(), scale: 0.34 + rng() * 0.38 });
+    out.push({ x: sx, z: sz, y: groundAt(sx, sz), rng: rng(), scale: 0.34 + rng() * 0.38 });
   }
 }
 

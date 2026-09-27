@@ -70,6 +70,12 @@ export class IglooInteraction {
   }
 
   _onMove(e) {
+    // While the view is being dragged round (CameraRig), the pointer sweeping
+    // over the dome is looking, not touching: the blocks are left alone.
+    if (document.documentElement.classList.contains('is-looking')) {
+      if (this.inside) this._onLeave();
+      return;
+    }
     this._track(e);
   }
 

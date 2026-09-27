@@ -370,6 +370,7 @@ export function setBakedField(data) {
     x0: -TERRAIN_SIZE / 2,
     z0: TERRAIN_CENTER_Z - TERRAIN_SIZE / 2,
   };
+  grid = null;
 }
 
 // Bilinear interpolation across eroded heightfield grid
@@ -412,8 +413,8 @@ export const WATER_Y = 12;
 // low shelf or down under the surface, so the land meets the water with a
 // short drop — the edge of sea ice — rather than a long wet slope.
 const SHORE_CENTRE = WATER_Y - 0.3;
-const SHORE_LIFT = 1.2;
-const SHORE_EDGE = 0.8;
+const SHORE_LIFT = 0.6;
+const SHORE_EDGE = 1.8;
 const SHORE_REACH = 3;
 
 function shore(h) {
@@ -424,22 +425,32 @@ function shore(h) {
 }
 
 /**
- * Open water between the igloo's shelf and the camera. The ridge that ran
- * across here hid the fjord from the opening view; sinking it leaves the igloo
- * on a shelf a short way out from its walls, with water all along the front.
+ * The igloo's island: a flat, ragged floe of land a little wider than it is
+ * deep, with open sea all round it — in front, and behind it back to the
+ * ranges — before the hills rise again further out.
  */
-function frontWater(x, z, h) {
-  if (z < 260 || z > 400) return h;
-  const d = Math.hypot(x - MOUND_AT[0], z - MOUND_AT[1]);
-  const k =
-    smoothstep(40, 54, d) *
-    smoothstep(262, 280, z) *
-    (1 - smoothstep(372, 398, z)) *
-    (1 - smoothstep(190, 270, Math.abs(x + 10)));
+const ISLAND_AT = [-22, 258];
+const ISLAND_RX = 62;
+const ISLAND_RZ = 44;
+const ISLAND_EDGE = 0.16; // of a radius: how quickly land gives way to sea
+const SEA_REACH = [200, 280];
+
+function islandSea(x, z, h) {
+  const dx = x - ISLAND_AT[0];
+  const dz = z - ISLAND_AT[1];
+  const dist = Math.hypot(dx, dz);
+  if (dist > SEA_REACH[1]) return h;
+  const a = Math.atan2(dz, dx);
+  // Broken outline: broad lobes, and a finer jag along the edge.
+  const lobes =
+    1 +
+    noise(Math.cos(a) * 1.1 + 3.7, Math.sin(a) * 1.1 - 1.9) * 0.14 +
+    noise(Math.cos(a) * 4.3 - 6.2, Math.sin(a) * 4.3 + 2.4) * 0.05;
+  const e = Math.hypot(dx / ISLAND_RX, dz / ISLAND_RZ) / lobes;
+  const k = smoothstep(1, 1 + ISLAND_EDGE, e) * (1 - smoothstep(SEA_REACH[0], SEA_REACH[1], dist));
   if (k <= 0) return h;
-  // An uneven bed, shallow in places, so the shore shaping leaves a few low
-  // ice islands standing in it rather than one clean trench.
-  const bed = WATER_Y - 3.5 + noise(x * 0.028 + 7.1, z * 0.028 - 3.3) * 3.2;
+  // An uneven bed, shallow in places, so a few low ice islets stand in it.
+  const bed = WATER_Y - 4 + noise(x * 0.028 + 7.1, z * 0.028 - 3.3) * 3;
   return h + (Math.min(h, bed) - h) * k;
 }
 
@@ -448,7 +459,7 @@ function frontWater(x, z, h) {
  * it is pressed down to a few units above the water, keeping only a trace of
  * its relief, so from the water it reads as a flat slab with a short edge.
  */
-const SHELF_TOP = WATER_Y + 1.6;
+const SHELF_TOP = WATER_Y + 1.2;
 const SHELF_KEEP = 0.12;
 
 function shelf(x, z, h) {
@@ -485,9 +496,91 @@ function valley(x, z, h) {
   return h + (Math.min(h, floor + (h - floor) * 0.12) - h) * k;
 }
 
+/**
+ * Crags: the eroded ranges come out of the bake smooth and rounded, so their
+ * upper slopes get ridged noise on top — sharp crests, gullies and broken
+ * buttresses — growing with height so the valley floors stay smooth.
+ */
+const CRAG_FROM = 45;
+const CRAG_FULL = 170;
+
+function crags(x, z, h) {
+  if (h < CRAG_FROM) return h;
+  const k = smoothstep(CRAG_FROM, CRAG_FULL, h);
+  let sum = 0;
+  let amp = 1;
+  let freq = 0.0042;
+  let norm = 0;
+  for (let i = 0; i < 3; i += 1) {
+    // A rounded crease (soft |v|) so crests are ridges, not knife edges.
+    const v = noise(x * freq + i * 17.3, z * freq - i * 9.1);
+    const n = 1 - Math.sqrt(v * v + 0.007);
+    sum += n * n * amp;
+    norm += amp;
+    amp *= 0.4;
+    freq *= 2.1;
+  }
+  // Relief grows with height, but only so far: on the tall back ranges it
+  // would otherwise stand up as a row of spikes along the skyline.
+  return h + (sum / norm - 0.42) * k * Math.min(h * 0.3, 62);
+}
+
+/**
+ * Glacier fronts: away from the igloo's island, wherever land rises out of
+ * the frozen fjord it does so as a wall of ice — the ground steps up almost
+ * sheer from the waterline to a snowy terrace, then carries on up the range.
+ * The terrain shader colours the wall as blue ice (see the glacier block in
+ * environment/Terrain.jsx).
+ */
+const FRONT_FROM = [190, 280]; // distance from the igloo it grows in over
+const FRONT_HEIGHT = 22;
+const FRONT_STEP = [WATER_Y + 0.4, WATER_Y + 1.6];
+
+function glacierFront(x, z, h) {
+  if (h <= FRONT_STEP[0]) return h;
+  const d = Math.hypot(x - MOUND_AT[0], z - MOUND_AT[1]);
+  const k = smoothstep(FRONT_FROM[0], FRONT_FROM[1], d);
+  if (k <= 0) return h;
+  // Taller and shorter along its length, with a broken top edge.
+  const tall =
+    FRONT_HEIGHT *
+    (0.7 + 0.45 * noise(x * 0.006 + 2.3, z * 0.006 - 7.1) + 0.12 * noise(x * 0.05, z * 0.05));
+  // Full lift just above the waterline, easing off up the slopes so the
+  // ranges above keep their own shape.
+  const lift = smoothstep(FRONT_STEP[0], FRONT_STEP[1], h) * (1 - smoothstep(60, 160, h));
+  return h + tall * lift * k;
+}
+
+/**
+ * The land behind the igloo: a snowfield running from the island's back edge
+ * up to the foot of the ranges, so the igloo stands on the shore of the ranges
+ * rather than on an island. It fans out as it goes back, and stops short of
+ * the sun's valley on the right so the frozen fjord still reaches toward it.
+ * Returns how much of the snowfield is here (0..1) alongside the height.
+ */
+const BACK_X = [-240, 10]; // fully snowfield between these
+const BACK_FADE = [90, 60]; // fading out over this much further left / right
+
+function backland(x, z, h) {
+  const behind = MOUND_AT[1] - z;
+  if (behind < -20) return [h, 0];
+  const spread = Math.max(0, behind) * 0.25;
+  const left = smoothstep(BACK_X[0] - spread - BACK_FADE[0], BACK_X[0] - spread, x);
+  const right = 1 - smoothstep(BACK_X[1], BACK_X[1] + BACK_FADE[1], x);
+  const w = smoothstep(-20, 20, behind) * left * right;
+  if (w <= 0) return [h, 0];
+  // Rising gently toward the ranges, rolling a little.
+  const target =
+    WATER_Y + 1.4 + Math.max(0, behind) * 0.035 + noise(x * 0.012 + 4.4, z * 0.012 - 2.2) * 1.6;
+  return [h + Math.max(0, target - h) * w, w];
+}
+
 // Resolves final ground height including igloo pad and drift banking
 export function heightAt(x, z) {
-  return shore(shelf(x, z, frontWater(x, z, valley(x, z, padded(x, z)))));
+  const [h, back] = backland(x, z, shelf(x, z, islandSea(x, z, crags(x, z, valley(x, z, padded(x, z))))));
+  const shored = shore(h);
+  // No ice wall across the snowfield itself.
+  return shored + (glacierFront(x, z, shored) - shored) * (1 - back);
 }
 
 function padded(x, z) {
@@ -511,6 +604,51 @@ function padded(x, z) {
   return levelled + bank;
 }
 
+/**
+ * heightAt() over the terrain mesh's own vertices, worked out once. Everything
+ * else that needs the ground over a wide area (the water's depth map, the
+ * mist, the floes, the scatter) samples this instead of calling heightAt()
+ * again, which made up most of the time spent building the world.
+ */
+const GRID_SEGMENTS = 512;
+const GRID_N = GRID_SEGMENTS + 1;
+const GRID_STEP = TERRAIN_SIZE / GRID_SEGMENTS;
+const GRID_X0 = -TERRAIN_SIZE / 2;
+const GRID_Z0 = TERRAIN_CENTER_Z - TERRAIN_SIZE / 2;
+let grid = null;
+
+function heightGrid() {
+  if (grid) return grid;
+  const data = new Float32Array(GRID_N * GRID_N);
+  for (let j = 0; j < GRID_N; j += 1) {
+    for (let i = 0; i < GRID_N; i += 1) {
+      data[j * GRID_N + i] = heightAt(GRID_X0 + i * GRID_STEP, GRID_Z0 + j * GRID_STEP);
+    }
+  }
+  grid = data;
+  return grid;
+}
+
+/**
+ * The ground as the terrain mesh draws it: bilinear between its vertices.
+ * Cheap; falls back to heightAt() off the edge of the mesh.
+ */
+export function groundAt(x, z) {
+  const gx = (x - GRID_X0) / GRID_STEP;
+  const gz = (z - GRID_Z0) / GRID_STEP;
+  if (gx < 0 || gz < 0 || gx >= GRID_N - 1 || gz >= GRID_N - 1) return heightAt(x, z);
+  const data = heightGrid();
+  const i = Math.floor(gx);
+  const j = Math.floor(gz);
+  const fx = gx - i;
+  const fz = gz - j;
+  const a = data[j * GRID_N + i];
+  const b = data[j * GRID_N + i + 1];
+  const c = data[(j + 1) * GRID_N + i];
+  const d = data[(j + 1) * GRID_N + i + 1];
+  return (a + (b - a) * fx) * (1 - fz) + (c + (d - c) * fx) * fz;
+}
+
 // Generates displaced terrain mesh geometry
 export function buildTerrainGeometry(segments = 512, centerZ = TERRAIN_CENTER_Z) {
   const geometry = new PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, segments, segments);
@@ -518,7 +656,13 @@ export function buildTerrainGeometry(segments = 512, centerZ = TERRAIN_CENTER_Z)
   geometry.translate(0, 0, centerZ);
 
   const pos = geometry.attributes.position;
+  // The usual mesh sits exactly on the cached grid, vertex for vertex.
+  const cached = segments === GRID_SEGMENTS && centerZ === TERRAIN_CENTER_Z ? heightGrid() : null;
   for (let i = 0; i < pos.count; i += 1) {
+    if (cached) {
+      pos.setY(i, cached[i]);
+      continue;
+    }
     const x = pos.getX(i);
     const z = pos.getZ(i);
     pos.setY(i, heightAt(x, z));

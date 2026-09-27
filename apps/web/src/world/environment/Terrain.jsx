@@ -88,6 +88,15 @@ const worldSpace = (shader) => {
   shader.uniforms.uHazeAmount = { value: LOOK.hazeAmount ?? 0.28 };
   const alpen = LOOK.alpen.enabled ? LOOK.alpen : { color: [0, 0, 0], intensity: 0 };
   shader.uniforms.uAlpen = { value: new Vector4(...alpen.color, alpen.intensity) };
+  // Exposed rock: how much shows and its colour. Looks without the setting
+  // show dark rock only where they carry alpenglow, as before.
+  shader.uniforms.uRockShow = { value: LOOK.rock.show ?? (LOOK.alpen.enabled ? 1 : 0) };
+  shader.uniforms.uRockTone = { value: new Vector3(...(LOOK.rock.tone || [0.052, 0.041, 0.035])) };
+  const glacier = LOOK.glacier || { light: [0, 0, 0], deep: [0, 0, 0], amount: 0 };
+  shader.uniforms.uGlacierLight = { value: new Vector3(...glacier.light) };
+  shader.uniforms.uGlacierDeep = { value: new Vector4(...glacier.deep, glacier.amount) };
+  // A frozen fjord keeps the snow at its edge dry; open water soaks it dark.
+  shader.uniforms.uWetDark = { value: LOOK.ice ? 0.12 : 0.3 };
   shader.vertexShader = `varying vec3 vFogWorld;
      ${shader.vertexShader}`.replace(
     '#include <begin_vertex>',
@@ -104,6 +113,11 @@ const worldSpace = (shader) => {
      uniform float uMistMax;
      uniform float uHazeAmount;
      uniform vec4 uAlpen;
+     uniform float uRockShow;
+     uniform vec3 uRockTone;
+     uniform vec3 uGlacierLight;
+     uniform vec4 uGlacierDeep;
+     uniform float uWetDark;
      uniform vec2 uCursorPos;
      uniform float uCursorForce;
      ${GROUND_FOG_GLSL}
@@ -166,7 +180,9 @@ const groundFog = (shader, windUniforms) => {
 
        // Raymarching through mist volume
        float reach = min( dist, 1100.0 );
-       const int STEPS = 16;
+       // Few steps, jittered per pixel: each one is three wind warps and a
+       // gust, and the loop is unrolled when the shader compiles.
+       const int STEPS = 10;
        float dw = reach / float( STEPS );
        float totalFog = 0.0;
 
@@ -198,15 +214,17 @@ const groundFog = (shader, windUniforms) => {
          float hFar = exp( -max( p.y - ${FOG_BASE.toFixed(1)}, 0.0 ) / 65.0 );
          float fadeFar = smoothstep( 180.0, 380.0, t ) * ( 1.0 - smoothstep( 850.0, 1150.0, t ) );
 
-         float stepMist = nNear * 1.45 * fadeNear * hNear
-                        + nMid  * 1.25 * fadeMid  * hMid
+         // Gusts carry more snow through the near and middle air.
+         float gust = sharedGust( p.xz, uTime );
+         float stepMist = nNear * 1.45 * fadeNear * hNear * ( 0.6 + 1.6 * gust )
+                        + nMid  * 1.25 * fadeMid  * hMid * ( 0.8 + 0.8 * gust )
                         + nFar  * 0.90 * fadeFar  * hFar;
          float dDome = length( p.xz - vec2( -30.0, 252.0 ) ) - 23.0;
          float iglooClearance = smoothstep( 2.0, 16.0, dDome );
          totalFog += stepMist * iglooClearance;
        }
 
-       float mist = clamp( totalFog * 0.015, 0.0, uMistMax );
+       float mist = clamp( totalFog * 0.024, 0.0, uMistMax );
        vec3 mistColor = uMistColor;
        gl_FragColor.rgb = mix(
          gl_FragColor.rgb,
@@ -293,8 +311,8 @@ const screeAndSnow = (shader) => {
      float scour = fogFbm( vec2( vFogWorld.x * 0.0035 + vFogWorld.z * 0.0015,
                                  vFogWorld.z * 0.045 - vFogWorld.x * 0.018 ) );
 
-     diffuseColor.rgb *= mix( 0.94, 1.04, nearFormations * nearZone );
-     diffuseColor.rgb *= mix( 0.97, 1.03, scour * nearZone );
+     diffuseColor.rgb *= mix( 0.84, 1.06, nearFormations * nearZone );
+     diffuseColor.rgb *= mix( 0.92, 1.05, scour * nearZone );
      roughnessFactor = mix( roughnessFactor, 0.84, nearFormations * nearZone * 0.35 );
 
      // Subtle alpine blue-gray shading on steep couloirs
@@ -305,15 +323,43 @@ const screeAndSnow = (shader) => {
      // Dark, warm-brown stone; the crag map only varies it, since the map
      // itself is pale ice-rock and would read as more snow in the dusk light.
      float rockGrain = dot( rockAlbedo, vec3( 0.299, 0.587, 0.114 ) );
-     vec3 rockTone = vec3( 0.052, 0.041, 0.035 ) * ( 0.55 + 0.9 * rockGrain );
+     vec3 rockTone = uRockTone * ( 0.55 + 0.9 * rockGrain );
      // The far ranges are past the detail fades above, so their rock comes
      // from slope and height alone, broken up so ribs and buttresses show.
-     float steepFace = 1.0 - smoothstep( 0.52, 0.72, wGeo.y );
+     float steepFace = 1.0 - smoothstep( 0.42, 0.62, wGeo.y );
      float rangeHigh = smoothstep( 30.0, 90.0, vFogWorld.y );
      float ribs = smoothstep( 0.46, 0.6, hillBed * 0.5 + hillFig * 0.5 + steepFace * 0.18 );
      float rangeRock = steepFace * rangeHigh * ribs * rockZone;
-     float rockShow = clamp( max( paintedRock * 0.9 + body * 0.55, rangeRock * 1.4 ), 0.0, 0.95 ) * step( 0.001, uAlpen.w );
+     float rockShow = clamp( max( paintedRock * 0.9 + body * 0.55, rangeRock * 1.2 ), 0.0, 0.9 ) * uRockShow;
+     // Rocky ranges: dark stone in strata across the steeper faces, snow
+     // lying on the ledges between, strongest where the look asks for it.
+     float strata = smoothstep( 0.4, 0.62, fogFbm( vec2( vFogWorld.x * 0.016 + vFogWorld.y * 0.03, vFogWorld.z * 0.016 - vFogWorld.y * 0.02 ) ) );
+     // (The mesh is coarse this far out, so faces read gentler than they
+     // look: anything short of level counts.)
+     float ledges = 1.0 - smoothstep( 0.72, 0.94, wGeo.y );
+     rockShow = max( rockShow, ledges * strata * rangeHigh * rockZone * 0.95 * uRockShow );
      diffuseColor.rgb = mix( diffuseColor.rgb, rockTone, rockShow );
+
+     // Glacier fronts: the steep lower faces of the ranges are blue ice, not
+     // snow, streaked top to bottom where it has cracked and slumped.
+     if ( uGlacierDeep.w > 0.0 ) {
+       float gSteep = 1.0 - smoothstep( 0.62, 0.88, wGeo.y );
+       float gLow = smoothstep( ${WATER_Y.toFixed(1)} + 3.0, ${WATER_Y.toFixed(1)} + 12.0, vFogWorld.y )
+                  * ( 1.0 - smoothstep( 140.0, 260.0, vFogWorld.y ) );
+       float gFar = smoothstep( 110.0, 240.0, snowDist ) * ( 1.0 - smoothstep( 1400.0, 2000.0, snowDist ) );
+       vec2 gAlong = vec2( vFogWorld.x * 0.11 + vFogWorld.z * 0.11, vFogWorld.y * 0.015 );
+       float gStreak = fogNoise( gAlong ) * 0.65 + fogNoise( gAlong * vec2( 3.1, 1.7 ) + 4.3 ) * 0.35;
+       float glacier = gSteep * gLow * gFar * smoothstep( 0.25, 0.5, gStreak + gSteep * 0.25 ) * uGlacierDeep.w;
+       vec3 iceTone = mix( uGlacierDeep.rgb, uGlacierLight, smoothstep( 0.3, 0.85, gStreak ) * 0.65 + sunFace * 0.35 );
+       diffuseColor.rgb = mix( diffuseColor.rgb, iceTone, glacier );
+       roughnessFactor = mix( roughnessFactor, 0.45, glacier );
+       rockShow = max( rockShow, glacier );
+
+       // Steep faces turned from the low sun fall into blue shade; flat snow,
+       // which the low sun only grazes anyway, stays white.
+       float shadeFace = ( 1.0 - smoothstep( 0.45, 0.95, wGeo.y ) ) * ( 1.0 - smoothstep( 0.0, 0.45, sunFace ) );
+       diffuseColor.rgb *= mix( vec3( 1.0 ), vec3( 0.88, 0.93, 1.03 ), shadeFace );
+     }
 
      // Alpenglow: sunlit slopes high on the ranges take the low sun's colour.
      float alpenHigh = smoothstep( 45.0, 260.0, vFogWorld.y );
@@ -325,8 +371,14 @@ const screeAndSnow = (shader) => {
      float wet = 1.0 - smoothstep( 0.0, 1.8, aboveWater );
      float iceEdge = ( 1.0 - smoothstep( 0.55, 0.9, wGeo.y ) ) * ( 1.0 - smoothstep( 0.8, 4.5, aboveWater ) );
      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.50, 0.70, 0.86 ), iceEdge * 0.7 );
-     diffuseColor.rgb *= mix( 1.0, 0.7, wet );
+     diffuseColor.rgb *= 1.0 - uWetDark * wet;
      roughnessFactor = mix( roughnessFactor, 0.35, max( wet, iceEdge * 0.6 ) );
+
+     // Snow crystals glinting near the eye (each from its own angle, so they
+     // twinkle as the view moves), and the hollows between drifts in blue shade.
+     float glint = step( 0.992, fogHash( floor( vFogWorld.xz * 6.0 ) + floor( normalize( vViewPosition ).xy * 24.0 ) ) );
+     diffuseColor.rgb += vec3( 1.0, 0.96, 0.88 ) * glint * nearZone * lay * 1.2;
+     diffuseColor.rgb *= mix( vec3( 1.0 ), vec3( 0.84, 0.9, 1.0 ), ( 1.0 - smoothstep( 0.3, 0.62, nearDrift ) ) * nearZone * 0.8 );
 
      // Atmospheric depth haze on distant mountains
      float distHaze = smoothstep( 280.0, 1400.0, snowDist ) * uHazeAmount;

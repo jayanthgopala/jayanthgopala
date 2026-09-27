@@ -1,10 +1,14 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { BufferAttribute, BufferGeometry } from 'three';
-import { heightAt } from '../lib/terrain.js';
+import { BufferAttribute, BufferGeometry, ShaderMaterial } from 'three';
+import { MOUND_AT, heightAt } from '../lib/terrain.js';
+import { SLAB_HALF, revealAt } from '../lib/reveal.js';
+import { MIST_LAYER } from './Weather.jsx';
 import { useWorldScroll } from '../scroll/ScrollProvider.jsx';
 
 // Spatial wireframe lattice survey grid that dissolves during camera descent
+
+const OPACITY = 0.5;
 
 // Grid cell sizing
 const CELL_SIZE = 7.4;
@@ -62,44 +66,80 @@ function buildLattice(at) {
   return g;
 }
 
+// Drawn only where the world has not arrived yet: brightest right at the
+// reveal's frontier, fading out ahead of it and with distance, so the grid
+// reads as the survey the world is being built onto rather than lines laid
+// over the finished scene.
+const LATTICE_VERT = /* glsl */ `
+  varying vec3 vWorld;
+  void main() {
+    vec4 world = modelMatrix * vec4( position, 1.0 );
+    vWorld = world.xyz;
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`;
+
+const LATTICE_FRAG = /* glsl */ `
+  uniform float uReveal;
+  uniform float uOpacity;
+  varying vec3 vWorld;
+  void main() {
+    float k = uReveal * uReveal;
+    float front = mix( ${SLAB_HALF.toFixed(1)}, 4200.0, k );
+    float beyond = length( vWorld.xz - vec2( ${MOUND_AT[0].toFixed(1)}, ${MOUND_AT[1].toFixed(1)} ) ) - front;
+    float ahead = smoothstep( -1.0, 5.0, beyond );
+    float edge = exp( -max( beyond, 0.0 ) / 45.0 );
+    float alpha = ahead * ( 0.25 + 0.75 * edge ) * uOpacity;
+    if ( alpha < 0.004 ) discard;
+    gl_FragColor = vec4( 0.9, 0.95, 1.0, alpha );
+  }
+`;
+
 export default function Lattice({ at = [-30, 252], seconds = 3.6 }) {
   const lines = useRef(null);
   const done = useRef(false);
   const { intro } = useWorldScroll();
 
   const geometry = useMemo(() => buildLattice(at), [at]);
+  const material = useMemo(
+    () =>
+      new ShaderMaterial({
+        vertexShader: LATTICE_VERT,
+        fragmentShader: LATTICE_FRAG,
+        uniforms: { uReveal: { value: 0 }, uOpacity: { value: OPACITY } },
+        transparent: true,
+        depthWrite: false,
+        toneMapped: false,
+      }),
+    []
+  );
 
   useFrame(() => {
     const mesh = lines.current;
     if (!mesh || done.current) return;
+    material.uniforms.uReveal.value = revealAt(intro.current);
 
-    if (intro.current <= 0) {
-      mesh.material.opacity = 0.55;
-      return;
-    }
-
-    // Quadratic fade synced to intro clock
-    const k = Math.min(1, intro.current / seconds);
+    // Faded out as the intro ends, then gone for good.
+    const k = Math.min(1, Math.max(0, intro.current) / seconds);
     const left = 1 - k;
-    mesh.material.opacity = 0.55 * left * left;
+    material.uniforms.uOpacity.value = OPACITY * left * left;
 
     if (k >= 1) {
       done.current = true;
       mesh.visible = false;
       geometry.dispose();
+      material.dispose();
     }
   });
 
   return (
-    <lineSegments ref={lines} geometry={geometry} frustumCulled={false}>
-      {/* Depth test enabled to occlude behind igloo structure */}
-      <lineBasicMaterial
-        color="#ffffff"
-        transparent
-        opacity={0.55}
-        depthWrite={false}
-        toneMapped={false}
-      />
-    </lineSegments>
+    <lineSegments
+      ref={lines}
+      geometry={geometry}
+      material={material}
+      frustumCulled={false}
+      // On the mist's layer, which the water's mirror does not draw.
+      onUpdate={(mesh) => mesh.layers.set(MIST_LAYER)}
+    />
   );
 }

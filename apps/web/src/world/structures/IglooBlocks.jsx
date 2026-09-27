@@ -99,38 +99,24 @@ const SEAT_ARC = 24;
 const SEAT_BANDS = 4;
 
 export function seatHeight(ax, az) {
-  let top = -Infinity;
-  for (let b = 0; b < SEAT_BANDS; b += 1) {
-    const r = FOOTPRINT * (0.72 + (0.28 * b) / (SEAT_BANDS - 1));
-    for (let a = 0; a < SEAT_ARC; a += 1) {
-      const t = (a / SEAT_ARC) * Math.PI * 2;
-      const h = heightAt(ax + Math.cos(t) * r, az + Math.sin(t) * r);
-      if (h > top) top = h;
-    }
-  }
-  return top;
+  return 0.0;
 }
 
 const worldVec = new Vector3();
 const projA = new Vector3();
 const projB = new Vector3();
 
-// Ice light terms in linear RGB: light scattered through the blocks, the rim,
-// and the lamp's glow through the joints. Only the sunset looks (the ones with
-// a sunward sky glow) carry them, so the overcast igloo stays as it was.
-const iceTerms = (on) => {
-  const rgb = (c) => c.map((v) => (on ? v : 0).toFixed(3)).join(', ');
-  return {
-    through: rgb([0.035, 0.07, 0.12]),
-    rim: rgb([0.26, 0.34, 0.5]),
-    seam: rgb([0.42, 0.3, 0.18]),
-    roughness: on ? 0.42 : 0.8,
-    env: on ? 0.75 : 0.45,
-  };
-};
-const ICE = iceTerms(Boolean(LOOK.sky.glow));
+// Ice light terms in linear RGB for frosted snow-ice blocks and glowing seams
+const iceTerms = () => ({
+  through: '0.04, 0.08, 0.14',
+  rim: '0.28, 0.45, 0.65',
+  seam: '0.0, 0.0, 0.0',
+  roughness: 0.85,
+  env: 0.35,
+});
+const ICE = iceTerms();
 
-// Custom ice shader customization: edge bevels, settled snow, sun facing, and internal illumination
+// Custom ice shader: clean frosted translucent snow/ice blocks with warm interior hearth illumination
 const iceShader = (shader) => {
   shader.vertexShader =
     'attribute float aEdge;\nattribute float aEntrance;\nvarying float vEdge;\nvarying float vEntrance;\nvarying float vFacing;\nvarying float vExcite;\nvarying vec3 vCorner;\n' +
@@ -166,47 +152,39 @@ const iceShader = (shader) => {
         '#include <normal_fragment_maps>',
         [
           '#include <normal_fragment_maps>',
-          'vec3 skyward = inverseTransformDirection( normalize( vNormal ), viewMatrix );',
-          'float collects = smoothstep( 0.22, 0.66, skyward.y );',
-          'float bare = dot( diffuseColor.rgb, vec3( 0.299, 0.587, 0.114 ) );',
-          'float drift = mix( 0.35, 1.0, smoothstep( 0.30, 0.68, bare ) );',
-          'float lying = collects * drift;',
-          'diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.940, 0.965, 0.995 ), lying * 0.65 );',
-          'float edgeFrost = smoothstep( 0.80, 0.98, vEdge );',
-          'diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.94, 0.97, 1.00 ), edgeFrost * 0.35 );',
-          'roughnessFactor = mix( roughnessFactor, 0.95, lying * 0.85 );',
           'float glossEdge = smoothstep( 0.86, 1.00, vEdge );',
-          'roughnessFactor = mix( roughnessFactor, 0.72, glossEdge * 0.35 );',
+          'roughnessFactor = mix( roughnessFactor, 0.74, glossEdge * 0.30 );',
           'float bevel = smoothstep( 0.55, 1.00, vEdge );',
           'normal = normalize( mix( normal, vCorner, bevel * 0.75 ) );',
           `vec3 sunDir = vec3( ${SUN_DIR.map((c) => c.toFixed(4)).join(', ')} );`,
           'vec3 wNrm = inverseTransformDirection( normalize( vNormal ), viewMatrix );',
           'float sunDot = dot( wNrm, sunDir );',
           'float sunFace = clamp( sunDot, 0.0, 1.0 );',
-          'diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.98, 0.99, 1.00 ), smoothstep( 0.25, 0.85, sunFace ) * 0.45 );',
-          'diffuseColor.rgb *= mix( 0.68, 1.0, smoothstep( -0.45, 0.30, sunDot ) );',
+          'diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.96, 0.98, 1.00 ), smoothstep( 0.25, 0.85, sunFace ) * 0.35 );',
+          'diffuseColor.rgb *= mix( 0.76, 1.0, smoothstep( -0.45, 0.30, sunDot ) );',
         ].join('\n')
       )
       .replace(
         '#include <emissivemap_fragment>',
         [
           '#include <emissivemap_fragment>',
-          'float innerFace = smoothstep( -0.30, -0.70, vFacing );',
-          'float atJoint = 0.55 + 0.45 * smoothstep( 0.15, 0.95, vEdge );',
-          'totalEmissiveRadiance += vec3( 1.00, 0.80, 0.48 ) * 3.60 * innerFace * atJoint;',
-          'float archGlow = ( 0.70 + 0.30 * vExcite ) * vEntrance;',
-          'float archRim = smoothstep( 0.84, 1.00, vEdge ) * archGlow;',
-          'totalEmissiveRadiance += vec3( 1.00, 0.84, 0.52 ) * 4.60 * archRim;',
-          // Ice, not snow: sky light scattered through the blocks, a bright
-          // rim where the dome turns away, and the lamp leaking out through
-          // the joints between blocks as thin warm seams.
-          'float outerFace = 1.0 - innerFace;',
+          'float innerFace = smoothstep( 0.20, -0.55, vFacing );',
+          // Warm golden hearth glow on all interior block surfaces
+          'totalEmissiveRadiance += vec3( 1.00, 0.76, 0.38 ) * 4.2 * innerFace;',
+          // Translucent light scattering through ice blocks from inside
+          'vec3 domeOut = normalize( vec3( vNormal.x, max(0.12, vNormal.y), vNormal.z ) );',
+          'float scatter = clamp( dot( -normalize( vViewPosition ), domeOut ), 0.0, 1.0 );',
+          'float seamLeak = smoothstep( 0.30, 0.95, vEdge );',
+          'totalEmissiveRadiance += vec3( 1.00, 0.70, 0.28 ) * ( 0.18 + 0.65 * seamLeak ) * ( 0.35 + 0.65 * scatter );',
+          // Entrance arch glow radiating warm amber illumination
+          'float insideArch = smoothstep( 0.35, -0.35, vFacing );',
+          'float archGlow = ( 0.80 + 0.20 * vExcite ) * vEntrance;',
+          'float archRim = smoothstep( 0.75, 1.00, vEdge ) * archGlow;',
+          'totalEmissiveRadiance += vec3( 1.00, 0.82, 0.46 ) * ( 3.8 * insideArch + 2.4 * archRim ) * archGlow;',
+          // Subtle daylight rim on outer dome contours
           'float nv = clamp( dot( normal, normalize( vViewPosition ) ), 0.0, 1.0 );',
-          'float rim = pow( 1.0 - nv, 3.0 );',
-          `totalEmissiveRadiance += vec3( ${ICE.through} ) * outerFace * ( 0.6 + 0.4 * ( 1.0 - lying ) );`,
-          `totalEmissiveRadiance += vec3( ${ICE.rim} ) * rim * outerFace;`,
-          'float seam = smoothstep( 0.90, 1.00, vEdge ) * outerFace * ( 1.0 - lying * 0.7 );',
-          `totalEmissiveRadiance += vec3( ${ICE.seam} ) * seam;`,
+          'float rim = pow( 1.0 - nv, 2.6 );',
+          'totalEmissiveRadiance += vec3( 0.20, 0.38, 0.60 ) * rim * ( 1.0 - innerFace ) * 0.30;',
         ].join('\n')
       );
 };
@@ -216,6 +194,7 @@ function gradeForWorld(material, tint) {
   material.color = new Color(tint);
   material.roughness = ICE.roughness;
   material.envMapIntensity = ICE.env;
+  material.side = 2; // DoubleSide
   material.onBeforeCompile = iceShader;
   material.needsUpdate = true;
 }
@@ -288,7 +267,7 @@ export default function IglooBlocks({
         physics.writeTo(igloo.mesh);
 
         const interaction = new IglooInteraction({
-          click: false,
+          click: true,
           touchHover: true,
           dom: gl.domElement,
           camera,
@@ -437,25 +416,20 @@ export default function IglooBlocks({
     <group ref={groupRef} position={origin} rotation={[0, yaw, 0]}>
       {rig && <primitive object={rig.igloo.mesh} dispose={null} />}
 
-      {/* Interior dome warm light */}
+      {/* Interior dome warm hearth light */}
       <pointLight
-        position={[0, 12.5, -3.5]}
+        position={[0, 11.5, -2.0]}
         intensity={LOOK.igloo.lamp.intensity}
-        distance={70}
+        distance={26}
         decay={2}
         color={LOOK.igloo.lamp.color}
-        castShadow
-        shadow-mapSize={[1024, 1024]}
-        shadow-camera-near={0.4}
-        shadow-camera-far={48}
-        shadow-normalBias={0.4}
       />
 
-      {/* Entrance porch illumination */}
+      {/* Entrance archway warm illumination */}
       <pointLight
-        position={[0, 4.6, 25.4]}
+        position={[0, 4.2, 24.8]}
         intensity={LOOK.igloo.porch.intensity}
-        distance={46}
+        distance={14}
         decay={2}
         color={LOOK.igloo.porch.color}
       />

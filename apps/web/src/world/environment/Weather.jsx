@@ -12,7 +12,7 @@ import {
   UnsignedByteType,
   Vector3,
 } from 'three';
-import { MOUND_AT, TERRAIN_SIZE, TERRAIN_CENTER_Z, WATER_Y, heightAt } from '../lib/terrain.js';
+import { MOUND_AT, TERRAIN_SIZE, TERRAIN_CENTER_Z, WATER_Y, groundAt } from '../lib/terrain.js';
 import { LOOK } from '../lib/lighting.js';
 import { SHARED_WIND_GLSL, updateWindState } from '../lib/wind.js';
 
@@ -31,7 +31,7 @@ function buildHeightTexture() {
 
   for (let j = 0; j < n; j += 1) {
     for (let i = 0; i < n; i += 1) {
-      raw[j * n + i] = heightAt(x0 + i * step, z0 + j * step);
+      raw[j * n + i] = groundAt(x0 + i * step, z0 + j * step);
     }
   }
 
@@ -97,6 +97,7 @@ const MIST_VERT = /* glsl */ `
   varying float vDepression;
   varying float vSunFacing;
   varying float vRelH;
+  varying float vFlat;
 
   void main() {
     vUv = uv;
@@ -119,6 +120,7 @@ const MIST_VERT = /* glsl */ `
     float hD = texture2D( uHeight, huv - vec2( 0.0, texel ) ).r * ${HEIGHT_MAX.toFixed(1)};
     vec3 nrm = normalize( vec3( -( hR - hL ) * 0.5, ${TEXEL_WORLD.toFixed(3)}, -( hU - hD ) * 0.5 ) );
     vSunFacing = dot( nrm, uSunDir );
+    vFlat = nrm.y;
 
     // Vertical drift oscillation
     float s = uSeed;
@@ -153,6 +155,7 @@ const MIST_FRAG = /* glsl */ `
   varying float vDepression;
   varying float vSunFacing;
   varying float vRelH;
+  varying float vFlat;
 
   ${SHARED_WIND_GLSL}
 
@@ -245,9 +248,22 @@ const MIST_FRAG = /* glsl */ `
     float dPorch = length( max( pPorch, 0.0 ) ) + min( max( pPorch.x, pPorch.y ), 0.0 );
     alpha *= mix( 0.10, 1.0, smoothstep( 3.5, 30.0, min( dDome, dPorch ) ) );
 
+    // Draped over a steep face, the mist's ground-plane noise stretches into
+    // vertical streaks; it lies in the valleys, so it fades out on the steeps.
+    alpha *= smoothstep( 0.6, 0.88, vFlat );
+
     // Boundary edge fade
     vec2 cuv = abs( vUv - 0.5 );
     alpha *= ( 1.0 - smoothstep( 0.40, 0.50, cuv.x ) ) * ( 1.0 - smoothstep( 0.40, 0.50, cuv.y ) );
+
+    // Thicker where a gust is carrying snow through.
+    alpha *= mix( 0.55, 1.5, sharedGust( p.xz, uTime ) );
+
+    // A thin layer: seen along it the mist builds up, looked straight down
+    // through it there is hardly any, so it fades as the view steepens rather
+    // than lying on the water like paint.
+    float steep = abs( normalize( p - cameraPosition ).y );
+    alpha *= 1.0 - smoothstep( 0.35, 0.8, steep );
 
     if ( alpha <= 0.0015 ) discard;
 
@@ -350,7 +366,7 @@ export default function Weather() {
         centerZ={-500}
         layerHeight={22.0}
         layerSpeed={0.16}
-        opacity={0.09}
+        opacity={0.16}
         noiseScale={0.0019}
         coverage={0.5}
         depthBand={[420, 720, 1200, 1650]}
@@ -365,7 +381,7 @@ export default function Weather() {
         centerZ={-40}
         layerHeight={9.0}
         layerSpeed={0.55}
-        opacity={0.2}
+        opacity={0.32}
         noiseScale={0.0046}
         coverage={0.47}
         depthBand={[110, 250, 620, 950]}
@@ -380,7 +396,7 @@ export default function Weather() {
         centerZ={180}
         layerHeight={2.2}
         layerSpeed={1.05}
-        opacity={0.13}
+        opacity={0.2}
         noiseScale={0.0115}
         coverage={0.56}
         depthBand={[45, 130, 260, 430]}
