@@ -80,7 +80,7 @@ function Header({ name, content }) {
       </a>
       <nav className="ink-header-links">
         <a href="/world" className="ink-btn ink-btn-ghost">
-          {copy(content, 'nav.immersive', 'Immersive')}
+          {copy(content, 'nav.immersive', 'Immersive').toUpperCase()}
         </a>
         <a href="#contact" className="ink-btn">
           {copy(content, 'nav.contact', 'Contact').toUpperCase()}
@@ -214,7 +214,7 @@ function Artifacts({ projects, loading }) {
                     )}
                   </h3>
                   <p>{p.summary || p.description}</p>
-                  {p.tech?.length > 0 && <div className="ink-tech">{p.tech.join(' · ').toUpperCase()}</div>}
+                  {p.tech?.length > 0 && <div className="ink-tech">{p.tech.slice(0, 6).join(' · ').toUpperCase()}</div>}
                 </Reveal>
               );
             })}
@@ -320,7 +320,8 @@ function Origins({ education, content }) {
 }
 
 function Contact({ profile, socials }) {
-  const links = socials.filter((s) => s.url);
+  // The email gets its own button, so drop any email entry among the socials.
+  const links = socials.filter((s) => s.url && !/^mailto:/i.test(s.url) && !/mail/i.test(s.icon || ''));
   return (
     <section id="contact" className="ink-contact">
       <Reveal className="ink-eyebrow">08 — CONTACT · THE END, OR THE BEGINNING</Reveal>
