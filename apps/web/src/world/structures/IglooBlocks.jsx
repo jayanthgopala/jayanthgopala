@@ -176,6 +176,10 @@ const iceShader = (shader) => {
           'float scatter = clamp( dot( -normalize( vViewPosition ), domeOut ), 0.0, 1.0 );',
           'float seamLeak = smoothstep( 0.30, 0.95, vEdge );',
           'totalEmissiveRadiance += vec3( 1.00, 0.70, 0.28 ) * ( 0.18 + 0.65 * seamLeak ) * ( 0.35 + 0.65 * scatter );',
+          // The joints between blocks: thin lines of the hearth light showing
+          // through. Constant; nothing here responds to the scroll.
+          'float seamLine = smoothstep( 0.92, 1.0, vEdge );',
+          'totalEmissiveRadiance += vec3( 1.00, 0.76, 0.40 ) * seamLine * 1.7 * ( 0.45 + 0.55 * scatter );',
           // Entrance arch glow radiating warm amber illumination
           'float insideArch = smoothstep( 0.35, -0.35, vFacing );',
           'float archGlow = ( 0.80 + 0.20 * vExcite ) * vEntrance;',
@@ -429,7 +433,7 @@ export default function IglooBlocks({
       <pointLight
         position={[0, 4.2, 24.8]}
         intensity={LOOK.igloo.porch.intensity}
-        distance={14}
+        distance={24}
         decay={2}
         color={LOOK.igloo.porch.color}
       />

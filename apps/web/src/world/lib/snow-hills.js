@@ -47,8 +47,10 @@ export function hillRise(x, z, m, seed, warp) {
   const t = Math.sqrt(a * a + across * across);
   if (t > REACH) return 0;
 
-  // Fuller in the shoulders than a bell curve, with a firmer crown.
-  const body = Math.exp(-0.55 * Math.pow(t, 1.7));
+  // Fuller in the shoulders than a bell curve, with a firmer crown. The tall
+  // far ranges come to real summits rather than domes.
+  const peak = smoothstep(120, 185, m.h);
+  const body = Math.exp(-0.55 * Math.pow(t, 1.7 - 0.3 * peak));
 
   // Fluting: noise sampled around the hill and only slowly outward, so its
   // features stretch into spokes running straight down every face.
@@ -66,7 +68,7 @@ export function hillRise(x, z, m, seed, warp) {
   // Broken shoulders, so the crest line is not one smooth arc.
   const knobs = warpFbm(ex * 1.4 + seed * 5.3, ez * 1.4 - seed * 2.9) * body * body;
 
-  return m.h * (body + (rib * rib - 0.45) * flank * (0.055 + 0.04 * lee) + knobs * 0.03);
+  return m.h * (body + (rib * rib - 0.45) * flank * (0.055 + 0.04 * lee + 0.03 * peak) + knobs * 0.03);
 }
 
 /**

@@ -32,8 +32,8 @@ import { hillRise, hillWarp, snowDrifts, snowSwell } from './lib/snow-hills.js';
 // Where the igloo stands, and the palette the whole frame is keyed to: a pale
 // arctic day where distance washes out to white rather than darkening.
 const IGLOO_AT = [-30, 252];
-const SKY_ZENITH = '#a8c6e8';
-const SKY_HORIZON = '#f3f8fd';
+const SKY_ZENITH = '#9aabc2';
+const SKY_HORIZON = '#eef3f8';
 const HAZE = '#edf4fc';
 // Sun bearing, as an offset from the igloo: high, front-left.
 const SUN_OFFSET = [-180, 190, 262];
@@ -199,9 +199,39 @@ function snowSurface(shader) {
         // up: long soft patches a shade apart, stretched along the wind.
         'float snPack = snFbm( snWindWarp( vSnowWorld.xz * 0.02 ) );',
         'snSnow *= mix( 0.95, 1.03, smoothstep( 0.3, 0.7, snPack ) );',
+        // The steep faces of the far ranges: snow scoured thin into streaks
+        // down the fall line, the darker ground showing through.
+        'float snDist = length( vSnowWorld - cameraPosition );',
+        'float snSteep = 1.0 - smoothstep( 0.7, 0.93, snWorldN.y );',
+        'float snStreak = snFbm( vec2( ( vSnowWorld.x + vSnowWorld.z ) * 0.05, vSnowWorld.y * 0.022 ) );',
+        'float snRock = snSteep * smoothstep( 0.48, 0.74, snStreak ) * smoothstep( 280.0, 620.0, snDist ) * smoothstep( 55.0, 120.0, vSnowWorld.y );',
+        'snSnow = mix( snSnow, vec3( 0.40, 0.45, 0.54 ), snRock * 0.7 );',
+        // Near snow reads bright and white, not grey.
+        'snSnow = mix( snSnow, snLit, ( 1.0 - smoothstep( 20.0, 170.0, snDist ) ) * 0.4 );',
         'diffuseColor.rgb *= snSnow;',
         // Scoured crests take a touch more gloss than the packed hollows.
         'roughnessFactor = mix( roughnessFactor, 0.62, snCrest * snNear * 0.45 );',
+      ].join('\n')
+    ).replace(
+      '#include <emissivemap_fragment>',
+      [
+        '#include <emissivemap_fragment>',
+        // Ice crystals glinting in the near snow, each from its own angle, so
+        // they twinkle as the view moves.
+        // One crystal at a random spot in each small cell, lit for only some
+        // view directions: scattered points, never a grid.
+        'vec2 snCellP = vSnowWorld.xz * 7.0;',
+        'vec2 snCell = floor( snCellP );',
+        'vec2 snSpot = vec2( snHash( snCell + 1.3 ), snHash( snCell + 7.9 ) ) * 0.8 + 0.1;',
+        'float snDot = smoothstep( 0.09, 0.0, length( fract( snCellP ) - snSpot ) );',
+        'vec3 snRay = normalize( vSnowWorld - cameraPosition );',
+        'float snTwinkle = step( 0.93, snHash( snCell + floor( snRay.xz * 30.0 ) * 0.37 ) );',
+        'float snGlint = snDot * snTwinkle * ( 1.0 - smoothstep( 10.0, 45.0, snDist ) );',
+        'totalEmissiveRadiance += vec3( 1.0, 0.98, 0.94 ) * snGlint * 2.0;',
+        // Light bounced between snow and overcast sky: open snow never falls
+        // to grey, as it does under a single sun.
+        'float snOpen = smoothstep( 0.75, 0.98, snWorldN.y );',
+        'totalEmissiveRadiance += vec3( 0.80, 0.85, 0.92 ) * 0.2 * snOpen * ( 1.0 - smoothstep( 80.0, 900.0, snDist ) );',
       ].join('\n')
     );
 }
@@ -212,7 +242,7 @@ function snowSurface(shader) {
 // one, each with a lit crown and a blue flank. A few wide gaussians can only
 // ever make one smooth roll, however they are tuned.
 //
-// x, z  centre, in world units (the igloo stands at [-30, 252], camera at z 358)
+// x, z  centre, in world units (the igloo stands at [-30, 252], camera at z 386)
 // h     crown height
 // rx,rz radii; rz < rx keeps the masses reading as ridges facing the lens
 const RIDGES = [
@@ -369,7 +399,9 @@ function MistBanks() {
   // Wide, shallow bands at the base of each range, plus two nearer wisps.
   const bands = useMemo(
     () => [
-      { at: [-250, 16, -150], size: [620, 48], opacity: 0.36, speed: 2.4 },
+      { at: [-250, 16, -150], size: [620, 48], opacity: 0.42, speed: 2.4 },
+      { at: [120, 26, -60], size: [520, 40], opacity: 0.32, speed: -1.5 },
+      { at: [-420, 30, 20], size: [480, 36], opacity: 0.28, speed: 1.2 },
       { at: [300, 18, -190], size: [660, 52], opacity: 0.34, speed: -1.9 },
       { at: [-60, 30, -380], size: [980, 70], opacity: 0.38, speed: 1.4 },
       { at: [-460, 44, -640], size: [900, 86], opacity: 0.34, speed: -2.2 },
@@ -491,6 +523,61 @@ function Spindrift({ count = 900 }) {
   );
 }
 
+// Big, soft flakes drifting down close to the lens: what gives the reference
+// its depth in the air. Few of them, and slow.
+function NearFlakes({ count = 160 }) {
+  const pointsRef = useRef(null);
+  const grain = useMemo(() => grainTexture(), []);
+  useEffect(() => () => grain.dispose(), [grain]);
+  const camera = useThree((s) => s.camera);
+
+  const [geometry, sway] = useMemo(() => {
+    const geo = new BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const phase = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 90;
+      positions[i * 3 + 1] = Math.random() * 40 - 10;
+      positions[i * 3 + 2] = -25 - Math.random() * 65;
+      phase[i] = Math.random() * Math.PI * 2;
+    }
+    geo.setAttribute('position', new BufferAttribute(positions, 3));
+    return [geo, phase];
+  }, [count]);
+
+  useFrame((state, delta) => {
+    const points = pointsRef.current;
+    if (!points) return;
+    // Carried with the lens, so the flakes are always in the near air.
+    points.position.copy(camera.position);
+    const array = points.geometry.attributes.position.array;
+    const dt = Math.min(delta, 1 / 20);
+    const t = state.clock.elapsedTime;
+    for (let i = 0; i < count; i++) {
+      const k = i * 3;
+      array[k + 1] -= (1.6 + (i % 7) * 0.25) * dt;
+      array[k] += (2.2 + Math.sin(t * 0.6 + sway[i]) * 1.4) * dt;
+      if (array[k + 1] < -12) array[k + 1] = 30;
+      if (array[k] > 45) array[k] = -45;
+    }
+    points.geometry.attributes.position.needsUpdate = true;
+  });
+
+  return (
+    <points ref={pointsRef} geometry={geometry} frustumCulled={false} renderOrder={3}>
+      <pointsMaterial
+        map={grain}
+        color="#ffffff"
+        size={0.35}
+        transparent
+        opacity={0.55}
+        depthWrite={false}
+        fog={false}
+      />
+    </points>
+  );
+}
+
 // High-key arctic daylight: a soft front-left sun, a cool bounce off the snow,
 // and almost no black anywhere in the frame.
 function Lighting() {
@@ -552,7 +639,7 @@ export default function Stage({ onIglooReady, begin = false, warm = false, onWar
           alpha: false,
           stencil: false,
         }}
-        camera={{ fov: 38, near: 4, far: 2800, position: [-28, 22, 358] }}
+        camera={{ fov: 38, near: 4, far: 2800, position: [-34, 21, 386] }}
         onCreated={({ gl, scene }) => {
           gl.toneMappingExposure = 1.18;
           scene.background = new Color(SKY_HORIZON);
@@ -575,6 +662,7 @@ export default function Stage({ onIglooReady, begin = false, warm = false, onWar
 
           {/* Snow streaming on the wind */}
           <Spindrift count={900} />
+          <NearFlakes count={160} />
 
           {/* 3D igloo settled firmly into the snow ground */}
           <IglooBlocks at={IGLOO_AT} lift={0.0} tint="#eef5fd" onReady={onIglooReady} />

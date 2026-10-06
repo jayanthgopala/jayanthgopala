@@ -81,6 +81,17 @@ void main() {
   float toSun = max( 0.0, dot( dir, normalize( uSun ) ) );
   col = mix( col, uGlow, pow( toSun, 3.2 ) * 0.55 * ( 1.0 - lift * 0.55 ) );
 
+  // Overcast: a broad deck of cloud over the upper sky, soft grey undersides
+  // with brighter breaks, thinning out into the horizon haze.
+  vec2 deck = vec2( atan( dir.z, dir.x ) * 1.7, h * 2.4 );
+  float deckA = snFbm( deck * vec2( 1.0, 2.8 ) + vec2( uTime * 0.005, 0.0 ) );
+  float deckB = snFbm( deck * vec2( 2.4, 5.2 ) - vec2( uTime * 0.009, 0.0 ) + 7.0 );
+  float cover = smoothstep( 0.3, 0.62, deckA * 0.72 + deckB * 0.28 );
+  float deckBand = smoothstep( 0.0, 0.14, h );
+  // Linear colours: they land as grey-blue undersides once encoded and exposed.
+  vec3 cloud = mix( vec3( 0.26, 0.31, 0.40 ), vec3( 0.86, 0.89, 0.94 ), smoothstep( 0.4, 0.82, deckB ) );
+  col = mix( col, cloud, cover * deckBand * 0.92 );
+
   // Cirrus: stretched fbm banded into thin streaks, faded out at the horizon
   // and thinned again at the zenith so the streaks stay in the upper third.
   vec2 sky = vec2( atan( dir.z, dir.x ) * 2.2, h * 3.1 );
