@@ -143,7 +143,8 @@ export function scrollState(scroll, vh, out = {}, pageHeight = 0) {
 // The opening hero frame places the igloo centered in the landscape with a slightly
 // elevated camera looking down at the frosted dome and front-right warm entrance.
 const CAMERA_POINTS = [
-  [-28, 20, 335],
+  // Opening frame: set a little further back from the igloo.
+  [-28, 22, 358],
   [-28, 48, 400],
   [-27, 85, 465],
   [-25, 122, 535],

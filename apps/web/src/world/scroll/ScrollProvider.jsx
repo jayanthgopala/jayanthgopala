@@ -131,6 +131,9 @@ export default function ScrollProvider({ children, locked = false }) {
     // contact room.
     const BOAT_GLIDE_SECONDS = 7;
     const CUT_GLIDE_SECONDS = 2.6;
+    // One scroll off the top goes all the way to the page: the pull-back and
+    // the cut in a single glide, and one scroll back up returns to the igloo.
+    const OPENING_GLIDE_SECONDS = 4.2;
     // An even, unhurried ease for the boat's run.
     const easeSine = (t) => 0.5 - 0.5 * Math.cos(Math.PI * t);
     const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -156,16 +159,18 @@ export default function ScrollProvider({ children, locked = false }) {
       const { runEnd, pageAt } = worldStops();
       const from = instance.scroll;
       const boat = Math.max(from, to) <= runEnd + 3;
-      const span = boat ? runEnd : pageAt - runEnd;
+      const whole = Math.min(from, to) < runEnd - 3 && Math.max(from, to) > runEnd + 3;
+      const span = whole ? pageAt : boat ? runEnd : pageAt - runEnd;
       const share = Math.min(1, Math.max(0.15, Math.abs(to - from) / span));
+      const seconds = whole ? OPENING_GLIDE_SECONDS : boat ? BOAT_GLIDE_SECONDS : CUT_GLIDE_SECONDS;
       gliding = true;
       glideNow.dir = Math.sign(to - from) || 1;
       glideNow.to = to;
       instance.scrollTo(to, {
-        duration: reduce ? 0 : (boat ? BOAT_GLIDE_SECONDS : CUT_GLIDE_SECONDS) * share,
+        duration: reduce ? 0 : seconds * share,
         immediate: reduce,
         force: true,
-        easing: boat ? easeSine : easeInOut,
+        easing: boat && !whole ? easeSine : easeInOut,
         onComplete: () => {
           gliding = false;
           glideNow.dir = 0;
@@ -233,19 +238,20 @@ export default function ScrollProvider({ children, locked = false }) {
       if (Math.abs(fallTarget - ringFall.current) < 1e-4) ringFall.current = fallTarget;
       ringNear.current = state.ringNear;
 
-      // Off the top, two scrolls: the first glides through the boat's run with
-      // the camera flying ahead of it and rests at the end of it; the next
-      // glides through the cut to the page. Scrolling back up plays the same
-      // two back, at the same pace. (See worldGlide for turning one round.)
+      // Off the top, one scroll glides through the pull-back and the cut to
+      // the page; one scroll up from the page glides back to the igloo. If a
+      // settle ever leaves the scroll resting at the end of the run, the next
+      // scroll carries on from there either way. (See worldGlide for turning
+      // one round.)
       {
         const { runEnd, pageAt } = worldStops();
         const s = instance.scroll;
-        if (!gliding && lastTop < 2 && s >= 2 && s < runEnd - 3) {
-          worldGlide(runEnd);
+        if (!gliding && lastTop < 2 && s >= 2 && s < pageAt - 3) {
+          worldGlide(pageAt);
+        } else if (!gliding && Math.abs(lastTop - pageAt) < 3 && s < pageAt - 3 && s > 2) {
+          worldGlide(0);
         } else if (!gliding && Math.abs(lastTop - runEnd) < 3 && s > runEnd + 2 && s < pageAt - 3) {
           worldGlide(pageAt);
-        } else if (!gliding && Math.abs(lastTop - pageAt) < 3 && s < pageAt - 3 && s > runEnd + 2) {
-          worldGlide(runEnd);
         } else if (!gliding && Math.abs(lastTop - runEnd) < 3 && s < runEnd - 3 && s > 2) {
           worldGlide(0);
         }

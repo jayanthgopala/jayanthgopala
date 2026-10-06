@@ -212,7 +212,7 @@ function snowSurface(shader) {
 // one, each with a lit crown and a blue flank. A few wide gaussians can only
 // ever make one smooth roll, however they are tuned.
 //
-// x, z  centre, in world units (the igloo stands at [-30, 252], camera at z 335)
+// x, z  centre, in world units (the igloo stands at [-30, 252], camera at z 358)
 // h     crown height
 // rx,rz radii; rz < rx keeps the masses reading as ridges facing the lens
 const RIDGES = [
@@ -552,7 +552,7 @@ export default function Stage({ onIglooReady, begin = false, warm = false, onWar
           alpha: false,
           stencil: false,
         }}
-        camera={{ fov: 38, near: 4, far: 2800, position: [-28, 20, 335] }}
+        camera={{ fov: 38, near: 4, far: 2800, position: [-28, 22, 358] }}
         onCreated={({ gl, scene }) => {
           gl.toneMappingExposure = 1.18;
           scene.background = new Color(SKY_HORIZON);
