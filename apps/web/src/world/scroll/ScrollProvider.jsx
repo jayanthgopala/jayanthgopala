@@ -133,7 +133,9 @@ export default function ScrollProvider({ children, locked = false }) {
     const CUT_GLIDE_SECONDS = 2.6;
     // One scroll off the top goes all the way to the page: the pull-back and
     // the cut in a single glide, and one scroll back up returns to the igloo.
-    const OPENING_GLIDE_SECONDS = 4.2;
+    // Brisk, and eased so it visibly moves the moment the wheel turns: a slow
+    // start read as the scroll not having taken, and people kept scrolling.
+    const OPENING_GLIDE_SECONDS = 2.4;
     // An even, unhurried ease for the boat's run.
     const easeSine = (t) => 0.5 - 0.5 * Math.cos(Math.PI * t);
     const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -170,7 +172,7 @@ export default function ScrollProvider({ children, locked = false }) {
         duration: reduce ? 0 : seconds * share,
         immediate: reduce,
         force: true,
-        easing: boat && !whole ? easeSine : easeInOut,
+        easing: boat || whole ? easeSine : easeInOut,
         onComplete: () => {
           gliding = false;
           glideNow.dir = 0;
@@ -248,7 +250,8 @@ export default function ScrollProvider({ children, locked = false }) {
         const s = instance.scroll;
         if (!gliding && lastTop < 2 && s >= 2 && s < pageAt - 3) {
           worldGlide(pageAt);
-        } else if (!gliding && Math.abs(lastTop - pageAt) < 3 && s < pageAt - 3 && s > 2) {
+        } else if (!gliding && lastTop >= pageAt - 3 && s < pageAt - 3 && s > 2) {
+          // Up past the top of the page, from wherever on it the scroll began.
           worldGlide(0);
         } else if (!gliding && Math.abs(lastTop - runEnd) < 3 && s > runEnd + 2 && s < pageAt - 3) {
           worldGlide(pageAt);
