@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Reveal } from '../lib/motion.jsx';
 import { copy, externalUrl, mediaUrl } from '../lib/api.js';
+import Lightbox from '../components/Lightbox.jsx';
 import '../styles/ink.css';
 
 /**
@@ -26,17 +27,6 @@ const DEFAULT_EXPERIENCE = [
     period: '',
     description: 'Designed and delivered the Shree Vani PU College website — a responsive institutional site.',
   },
-];
-
-const ENGINEERING = [
-  ['Frontend', 'Responsive, accessible interfaces in modern frameworks.'],
-  ['Backend', 'Robust services and business logic at scale.'],
-  ['Databases', 'Modeling, querying, and tuning relational & NoSQL stores.'],
-  ['Cloud', 'Deployment and infrastructure for real traffic.'],
-  ['APIs', 'Clean, versioned interfaces between systems.'],
-  ['Security', 'Auth, access control, and safe data handling.'],
-  ['Architecture', 'System design that stays maintainable as it grows.'],
-  ['Automation', 'Tooling and pipelines that remove manual work.'],
 ];
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -90,8 +80,46 @@ function Header({ name, content }) {
   );
 }
 
+// "Scroll to begin" rides along at the foot of the screen and fades out over
+// the first part of the scroll, drifting down a little as it goes.
+function ScrollCue() {
+  const cue = useRef(null);
+  useEffect(() => {
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const t = Math.min(1, window.scrollY / (window.innerHeight * 0.45));
+      const node = cue.current;
+      if (!node) return;
+      node.style.opacity = String(1 - t);
+      node.style.transform = `translateY(${t * 24}px)`;
+      node.style.visibility = t >= 1 ? 'hidden' : 'visible';
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, []);
+
+  return (
+    <div ref={cue} className="ink-scroll" aria-hidden="true">
+      <div className="ink-scroll-float">
+        <span>SCROLL TO BEGIN</span>
+        <span className="ink-scroll-line" />
+      </div>
+    </div>
+  );
+}
+
 function Hero({ profile }) {
-  const first = (profile.name || 'Jayanth').split(' ')[0].toUpperCase();
+  const name = (profile.name || 'Jayanth Gopala V').toUpperCase();
   return (
     <section id="home" className="ink-hero">
       <svg className="ink-stroke ink-stroke-a" viewBox="0 0 200 60" aria-hidden="true">
@@ -108,17 +136,18 @@ function Hero({ profile }) {
         <span className="ink-rule" />
       </Reveal>
       <Reveal as="h1" delay={80} className="ink-title">
-        THE {first}
-        <br />
-        <em>EXPERIENCE</em>
+        <span className="ink-title-the">
+          <span className="ink-title-dash" />
+          The
+          <span className="ink-title-dash" />
+        </span>
+        <span className="ink-title-name">{name}</span>
+        <em className="ink-title-tail">Experience</em>
       </Reveal>
       <Reveal as="p" delay={160} className="ink-lede">
         {profile.headline}
       </Reveal>
-      <div className="ink-scroll">
-        <span>SCROLL TO BEGIN</span>
-        <span className="ink-scroll-line" />
-      </div>
+      <ScrollCue />
     </section>
   );
 }
@@ -182,12 +211,73 @@ function Work({ experience }) {
   );
 }
 
-function Artifacts({ projects, loading }) {
+// A project's text: the summary, clamped, until it is clicked; then the full
+// description, with the box easing open to its new height.
+function Description({ short, full }) {
+  const [open, setOpen] = useState(false);
+  const [clipped, setClipped] = useState(false);
+  const box = useRef(null);
+  const from = useRef(null);
+  const longer = Boolean(full) && full !== short;
+
+  // A summary can be cut off by the clamp even when there is no longer text.
+  useLayoutEffect(() => {
+    const p = box.current?.firstElementChild;
+    if (p && !open) setClipped(p.scrollHeight > p.clientHeight + 1);
+  }, [short, open]);
+
+  // Animate from the height before the change to the height after it.
+  useLayoutEffect(() => {
+    const node = box.current;
+    if (!node || from.current === null) return;
+    const to = node.scrollHeight;
+    node.style.height = `${from.current}px`;
+    void node.offsetHeight;
+    node.style.height = `${to}px`;
+    from.current = null;
+  }, [open]);
+
+  if (!longer && !clipped) {
+    return (
+      <div ref={box} className="ink-desc ink-desc-static">
+        <p className="is-clamped">{short}</p>
+      </div>
+    );
+  }
+
+  const toggle = () => {
+    from.current = box.current.offsetHeight;
+    setOpen((v) => !v);
+  };
+
+  return (
+    <button type="button" className="ink-desc-toggle" aria-expanded={open} onClick={toggle}>
+      <div
+        ref={box}
+        className="ink-desc"
+        onTransitionEnd={(e) => {
+          if (e.target === box.current) box.current.style.height = '';
+        }}
+      >
+        <p key={open ? 'full' : 'short'} className={open ? 'is-open' : 'is-clamped'}>
+          {open ? full || short : short}
+        </p>
+      </div>
+      <span className="ink-desc-more">
+        {open ? 'LESS' : 'READ MORE'}
+        <span className="ink-desc-sign" aria-hidden="true" />
+      </span>
+    </button>
+  );
+}
+
+function Artifacts({ projects, loading, n }) {
   const shown = projects.filter((p) => p.published !== false);
+  const [enlarged, setEnlarged] = useState(null);
   return (
     <section id="projects" className="ink-section">
       <Reveal className="ink-head">
-        <Eyebrow n={3}>SELECTED PROJECTS</Eyebrow>
+        <Eyebrow n={n}>SELECTED PROJECTS</Eyebrow>
         <h2>The Artifacts</h2>
       </Reveal>
       <div className="ink-artifacts">
@@ -199,7 +289,14 @@ function Artifacts({ projects, loading }) {
                 <Reveal key={p.id ?? p.slug} delay={50 + i * 80} className="ink-artifact">
                   <div className="ink-frame">
                     {p.screenshot ? (
-                      <img src={mediaUrl(p.screenshot)} alt={`${p.title} screenshot`} loading="lazy" decoding="async" />
+                      <button
+                        type="button"
+                        className="ink-frame-btn"
+                        onClick={() => setEnlarged({ src: mediaUrl(p.screenshot), alt: `${p.title} screenshot` })}
+                        aria-label={`Open ${p.title} screenshot`}
+                      >
+                        <img src={mediaUrl(p.screenshot)} alt={`${p.title} screenshot`} loading="lazy" decoding="async" />
+                      </button>
                     ) : (
                       <span className="ink-frame-empty">{p.title?.[0]}</span>
                     )}
@@ -213,39 +310,18 @@ function Artifacts({ projects, loading }) {
                       p.title
                     )}
                   </h3>
-                  <p>{p.summary || p.description}</p>
+                  <Description short={p.summary || p.description} full={p.description} />
                   {p.tech?.length > 0 && <div className="ink-tech">{p.tech.slice(0, 6).join(' · ').toUpperCase()}</div>}
                 </Reveal>
               );
             })}
       </div>
+      <Lightbox src={enlarged?.src} alt={enlarged?.alt} onClose={() => setEnlarged(null)} />
     </section>
   );
 }
 
-function Engineering() {
-  return (
-    <section id="engineering" className="ink-section">
-      <Reveal className="ink-head ink-head-tight">
-        <Eyebrow n={4}>ENGINEERING</Eyebrow>
-      </Reveal>
-      <Reveal as="p" delay={80} className="ink-statement">
-        End to end, from interface to infrastructure.
-      </Reveal>
-      <div className="ink-disciplines">
-        {ENGINEERING.map(([title, text], i) => (
-          <Reveal key={title} delay={(i % 4) * 50} className="ink-card ink-discipline">
-            <div className="ink-num">{pad(i + 1)}</div>
-            <h4>{title}</h4>
-            <p>{text}</p>
-          </Reveal>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function Skills({ stack }) {
+function Skills({ stack, n }) {
   if (stack.length === 0) return null;
   const grouped = stack.reduce((acc, item) => {
     (acc[item.category || 'Other'] ||= []).push(item);
@@ -254,7 +330,7 @@ function Skills({ stack }) {
   return (
     <section id="skills" className="ink-section">
       <Reveal className="ink-head">
-        <Eyebrow n={5}>SKILLS</Eyebrow>
+        <Eyebrow n={n}>SKILLS</Eyebrow>
         <h2>The Tools of the Trade</h2>
       </Reveal>
       <div className="ink-skills">
@@ -275,13 +351,13 @@ function Skills({ stack }) {
   );
 }
 
-function Achievements({ experience }) {
+function Achievements({ experience, n }) {
   const marks = experience.filter((x) => x.kind === 'achievement');
   if (marks.length === 0) return null;
   return (
     <section id="achievements" className="ink-section">
       <Reveal className="ink-head">
-        <Eyebrow n={6}>ACHIEVEMENTS</Eyebrow>
+        <Eyebrow n={n}>ACHIEVEMENTS</Eyebrow>
         <h2>Marks Along the Way</h2>
       </Reveal>
       <div className="ink-marks">
@@ -297,34 +373,29 @@ function Achievements({ experience }) {
   );
 }
 
-function Origins({ education, content }) {
-  const items =
-    education.length > 0
-      ? education
-      : content['banner.education']
-        ? [{ id: 'edu', qualification: content['banner.education'], description: '' }]
-        : [];
-  if (items.length === 0) return null;
+// Only shown once education entries exist in the admin panel.
+function Origins({ education, n }) {
+  if (education.length === 0) return null;
   return (
     <section id="education" className="ink-section">
       <Reveal className="ink-head">
-        <Eyebrow n={7}>EDUCATION</Eyebrow>
+        <Eyebrow n={n}>EDUCATION</Eyebrow>
         <h2>Origins</h2>
       </Reveal>
       <Rows
-        items={items}
+        items={education}
         heading={(e) => [[e.qualification, e.field].filter(Boolean).join(' '), e.institution].filter(Boolean).join(' · ')}
       />
     </section>
   );
 }
 
-function Contact({ profile, socials }) {
+function Contact({ profile, socials, n }) {
   // The email gets its own button, so drop any email entry among the socials.
   const links = socials.filter((s) => s.url && !/^mailto:/i.test(s.url) && !/mail/i.test(s.icon || ''));
   return (
     <section id="contact" className="ink-contact">
-      <Reveal className="ink-eyebrow">08 — CONTACT · THE END, OR THE BEGINNING</Reveal>
+      <Reveal className="ink-eyebrow">{pad(n)} — CONTACT · THE END, OR THE BEGINNING</Reveal>
       <Reveal as="h2" delay={80} className="ink-sign">
         Let&rsquo;s build
         <br />
@@ -360,6 +431,10 @@ function Contact({ profile, socials }) {
 export default function InkSite({ site, loading }) {
   const { profile, projects = [], stack = [], socials = [], education = [], experience = [], content = {} } = site;
 
+  // Section numbers run on past the projects (03), skipping hidden sections.
+  let count = 3;
+  const next = (shown) => (shown ? ++count : count);
+
   // The page is paper, not the dark theme the shared base styles assume.
   useEffect(() => {
     document.documentElement.dataset.route = 'ink';
@@ -376,12 +451,11 @@ export default function InkSite({ site, loading }) {
         <Hero profile={profile} />
         <About profile={profile} content={content} />
         <Work experience={experience} />
-        <Artifacts projects={projects} loading={loading} />
-        <Engineering />
-        <Skills stack={stack} />
-        <Achievements experience={experience} />
-        <Origins education={education} content={content} />
-        <Contact profile={profile} socials={socials} />
+        <Artifacts projects={projects} loading={loading} n={3} />
+        <Skills stack={stack} n={next(stack.length > 0)} />
+        <Achievements experience={experience} n={next(experience.some((x) => x.kind === 'achievement'))} />
+        <Origins education={education} n={next(education.length > 0)} />
+        <Contact profile={profile} socials={socials} n={next(true)} />
       </main>
     </div>
   );
