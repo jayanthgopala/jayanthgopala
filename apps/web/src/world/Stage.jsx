@@ -27,6 +27,7 @@ import {
 } from 'three';
 import { ToneMappingMode } from 'postprocessing';
 import { NOISE_GLSL, SKY_FRAG, SKY_VERT, WIND_GLSL } from './lib/snow-shaders.js';
+import { hillRise, hillWarp, snowDrifts, snowSwell } from './lib/snow-hills.js';
 
 // Where the igloo stands, and the palette the whole frame is keyed to: a pale
 // arctic day where distance washes out to white rather than darkening.
@@ -176,7 +177,10 @@ function snowSurface(shader) {
         'float snHZ = snSastrugi( ( vSnowWorld.xz + vec2( 0.0, snStep ) ) * snScale );',
         // Ripples flatten out with distance so the far ranges stay smooth.
         'float snNear = 1.0 - smoothstep( 70.0, 520.0, length( vSnowWorld - cameraPosition ) );',
-        'float snRelief = 4.4 * snNear;',
+        // Patchy, so the ripples come and go like real wind crust instead of
+        // running across the whole plain as one rippled sheet.
+        'float snPatch = smoothstep( 0.35, 0.7, snFbm( vSnowWorld.xz * 0.012 + 7.0 ) );',
+        'float snRelief = ( 0.8 + 1.6 * snPatch ) * snNear;',
         'snWorldN = normalize( snWorldN + vec3( -( snHX - snH0 ), 0.0, -( snHZ - snH0 ) ) * snRelief / snStep );',
         'normal = normalize( ( viewMatrix * vec4( snWorldN, 0.0 ) ).xyz );',
         // Wide dune-scale value break, so the plain is never a flat sheet.
@@ -191,6 +195,10 @@ function snowSurface(shader) {
         'vec3 snSnow = mix( snShade, snLit, clamp( snFlat * 0.86 + snCrest * 0.22 * snNear + snBroad * 0.16, 0.0, 1.0 ) );',
         'float snSun = dot( snWorldN, vec3( -0.490, 0.501, 0.713 ) );',
         'snSnow *= mix( 0.74, 1.08, smoothstep( -0.30, 0.80, snSun ) );',
+        // Past the ripples, wind-packed and loose snow still break the slopes
+        // up: long soft patches a shade apart, stretched along the wind.
+        'float snPack = snFbm( snWindWarp( vSnowWorld.xz * 0.02 ) );',
+        'snSnow *= mix( 0.95, 1.03, smoothstep( 0.3, 0.7, snPack ) );',
         'diffuseColor.rgb *= snSnow;',
         // Scoured crests take a touch more gloss than the packed hollows.
         'roughnessFactor = mix( roughnessFactor, 0.62, snCrest * snNear * 0.45 );',
@@ -244,7 +252,8 @@ function SnowTerrain() {
   const geometry = useMemo(() => {
     // 3200 wide (X), 3000 deep (Z), so the farthest crowns still have ground
     // behind them and the plane's own edge never reaches the frame.
-    const geo = new PlaneGeometry(3200, 3000, 240, 220);
+    // ~6.7 units a cell: fine enough for the flutes down each hill's flanks.
+    const geo = new PlaneGeometry(3200, 3000, 480, 450);
     geo.rotateX(-Math.PI / 2);
     geo.translate(0, 0, 50);
     const pos = geo.attributes.position;
@@ -262,34 +271,24 @@ function SnowTerrain() {
       const cradle = 0.45 * Math.exp(-(r * r) / (2 * 45 * 45));
       const drift = 0.65 * Math.exp(-Math.pow(r - 24.5, 2) / (2 * 5.5 * 5.5));
 
-      // Subtle sastrugi wind ripples across the snow plain
-      const sastrugi =
-        Math.sin(x * 0.038 - z * 0.028) * Math.cos(x * 0.022 + z * 0.032) * 0.32 +
-        Math.sin(x * 0.012 + z * 0.015) * 0.45;
-
-      let height = cradle + drift + sastrugi;
+      // Low wind drifts across the snow plain
+      let height = cradle + drift + snowDrifts(x, z) * 0.9 * (0.35 + 0.65 * smoothstep(26, 60, r));
 
       // Composed with max, never summed. Summed, every drift's tail adds to
       // its neighbour's and the whole table fuses into one wall that fills the
       // frame — no ridgelines, no gaps, no sky.
+      const warp = hillWarp(x, z);
       let ridges = 0;
       for (let k = 0; k < RIDGES.length; k++) {
-        const m = RIDGES[k];
-        const ex = (x - m.x) / m.rx;
-        const ez = (z - m.z) / m.rz;
-        const rise = m.h * Math.exp(-(ex * ex + ez * ez) / 2);
+        const rise = hillRise(x, z, RIDGES[k], k + 1, warp);
         if (rise > ridges) ridges = rise;
       }
 
       // Long swells stitching the drifts into one continuous snowfield
-      const swell =
-        (Math.sin(x * 0.0045 + 0.9) * 7.0 +
-          Math.cos(z * 0.0055 - 0.4) * 5.0 +
-          Math.sin(x * 0.009 - z * 0.007) * 3.0) *
-        smoothstep(-40, -260, dz);
+      const swell = snowSwell(x, z) * smoothstep(-40, -260, dz);
 
       // The igloo keeps its own clearing: no drift is allowed to climb into it.
-      height += (ridges + Math.max(0, swell)) * smoothstep(55, 125, r);
+      height += Math.max(ridges, swell) * smoothstep(55, 125, r);
 
       pos.setY(i, height);
     }
