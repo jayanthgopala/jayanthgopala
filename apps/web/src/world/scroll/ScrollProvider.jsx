@@ -64,18 +64,24 @@ export default function ScrollProvider({ children, locked = false }) {
       // On the project page (see PAGE_MAX_LEAD): no stops, a pace cap; past
       // the last project the scroll carries on into the rings.
       virtualScroll: (data) => {
-        // The opening's glides: scrolling on does not rush one, and scrolling
-        // the other way stops it and sends it back where it came from.
-        if (glideNow.dir !== 0) {
+        // The opening (the igloo to the top of the page) has two resting
+        // places and nothing between. Any scroll there glides to the one in
+        // the direction scrolled; scrolling on does not rush a glide, and
+        // scrolling the other way turns it straight round.
+        {
+          const { pageAt } = worldStops();
           const d = data.deltaY;
-          if (d && Math.sign(d) !== glideNow.dir) {
-            const { runEnd, pageAt } = worldStops();
-            const back =
-              glideNow.to === runEnd ? (glideNow.dir > 0 ? 0 : pageAt) : glideNow.to === pageAt ? runEnd : runEnd;
-            worldGlide(back);
+          const inOpening = glideNow.dir !== 0 || instance.scroll < pageAt - 3;
+          if (inOpening) {
+            if (d) {
+              const dir = Math.sign(d);
+              const to = dir > 0 ? pageAt : 0;
+              const there = Math.abs(instance.scroll - to) < 3;
+              if (glideNow.dir !== dir && !there) worldGlide(to);
+            }
+            if (data.event.cancelable) data.event.preventDefault();
+            return false;
           }
-          if (data.event.cancelable) data.event.preventDefault();
-          return false;
         }
         if (!data.event.type.includes('wheel')) return true;
         const leash = pageLeash.current?.stops?.length ? pageLeash.current : null;
@@ -126,11 +132,6 @@ export default function ScrollProvider({ children, locked = false }) {
     // descents per second) keeps a flick travelling through every ring.
     const FALL_FOLLOW = 4.2;
     const FALL_RATE = 1.6 / RINGS.fall;
-    // The glides, end to end: the boat's run (the first scroll off the top),
-    // the cut to the page (the next scroll), and from the ring cut to the
-    // contact room.
-    const BOAT_GLIDE_SECONDS = 7;
-    const CUT_GLIDE_SECONDS = 2.6;
     // One scroll off the top goes all the way to the page: the pull-back and
     // the cut in a single glide, and one scroll back up returns to the igloo.
     // Brisk, and eased so it visibly moves the moment the wheel turns: a slow
@@ -157,31 +158,28 @@ export default function ScrollProvider({ children, locked = false }) {
     // both directions. Starting part-way (turned round mid-glide) takes the
     // matching share of the time.
     const glideNow = { dir: 0, to: 0 };
+    let glideDeadline = 0;
+    function endGlide() {
+      gliding = false;
+      glideNow.dir = 0;
+    }
     function worldGlide(to) {
-      const { runEnd, pageAt } = worldStops();
+      const { pageAt } = worldStops();
       const from = instance.scroll;
-      const boat = Math.max(from, to) <= runEnd + 3;
-      const whole = Math.min(from, to) < runEnd - 3 && Math.max(from, to) > runEnd + 3;
-      const span = whole ? pageAt : boat ? runEnd : pageAt - runEnd;
-      const share = Math.min(1, Math.max(0.15, Math.abs(to - from) / span));
-      const seconds = whole ? OPENING_GLIDE_SECONDS : boat ? BOAT_GLIDE_SECONDS : CUT_GLIDE_SECONDS;
+      const share = Math.min(1, Math.max(0.15, Math.abs(to - from) / pageAt));
+      const seconds = OPENING_GLIDE_SECONDS * share;
       gliding = true;
       glideNow.dir = Math.sign(to - from) || 1;
       glideNow.to = to;
+      glideDeadline = performance.now() + (reduce ? 0 : seconds * 1000) + 600;
       instance.scrollTo(to, {
-        duration: reduce ? 0 : seconds * share,
+        duration: reduce ? 0 : seconds,
         immediate: reduce,
         force: true,
-        easing: boat || whole ? easeSine : easeInOut,
-        onComplete: () => {
-          gliding = false;
-          glideNow.dir = 0;
-        },
+        easing: easeSine,
+        onComplete: endGlide,
       });
-      if (reduce) {
-        gliding = false;
-        glideNow.dir = 0;
-      }
+      if (reduce) endGlide();
     }
 
     let lastInput = performance.now();
@@ -246,17 +244,20 @@ export default function ScrollProvider({ children, locked = false }) {
       // scroll carries on from there either way. (See worldGlide for turning
       // one round.)
       {
-        const { runEnd, pageAt } = worldStops();
+        const { pageAt } = worldStops();
         const s = instance.scroll;
+        // A glide that never reported finishing (cut short by a key, the
+        // scrollbar or a touch) must not keep the wheel locked out.
+        if (gliding && glideNow.dir !== 0 && performance.now() > glideDeadline) endGlide();
         if (!gliding && lastTop < 2 && s >= 2 && s < pageAt - 3) {
           worldGlide(pageAt);
         } else if (!gliding && lastTop >= pageAt - 3 && s < pageAt - 3 && s > 2) {
           // Up past the top of the page, from wherever on it the scroll began.
           worldGlide(0);
-        } else if (!gliding && Math.abs(lastTop - runEnd) < 3 && s > runEnd + 2 && s < pageAt - 3) {
-          worldGlide(pageAt);
-        } else if (!gliding && Math.abs(lastTop - runEnd) < 3 && s < runEnd - 3 && s > 2) {
-          worldGlide(0);
+        } else if (!gliding && s > 2 && s < pageAt - 3 && time - lastInput > 250) {
+          // Left anywhere between the two (keys, scrollbar, a resize): on to
+          // whichever is nearer.
+          worldGlide(s < pageAt / 2 ? 0 : pageAt);
         }
         lastTop = s;
       }
@@ -341,8 +342,7 @@ export default function ScrollProvider({ children, locked = false }) {
         let target = null;
         // Anywhere in the world stretch is a place to rest (the boat's run);
         // part-way into the cut, it falls back to the cut's start.
-        if (s > worldPx + 1 && s < commitPx) target = worldPx;
-        else if (s >= commitPx && s < worldPx + cutPx - 1) target = worldPx + cutPx + 2;
+        if (s > 1 && s < worldPx + cutPx - 1) target = s < commitPx ? 0 : worldPx + cutPx + 2;
         else if (hasPage && s > ringFrom + 1 && s < ringCommit) target = ringFrom;
         else if (hasPage && s >= ringCommit && s < ringFrom + ringCutPx - 1) target = ringFrom + ringCutPx + 2;
 

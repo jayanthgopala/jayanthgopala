@@ -36,11 +36,13 @@ export default defineConfig(({ mode }) => {
   },
   server: {
     port: 5173,
-    // Proxy local dev requests to the Worker API
+    // Proxy local dev requests to the Worker API. API_PROXY points it at a
+    // deployed Worker instead, so any local port can use the real data without
+    // being on the API's CORS allowlist (run with VITE_API_URL="" for that).
     proxy: {
-      '/api': { target: 'http://localhost:8787', changeOrigin: true },
-      '/media': { target: 'http://localhost:8787', changeOrigin: true },
-      '/svg': { target: 'http://localhost:8787', changeOrigin: true },
+      '/api': { target: env.API_PROXY || 'http://localhost:8787', changeOrigin: true },
+      '/media': { target: env.API_PROXY || 'http://localhost:8787', changeOrigin: true },
+      '/svg': { target: env.API_PROXY || 'http://localhost:8787', changeOrigin: true },
     },
   },
   build: {

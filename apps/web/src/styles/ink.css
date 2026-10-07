@@ -505,23 +505,9 @@
   cursor: zoom-in;
 }
 
-/* Description: clamped summary that eases open to the full text */
-
-.ink-desc-toggle {
-  display: block;
-  width: 100%;
-  margin-bottom: 12px;
-  padding: 0;
-  text-align: left;
-  cursor: pointer;
-}
+/* Description: clamped summary, with "Read more" opening the dossier */
 
 .ink-desc {
-  overflow: hidden;
-  transition: height 0.55s var(--ink-ease);
-}
-
-.ink-desc-static {
   margin-bottom: 12px;
 }
 
@@ -529,7 +515,6 @@
   font-size: 14px;
   line-height: 1.6;
   color: var(--ink-soft);
-  animation: ink-text-in 0.5s var(--ink-ease);
 }
 
 .ink-desc p.is-clamped {
@@ -539,16 +524,12 @@
   overflow: hidden;
 }
 
-@keyframes ink-text-in {
-  from { opacity: 0.35; }
-  to { opacity: 1; }
-}
-
 .ink-desc-more {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   margin-top: 8px;
+  padding: 0 0 2px;
   font-family: var(--typewriter);
   font-size: 10px;
   letter-spacing: 0.18em;
@@ -557,15 +538,16 @@
   transition: border-color 0.25s var(--ink-ease);
 }
 
-.ink-desc-toggle:hover .ink-desc-more {
+.ink-desc-more:hover {
   border-color: var(--ink);
 }
 
-/* A plus that turns into a minus */
+/* A plus, turning a quarter on hover */
 .ink-desc-sign {
   position: relative;
   width: 9px;
   height: 9px;
+  transition: transform 0.4s var(--ink-ease);
 }
 
 .ink-desc-sign::before,
@@ -575,15 +557,151 @@
   inset: 4px 0 auto;
   height: 1px;
   background: var(--seal);
-  transition: transform 0.4s var(--ink-ease);
 }
 
 .ink-desc-sign::after {
   transform: rotate(90deg);
 }
 
-.ink-desc-toggle[aria-expanded='true'] .ink-desc-sign::after {
-  transform: rotate(0deg);
+.ink-desc-more:hover .ink-desc-sign {
+  transform: rotate(90deg);
+}
+
+/* Dossier: the full project on a paper card */
+
+.ink-dossier {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 5vw, 56px);
+  background: rgba(231, 226, 215, 0.88);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: ink-wash-in 0.35s var(--ink-ease) both;
+  cursor: zoom-out;
+}
+
+.ink-dossier-frame {
+  position: relative;
+  width: min(720px, 100%);
+  /* The screen less the wash's padding: the card scrolls inside this. */
+  max-height: calc(100dvh - 2 * clamp(16px, 5vw, 56px));
+  display: flex;
+  cursor: default;
+  animation: ink-card-in 0.55s var(--ink-ease) both;
+}
+
+.ink-dossier.is-leaving .ink-dossier-frame {
+  animation: ink-card-out 0.26s ease-in both;
+}
+
+.ink-dossier-card {
+  position: relative;
+  width: 100%;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink) transparent;
+  overflow-y: auto;
+  padding: clamp(28px, 4vw, 48px);
+  background-color: var(--paper-card);
+  background-image: radial-gradient(rgba(22, 19, 15, 0.04) 1px, transparent 1px);
+  background-size: 4px 4px;
+  border: 2px solid var(--ink);
+  box-shadow: 10px 10px 0 var(--ink-shadow);
+  overscroll-behavior: contain;
+}
+
+.ink-dossier.is-leaving {
+  animation: ink-wash-out 0.26s ease-in both;
+}
+
+@keyframes ink-wash-in {
+  from { opacity: 0; }
+}
+
+@keyframes ink-wash-out {
+  to { opacity: 0; }
+}
+
+@keyframes ink-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+    box-shadow: 0 0 0 var(--ink-shadow);
+  }
+}
+
+@keyframes ink-card-out {
+  to {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+.ink-dossier-close {
+  position: absolute;
+  z-index: 2;
+  top: 16px;
+  right: 20px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  background: var(--ink);
+  color: var(--paper);
+  border: 2px solid var(--ink);
+  transition: background 0.2s var(--ink-ease), border-color 0.2s var(--ink-ease);
+}
+
+.ink-dossier-close:hover {
+  background: var(--seal);
+  border-color: var(--seal);
+}
+
+.ink-dossier-title {
+  max-width: 90%;
+  font-family: var(--serif);
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 700;
+  line-height: 1.05;
+}
+
+.ink-dossier-rule {
+  display: block;
+  width: 48px;
+  height: 2px;
+  margin: 20px 0 22px;
+  background: var(--seal);
+}
+
+.ink-dossier-body p {
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--ink-soft);
+}
+
+.ink-dossier-body p + p {
+  margin-top: 14px;
+}
+
+.ink-dossier-tech {
+  margin-top: 26px;
+}
+
+.ink-dossier-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ink-dossier,
+  .ink-dossier-frame {
+    animation: none;
+  }
 }
 
 /* Lightbox on paper: a pale wash and the image framed in ink */
@@ -613,13 +731,7 @@
   color: var(--paper);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .ink-desc,
-  .ink-desc p {
-    transition: none;
-    animation: none;
-  }
-}
+
 
 .ink-tech {
   font-family: var(--typewriter);

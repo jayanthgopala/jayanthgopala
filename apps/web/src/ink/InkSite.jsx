@@ -211,69 +211,142 @@ function Work({ experience }) {
   );
 }
 
-// A project's text: the summary, clamped, until it is clicked; then the full
-// description, with the box easing open to its new height.
-function Description({ short, full }) {
-  const [open, setOpen] = useState(false);
+// A project's summary, clamped to a few lines. When there is more to read
+// (a longer description, or a summary the clamp cuts off), "Read more" opens
+// the project's dossier.
+function Description({ short, full, onOpen }) {
   const [clipped, setClipped] = useState(false);
-  const box = useRef(null);
-  const from = useRef(null);
+  const text = useRef(null);
   const longer = Boolean(full) && full !== short;
 
-  // A summary can be cut off by the clamp even when there is no longer text.
   useLayoutEffect(() => {
-    const p = box.current?.firstElementChild;
-    if (p && !open) setClipped(p.scrollHeight > p.clientHeight + 1);
-  }, [short, open]);
+    const p = text.current;
+    if (p) setClipped(p.scrollHeight > p.clientHeight + 1);
+  }, [short]);
 
-  // Animate from the height before the change to the height after it.
-  useLayoutEffect(() => {
-    const node = box.current;
-    if (!node || from.current === null) return;
-    const to = node.scrollHeight;
-    node.style.height = `${from.current}px`;
-    void node.offsetHeight;
-    node.style.height = `${to}px`;
-    from.current = null;
-  }, [open]);
+  const more = longer || clipped;
+  return (
+    <div className="ink-desc">
+      <p ref={text} className="is-clamped">
+        {short}
+      </p>
+      {more && (
+        <button type="button" className="ink-desc-more" onClick={onOpen}>
+          READ MORE
+          <span className="ink-desc-sign" aria-hidden="true" />
+        </button>
+      )}
+    </div>
+  );
+}
 
-  if (!longer && !clipped) {
-    return (
-      <div ref={box} className="ink-desc ink-desc-static">
-        <p className="is-clamped">{short}</p>
-      </div>
-    );
-  }
+const DOSSIER_OUT_MS = 260;
 
-  const toggle = () => {
-    from.current = box.current.offsetHeight;
-    setOpen((v) => !v);
+// The full project, on a paper card over a pale wash: rises in, sinks out.
+function Dossier({ project, index, n, onClose }) {
+  const [leaving, setLeaving] = useState(false);
+  const closeRef = useRef(null);
+  const timer = useRef(0);
+
+  const close = () => {
+    if (leaving) return;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) {
+      onClose();
+      return;
+    }
+    setLeaving(true);
+    timer.current = window.setTimeout(onClose, DOSSIER_OUT_MS);
   };
 
+  useEffect(() => {
+    const back = document.activeElement;
+    closeRef.current?.focus();
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e) => {
+      if (e.key === 'Escape') close();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previous;
+      window.clearTimeout(timer.current);
+      if (back instanceof HTMLElement) back.focus();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const p = project;
+  const body = (p.description || p.summary || '').split(/\n\s*\n/).filter(Boolean);
+  const live = externalUrl(p.liveUrl || '');
+  const repo = externalUrl(p.repoUrl || '');
+
   return (
-    <button type="button" className="ink-desc-toggle" aria-expanded={open} onClick={toggle}>
-      <div
-        ref={box}
-        className="ink-desc"
-        onTransitionEnd={(e) => {
-          if (e.target === box.current) box.current.style.height = '';
-        }}
-      >
-        <p key={open ? 'full' : 'short'} className={open ? 'is-open' : 'is-clamped'}>
-          {open ? full || short : short}
-        </p>
+    <div
+      className={`ink-dossier${leaving ? ' is-leaving' : ''}`}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="ink-dossier-title"
+      onClick={close}
+    >
+      {/* The frame holds the close button still while the card scrolls. */}
+      <div className="ink-dossier-frame" onClick={(e) => e.stopPropagation()}>
+      <button ref={closeRef} type="button" className="ink-dossier-close" onClick={close} aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18" />
+        </svg>
+      </button>
+      <article className="ink-dossier-card">
+
+        <div className="ink-eyebrow">
+          {pad(n)} — ARTIFACT · {pad(index + 1)}
+        </div>
+        <h3 id="ink-dossier-title" className="ink-dossier-title">
+          {p.title}
+        </h3>
+        <span className="ink-dossier-rule" aria-hidden="true" />
+
+        <div className="ink-dossier-body">
+          {body.map((para, i) => (
+            <p key={i}>{para}</p>
+          ))}
+        </div>
+
+        {p.tech?.length > 0 && (
+          <ul className="ink-chips ink-dossier-tech">
+            {p.tech.map((t) => (
+              <li key={t} className="ink-chip">
+                {t}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {(live || repo) && (
+          <div className="ink-dossier-links">
+            {live && (
+              <a className="ink-btn" href={live} target="_blank" rel="noreferrer noopener">
+                VISIT LIVE ↗
+              </a>
+            )}
+            {repo && (
+              <a className="ink-btn ink-btn-ghost" href={repo} target="_blank" rel="noreferrer noopener">
+                SOURCE ↗
+              </a>
+            )}
+          </div>
+        )}
+      </article>
       </div>
-      <span className="ink-desc-more">
-        {open ? 'LESS' : 'READ MORE'}
-        <span className="ink-desc-sign" aria-hidden="true" />
-      </span>
-    </button>
+    </div>
   );
 }
 
 function Artifacts({ projects, loading, n }) {
   const shown = projects.filter((p) => p.published !== false);
   const [enlarged, setEnlarged] = useState(null);
+  const [reading, setReading] = useState(null);
   return (
     <section id="projects" className="ink-section">
       <Reveal className="ink-head">
@@ -310,13 +383,16 @@ function Artifacts({ projects, loading, n }) {
                       p.title
                     )}
                   </h3>
-                  <Description short={p.summary || p.description} full={p.description} />
+                  <Description short={p.summary || p.description} full={p.description} onOpen={() => setReading(i)} />
                   {p.tech?.length > 0 && <div className="ink-tech">{p.tech.slice(0, 6).join(' · ').toUpperCase()}</div>}
                 </Reveal>
               );
             })}
       </div>
       <Lightbox src={enlarged?.src} alt={enlarged?.alt} onClose={() => setEnlarged(null)} />
+      {reading !== null && shown[reading] && (
+        <Dossier project={shown[reading]} index={reading} n={n} onClose={() => setReading(null)} />
+      )}
     </section>
   );
 }

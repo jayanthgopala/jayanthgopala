@@ -350,6 +350,63 @@ function SnowTerrain() {
   );
 }
 
+// Snow banked against the igloo's foot, irregular all round, lower across the
+// entrance. A fine ring of its own: the terrain's cells are wider than the bank.
+const BANK = { inner: 21.5, peak: 24.6, outer: 31, height: 1.9 };
+// The entrance faces along the igloo's yaw (IglooBlocks: IGLOO_YAW).
+const DOOR_BEARING = 1.24;
+
+function SnowBank() {
+  const geometry = useMemo(() => {
+    const radial = 18;
+    const around = 160;
+    const positions = new Float32Array((radial + 1) * (around + 1) * 3);
+    const index = [];
+    for (let j = 0; j <= around; j++) {
+      const theta = (j / around) * Math.PI * 2;
+      // Lumpy along its length, and low where the doorway is.
+      const lump =
+        0.75 + 0.3 * Math.sin(theta * 5 + 1.3) + 0.18 * Math.sin(theta * 11 - 0.4) + 0.1 * Math.sin(theta * 23 + 2.0);
+      const toDoor = Math.abs(Math.atan2(Math.sin(theta - DOOR_BEARING), Math.cos(theta - DOOR_BEARING)));
+      const door = smoothstep(0.18, 0.55, toDoor);
+      for (let i = 0; i <= radial; i++) {
+        const u = i / radial;
+        const r = BANK.inner + (BANK.outer - BANK.inner) * u;
+        // Steep against the wall, a long tail outward, sunk at both ends.
+        const rise = r < BANK.peak
+          ? smoothstep(BANK.inner, BANK.peak, r)
+          : 1 - smoothstep(BANK.peak, BANK.outer, r) ** 0.7;
+        // Only the very last ring sinks below the ground, to blend into it;
+        // anywhere else a dip would show the bank's underside as a dark hole.
+        const h = i === radial ? -0.3 : 0.05 + BANK.height * rise * lump * (0.25 + 0.75 * door);
+        const k = (j * (radial + 1) + i) * 3;
+        positions[k] = IGLOO_AT[0] + Math.sin(theta) * r;
+        positions[k + 1] = h;
+        positions[k + 2] = IGLOO_AT[1] + Math.cos(theta) * r;
+      }
+    }
+    for (let j = 0; j < around; j++) {
+      for (let i = 0; i < radial; i++) {
+        const a = j * (radial + 1) + i;
+        const b = (j + 1) * (radial + 1) + i;
+        // Wound so the faces (and normals) point up, toward the sky.
+        index.push(a, a + 1, b, b, a + 1, b + 1);
+      }
+    }
+    const geo = new BufferGeometry();
+    geo.setAttribute('position', new BufferAttribute(positions, 3));
+    geo.setIndex(index);
+    geo.computeVertexNormals();
+    return geo;
+  }, []);
+
+  return (
+    <mesh geometry={geometry} receiveShadow frustumCulled={false}>
+      <meshStandardMaterial color="#f2f7fd" roughness={0.86} onBeforeCompile={snowSurface} />
+    </mesh>
+  );
+}
+
 // Soft blob used for the low mist banks: one radial falloff, torn at its edges
 // so the bands never read as a painted oval.
 function mistTexture() {
@@ -666,6 +723,7 @@ export default function Stage({ onIglooReady, begin = false, warm = false, onWar
 
           {/* 3D igloo settled firmly into the snow ground */}
           <IglooBlocks at={IGLOO_AT} lift={0.0} tint="#eef5fd" onReady={onIglooReady} />
+          <SnowBank />
 
           <Preload all />
         </Suspense>
