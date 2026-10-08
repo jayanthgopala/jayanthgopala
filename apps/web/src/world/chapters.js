@@ -145,7 +145,7 @@ export function scrollState(scroll, vh, out = {}, pageHeight = 0) {
 const CAMERA_POINTS = [
   // Opening frame: well back from the igloo, so it sits small in a wide
   // snowfield as in the reference.
-  [-34, 21, 386],
+  [-34, 21, 382],
   [-28, 48, 400],
   [-27, 85, 465],
   [-25, 122, 535],
@@ -163,6 +163,9 @@ const TARGET_POINTS = [
   [-28, 45, 252],
   [-28, 52, 252],
 ];
+
+// The opening frame, which the sky backplate was cut from (see SnowSky).
+export const OPENING_FRAME = { eye: CAMERA_POINTS[0], aim: TARGET_POINTS[0], fov: 38 };
 
 const toVec = (p) => new Vector3(p[0], p[1], p[2]);
 

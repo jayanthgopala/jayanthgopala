@@ -475,6 +475,19 @@
   font-weight: 500;
 }
 
+.w-hud::before {
+  /* A faint shade behind the corner text, so it stays readable on bright snow. */
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 34% 20% at 0% 0%, rgba(34, 46, 64, 0.18), transparent 72%),
+    radial-gradient(ellipse 26% 16% at 100% 0%, rgba(34, 46, 64, 0.12), transparent 72%),
+    radial-gradient(ellipse 30% 16% at 0% 100%, rgba(34, 46, 64, 0.14), transparent 72%);
+}
+
 .w-hud > * { pointer-events: none; }
 .w-hud a,
 .w-hud button { pointer-events: auto; }

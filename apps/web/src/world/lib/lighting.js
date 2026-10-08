@@ -413,7 +413,7 @@ export const ARCTIC_HERO = {
     glow: '#ffaa44',
     strength: 1.0,
     lamp: { color: '#ff9834', intensity: 1400 },
-    porch: { color: '#ffa244', intensity: 1300 },
+    porch: { color: '#ffa244', intensity: 1100 },
   },
   snow: { normalScale: 0.22 },
   grade: {

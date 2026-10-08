@@ -188,7 +188,7 @@ const iceShader = (shader) => {
           // coordinates so it never swims as blocks move.
           'float igCoarse = igNoise( vLocal * 0.22 + 4.1 );',
           'float igGrain = igNoise( vLocal * 0.55 ) * 0.55 + igNoise( vLocal * 1.6 ) * 0.3 + igNoise( vLocal * 4.2 ) * 0.15;',
-          'diffuseColor.rgb *= mix( 0.93, 1.03, igGrain );',
+          'diffuseColor.rgb *= mix( 0.97, 1.02, igGrain );',
           // Edges crumble unevenly: the rounding reaches further in where the
           // block has chipped.
           'float bevel = smoothstep( 0.62 - 0.3 * igCoarse, 1.00, vEdge );',
@@ -196,7 +196,7 @@ const iceShader = (shader) => {
           // Bump from the grain, strongest on the worn edges.
           // Broad chisel cuts (ridged noise) under the finer packed-snow grain.
           'float igChisel = 1.0 - abs( igNoise( vLocal * 0.3 + 7.0 ) * 2.0 - 1.0 );',
-          'float igH = ( igNoise( vLocal * 0.55 ) * 0.65 + igNoise( vLocal * 1.6 ) * 0.35 ) * ( 0.6 + 1.2 * bevel ) + igChisel * 0.9;',
+          'float igH = ( igNoise( vLocal * 0.55 ) * 0.65 + igNoise( vLocal * 1.6 ) * 0.35 ) * ( 0.6 + 1.2 * bevel ) + igChisel * 0.45;',
           'vec3 igDpx = dFdx( -vViewPosition );',
           'vec3 igDpy = dFdy( -vViewPosition );',
           'float igDhx = dFdx( igH );',
@@ -205,9 +205,9 @@ const iceShader = (shader) => {
           'vec3 igR2 = cross( normal, igDpx );',
           'float igDet = dot( igDpx, igR1 );',
           'vec3 igGrad = sign( igDet ) * ( igDhx * igR1 + igDhy * igR2 );',
-          'normal = normalize( abs( igDet ) * normal - igGrad * 0.35 );',
+          'normal = normalize( abs( igDet ) * normal - igGrad * 0.1 );',
           // Joints sit a shade darker: packed with loose snow, in shadow.
-          'diffuseColor.rgb *= mix( 1.0, 0.86, smoothstep( 0.9, 1.0, vEdge ) );',
+          'diffuseColor.rgb *= mix( 1.0, 0.62, smoothstep( 0.93, 1.0, vEdge ) );',
           'roughnessFactor = 0.95;',
           `vec3 sunDir = vec3( ${SUN_DIR.map((c) => c.toFixed(4)).join(', ')} );`,
           'vec3 wNrm = inverseTransformDirection( normalize( vNormal ), viewMatrix );',
@@ -238,16 +238,18 @@ const iceShader = (shader) => {
           // through. Constant; nothing here responds to the scroll.
           'float seamLine = smoothstep( 0.92, 1.0, vEdge );',
           'float seamLeakage = smoothstep( 0.3, 0.75, igNoise( vLocal * 0.18 + 3.1 ) );',
-          'totalEmissiveRadiance += vec3( 1.00, 0.76, 0.40 ) * seamLine * ( 0.3 + 0.9 * seamLeakage ) * ( 0.45 + 0.55 * scatter );',
+          'totalEmissiveRadiance += vec3( 1.00, 0.76, 0.40 ) * seamLine * ( 0.0 + 0.04 * seamLeakage ) * ( 0.45 + 0.55 * scatter );',
           // Entrance arch glow radiating warm amber illumination
           'float insideArch = smoothstep( 0.35, -0.35, vFacing );',
-          'float archGlow = ( 0.80 + 0.20 * vExcite ) * vEntrance;',
+          'float archGlow = ( 0.55 + 0.15 * vExcite ) * vEntrance;',
           'float archRim = smoothstep( 0.75, 1.00, vEdge ) * archGlow;',
           'totalEmissiveRadiance += vec3( 1.00, 0.82, 0.46 ) * ( 3.8 * insideArch + 2.4 * archRim ) * archGlow;',
           // Subtle daylight rim on outer dome contours
           'float nv = clamp( dot( normal, normalize( vViewPosition ) ), 0.0, 1.0 );',
           'float rim = pow( 1.0 - nv, 2.6 );',
           'totalEmissiveRadiance += vec3( 0.20, 0.38, 0.60 ) * rim * ( 1.0 - innerFace ) * 0.30;',
+          // Overcast fill: the block faces read clean white, as in the reference.
+          'totalEmissiveRadiance += vec3( 0.80, 0.84, 0.90 ) * 0.10 * ( 1.0 - innerFace ) * ( 1.0 - smoothstep( 0.9, 1.0, vEdge ) );',
         ].join('\n')
       );
 };
@@ -259,7 +261,7 @@ function gradeForWorld(material, tint) {
   material.envMapIntensity = ICE.env;
   // The baked normal map's broad dents shade every block in grey blotches,
   // which read as marble; keep only a hint of it under the snow grain.
-  material.normalScale.set(0.4, 0.4);
+  material.normalScale.set(0.3, 0.3);
   material.side = 2; // DoubleSide
   material.onBeforeCompile = iceShader;
   material.needsUpdate = true;
@@ -499,7 +501,7 @@ export default function IglooBlocks({
       <pointLight
         position={[0, 2.4, 27.5]}
         intensity={LOOK.igloo.porch.intensity}
-        distance={18}
+        distance={24}
         decay={2}
         color={LOOK.igloo.porch.color}
       />

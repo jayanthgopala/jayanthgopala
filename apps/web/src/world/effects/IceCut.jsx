@@ -97,7 +97,8 @@ const FRAGMENT = /* glsl */ `
 
   // Spectral tint weight function
   vec3 spectrum( float t ) {
-    return vec3( 1.0 - t, 1.0 - abs( t * 2.0 - 1.0 ), t ) + 0.1;
+    // Mostly neutral: a blur, not a pink and orange fringe.
+    return mix( vec3( 1.0 ), vec3( 1.0 - t, 1.0 - abs( t * 2.0 - 1.0 ), t ) + 0.1, 0.18 );
   }
 
   // Multi-tap directional smear with chromatic dispersion for the 3D world scene
