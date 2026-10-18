@@ -1,10 +1,6 @@
 <div align="center">
 
-<!--
-  Banner is served live from the portfolio Worker, so it reflects the admin
-  panel without a commit. <picture> lets GitHub pick the palette: an SVG
-  embedded as an image can't see the host page's colour scheme itself.
--->
+<!-- Live dynamic SVG banner -->
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://portfolio-api.jayanthgopala21.workers.dev/svg/banner-dark.svg" />
   <source media="(prefers-color-scheme: light)" srcset="https://portfolio-api.jayanthgopala21.workers.dev/svg/banner-light.svg" />
@@ -31,12 +27,7 @@ I design and ship production systems end to end — from edge APIs and data mode
   <img src="https://portfolio-api.jayanthgopala21.workers.dev/svg/status.svg" alt="Live status" width="820" />
 </div>
 
-<!--
-  The links inside that card are pixels, not anchors. GitHub proxies README
-  images through camo and renders them as <img>, so nothing inside an SVG is
-  ever clickable — an <a> in the markup would simply be ignored. The row below
-  is the clickable equivalent.
--->
+<!-- Fallback clickable links row -->
 <div align="center">
 
 [GitHub](https://github.com/jayanthgopala) &nbsp;·&nbsp; [Portfolio](https://jayanthgopala.com) &nbsp;·&nbsp; [LinkedIn](https://www.linkedin.com/in/jayanth-gopala-v/) &nbsp;·&nbsp; [Email](mailto:jayanthgopala21@gmail.com)
@@ -51,7 +42,7 @@ I design and ship production systems end to end — from edge APIs and data mode
 - **Frontend** — `React` `Vite` `css`
 - **Backend** — `Node.js` `Express` `JWT` `WebAuthn` `BullMQ` `serverless backend`
 - **Platform** — `Cloudflare Workers` `Cloudflare` `Docker` `Dokploy` `Sequelize`
-- **Data** — `PostgreSQL` `mongo db` `my sql` `sqlite` `Redis`
+- **Data** — `PostgreSQL` `PostgreSQL` `mongo db` `my sql` `sqlite` `Redis`
 - **Tooling** — `Git` `GitHub` `npm` `Postman`
 - **Other** — `REST APIs` `Microservices` `RBAC` `CI/CD` `WebSockets` `Tunnel` `n8n` `Git · GitHub · Docker · Dokploy · Claude Code · Gemini CLI · Automation Tools`
 
