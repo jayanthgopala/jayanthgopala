@@ -1184,3 +1184,14 @@
   .w-readout-lines path { stroke-dashoffset: 0; }
   .w-readout-go { background-size: 100% 1px; }
 }
+
+/* Sound button in the main HUD: bottom right, mirrors the scroll hint. */
+.w-sound-hud {
+  grid-column: 3;
+  justify-self: end;
+  pointer-events: auto;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 8px 4px;
+}

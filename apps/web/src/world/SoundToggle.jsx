@@ -3,10 +3,53 @@ import { useWorldScroll } from './scroll/ScrollProvider.jsx';
 import { windState } from './lib/wind.js';
 import { sound } from './lib/sound.js';
 
+// Sound is on by default and the visitor's choice is remembered. Browsers refuse
+// to play audio before the page has been touched, so "on" starts at the first
+// touch, key press or scroll; an explicit off is kept across visits.
+const PREF_KEY = 'world.sound';
+const readPref = () => {
+  try {
+    return window.localStorage.getItem(PREF_KEY);
+  } catch {
+    return null;
+  }
+};
+const writePref = (value) => {
+  try {
+    window.localStorage.setItem(PREF_KEY, value);
+  } catch {
+    /* private mode: the choice just lasts the visit */
+  }
+};
+
+let autoStartArmed = false;
+function armAutoStart() {
+  if (autoStartArmed || typeof window === 'undefined') return;
+  autoStartArmed = true;
+  const events = ['pointerdown', 'touchstart', 'keydown', 'wheel'];
+  const go = () => {
+    events.forEach((name) => window.removeEventListener(name, go, true));
+    if (readPref() !== 'off' && !sound.enabled) sound.start();
+  };
+  events.forEach((name) => window.addEventListener(name, go, { capture: true, passive: true }));
+  // Sometimes allowed straight away (a returning visitor); harmless if not.
+  if (readPref() !== 'off') {
+    try {
+      sound.start();
+    } catch {
+      /* wait for the first touch */
+    }
+  }
+}
+
 // The ambient sound toggle, shared by the HUD (WorldSite.jsx) and the
 // project detail (WorkPage.jsx).
 export default function SoundToggle({ className = '' } = {}) {
-  const [on, setOn] = useState(() => sound.enabled);
+  const [live, setLive] = useState(() => sound.enabled);
+  // Until the first touch lets audio play, the default "on" is pending: show it
+  // as on, so the button states what will happen rather than what has not yet.
+  const [pending, setPending] = useState(() => !sound.enabled && readPref() !== 'off');
+  const on = live || pending;
   let scrollCtx = null;
   try {
     scrollCtx = useWorldScroll();
@@ -20,8 +63,12 @@ export default function SoundToggle({ className = '' } = {}) {
   // Buffer the pad track once the world is up, so the first toggle starts
   // immediately without its 9 MB competing with the load.
   useEffect(() => {
+    armAutoStart();
     const warm = setTimeout(() => sound.preload(), 12000);
-    const unsub = sound.subscribe((active) => setOn(active));
+    const unsub = sound.subscribe((active) => {
+      setLive(active);
+      if (active) setPending(false);
+    });
     return () => {
       clearTimeout(warm);
       unsub();
@@ -30,18 +77,18 @@ export default function SoundToggle({ className = '' } = {}) {
 
   // Pause audio when document is hidden.
   useEffect(() => {
-    if (!on) return undefined;
+    if (!live) return undefined;
     const onVisibility = () => {
       if (document.hidden) sound.stop();
       else sound.start();
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, [on]);
+  }, [live]);
 
   // Feed velocity and cut progress to sound engine.
   useEffect(() => {
-    if (!on) return undefined;
+    if (!live) return undefined;
     let frame = 0;
     let last = performance.now();
     let previous = cut.current;
@@ -63,11 +110,17 @@ export default function SoundToggle({ className = '' } = {}) {
 
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [on, flight, cut, ringCut]);
+  }, [live, flight, cut, ringCut]);
 
   const toggle = () => {
-    if (sound.enabled) sound.stop();
-    else sound.start();
+    if (on) {
+      writePref('off');
+      setPending(false);
+      sound.stop();
+    } else {
+      writePref('on');
+      sound.start();
+    }
   };
 
   return (

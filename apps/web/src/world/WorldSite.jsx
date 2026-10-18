@@ -6,6 +6,7 @@ import WorkPage from './WorkPage.jsx';
 import RingsSection from './rings/RingsSection.jsx';
 import WorldLoader from './WorldLoader.jsx';
 import MinimalLink from './MinimalLink.jsx';
+import SoundToggle from './SoundToggle.jsx';
 import { ACTS, actAt } from './chapters.js';
 import { copy } from '../lib/api.js';
 import '../styles/world.css';
@@ -49,6 +50,7 @@ function Hud({ profile = {}, content = {} }) {
 
       <footer className="w-hud-bottom">
         <span className={`w-hint${act.id === 'work' ? ' is-away' : ''}`}>Scroll to travel</span>
+        <SoundToggle className="w-sound-hud" />
       </footer>
     </div>
   );

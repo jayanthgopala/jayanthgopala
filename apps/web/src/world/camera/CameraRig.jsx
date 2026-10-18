@@ -16,6 +16,11 @@ const INTRO_OFFSET = [0, 80, 50];
 // picture parts company with the geometry within a few, so this is short
 // and sits under the travel blur.
 const PLATE_TRAVEL = 13;
+// The igloo's x, and the half-width (porch included) the lens must clear on a
+// narrow screen.
+// Centre of the igloo and its porch together (the porch sticks out to the right).
+const IGLOO_X = -21;
+const FIT_RADIUS = 46;
 
 // Quintic smootherstep easing
 const smootherstep = (k) => k * k * k * (k * (k * 6 - 15) + 10);
@@ -93,6 +98,26 @@ export default function CameraRig({ begin = true }) {
       position.current.x += INTRO_OFFSET[0] * remaining;
       position.current.y += INTRO_OFFSET[1] * remaining;
       position.current.z += INTRO_OFFSET[2] * remaining;
+    }
+
+    // Tall, narrow screens (a phone held upright): the opening frame was
+    // composed for a wide window, where the igloo sits a little right of centre
+    // and fills a fifth of the width. Narrow, the same frame crops it. Centre it
+    // and back the lens off until it fits, easing back to the authored path
+    // over the first part of the scroll so the retreat itself is unchanged.
+    const aspect = camera.aspect || 1;
+    const narrow = Math.min(1, Math.max(0, (1.15 - aspect) / 0.65));
+    if (narrow > 0) {
+      const open = (1 - smootherstep(Math.min(1, eased.current / 0.12))) * narrow;
+      target.current.x += (IGLOO_X - target.current.x) * open;
+      position.current.x += (IGLOO_X - position.current.x) * open;
+      const tanHalf = Math.tan((camera.fov * Math.PI) / 360);
+      const wanted = FIT_RADIUS / (tanHalf * aspect);
+      const away = position.current.clone().sub(target.current);
+      const dist = away.length();
+      if (dist > 0.001 && wanted > dist) {
+        position.current.addScaledVector(away.multiplyScalar(1 / dist), (wanted - dist) * open);
+      }
     }
 
     // Minimum ground clearance collision offset

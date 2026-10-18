@@ -8,7 +8,6 @@ import { BlockPhysics } from '../../igloo/BlockPhysics.js';
 import { IglooInteraction } from '../../igloo/IglooInteraction.js';
 import { LOOK, SUN_DIR } from '../lib/lighting.js';
 import { sound } from '../lib/sound.js';
-import { REF_PLATE_GLSL, refPlateUniforms } from '../lib/ref-plate.js';
 
 /** Where the igloo stands in the world, and which way its entrance faces. */
 export const IGLOO_AT = [-30, 252];
@@ -112,8 +111,8 @@ const iceTerms = () => ({
   through: '0.04, 0.08, 0.14',
   rim: '0.28, 0.45, 0.65',
   seam: '0.0, 0.0, 0.0',
-  roughness: 0.85,
-  env: 0.35,
+  roughness: 1.0,
+  env: 0.0,
 });
 const ICE = iceTerms();
 
@@ -140,7 +139,6 @@ const IDLE_SWEEP = false;
 
 // Custom ice shader: clean frosted translucent snow/ice blocks with warm interior hearth illumination
 const iceShader = (shader) => {
-  Object.assign(shader.uniforms, refPlateUniforms());
   shader.vertexShader =
     IG_NOISE_GLSL +
     'varying vec3 vRefWorld;\n' +
@@ -192,7 +190,6 @@ const iceShader = (shader) => {
 
   shader.fragmentShader =
     'varying vec3 vRefWorld;\n' +
-    REF_PLATE_GLSL +
     'varying float vEdge;\nvarying float vEntrance;\nvarying float vFacing;\nvarying float vExcite;\nvarying vec3 vCorner;\nvarying vec3 vLocal;\nvarying float vBlock;\n' +
     IG_NOISE_GLSL +
     shader.fragmentShader
@@ -203,14 +200,18 @@ const iceShader = (shader) => {
           // Packed snow, not marble: only a trace of the colour map's
           // blotches survives, on a bright white base.
           'float igMapL = dot( diffuseColor.rgb, vec3( 0.299, 0.587, 0.114 ) );',
-          'diffuseColor.rgb = vec3( 0.972, 0.988, 1.0 ) * mix( 0.95, 1.02, smoothstep( 0.35, 0.85, igMapL ) );',
+          // The same snow as the ground in front of it: its cool white, its grain.
+          'diffuseColor.rgb = vec3( 0.95, 0.97, 1.0 ) * mix( 0.96, 1.02, smoothstep( 0.35, 0.85, igMapL ) );',
           // Crystal grain, cut-block scrapes and pits, in each block's own
           // coordinates so it never swims as blocks move.
           'float igCoarse = igNoise( vLocal * 0.22 + 4.1 );',
           'float igGrain = igNoise( vLocal * 0.55 ) * 0.55 + igNoise( vLocal * 1.6 ) * 0.3 + igNoise( vLocal * 4.2 ) * 0.15;',
-          'diffuseColor.rgb *= mix( 0.925, 1.035, igGrain );',
+          'diffuseColor.rgb *= mix( 0.66, 1.1, igGrain );',
+          // Fine crystals, as on the ground: a speckle of lighter and darker grains.
+          'float igCrystal = igNoise( vLocal * 5.0 ) * 0.6 + igNoise( vLocal * 13.0 ) * 0.4;',
+          'diffuseColor.rgb *= mix( 0.78, 1.08, igCrystal );',
           // Block to block: a hand-cut wall is never one even white.
-          'diffuseColor.rgb *= mix( 0.945, 1.015, vBlock );',
+          'diffuseColor.rgb *= mix( 0.9, 1.02, vBlock );',
           // Edges crumble unevenly: the rounding reaches further in where the
           // block has chipped.
           'float bevel = smoothstep( 0.62 - 0.3 * igCoarse, 1.00, vEdge );',
@@ -227,7 +228,7 @@ const iceShader = (shader) => {
           // Bump from the grain, strongest on the worn edges.
           // Broad chisel cuts (ridged noise) under the finer packed-snow grain.
           'float igChisel = 1.0 - abs( igNoise( vLocal * 0.3 + 7.0 ) * 2.0 - 1.0 );',
-          'float igH = ( igNoise( vLocal * 0.55 ) * 0.65 + igNoise( vLocal * 1.6 ) * 0.35 ) * ( 0.6 + 1.2 * bevel ) + igChisel * 0.45;',
+          'float igH = ( igNoise( vLocal * 0.55 ) * 0.65 + igNoise( vLocal * 1.6 ) * 0.35 ) * ( 0.6 + 1.2 * bevel ) + igChisel * 0.1 + igNoise( vLocal * 3.0 ) * 0.8;',
           'vec3 igDpx = dFdx( -vViewPosition );',
           'vec3 igDpy = dFdy( -vViewPosition );',
           'float igDhx = dFdx( igH );',
@@ -236,27 +237,32 @@ const iceShader = (shader) => {
           'vec3 igR2 = cross( normal, igDpx );',
           'float igDet = dot( igDpx, igR1 );',
           'vec3 igGrad = sign( igDet ) * ( igDhx * igR1 + igDhy * igR2 );',
-          'normal = normalize( abs( igDet ) * normal - igGrad * 0.2 );',
+          'normal = normalize( abs( igDet ) * normal - igGrad * 0.85 );',
           // Joints sit a shade darker: packed with loose snow, in shadow.
           // The joint is a groove packed with loose snow: a wider, deeper
           // band of shade, which is what separates one block from the next.
-          'diffuseColor.rgb *= mix( 1.0, 0.86, smoothstep( 0.86, 1.0, vEdge ) );',
-          'roughnessFactor = mix( 0.90, 0.985, vBlock );',
+          'diffuseColor.rgb *= mix( 1.0, 0.9, smoothstep( 0.9, 1.0, vEdge ) );',
+          'roughnessFactor = 1.0;',
           // Crystals in the packed face catching the light, the sparkle the
           // snow around it already has.
           'float igSpark = igNoise( vLocal * 7.5 + 13.0 );',
-          'diffuseColor.rgb += vec3( 0.07, 0.075, 0.08 ) * smoothstep( 0.76, 0.93, igSpark ) * ( 1.0 - smoothstep( 0.9, 1.0, vEdge ) );',
+          'diffuseColor.rgb *= 1.0 - 0.06 * smoothstep( 0.76, 0.93, igSpark );',
           `vec3 sunDir = vec3( ${SUN_DIR.map((c) => c.toFixed(4)).join(', ')} );`,
           'vec3 wNrm = inverseTransformDirection( normalize( vNormal ), viewMatrix );',
           'float sunDot = dot( wNrm, sunDir );',
           'float sunFace = clamp( sunDot, 0.0, 1.0 );',
-          'diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.96, 0.98, 1.00 ), smoothstep( 0.25, 0.85, sunFace ) * 0.35 );',
+          'diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.96, 0.98, 1.00 ), smoothstep( 0.25, 0.85, sunFace ) * 0.08 * ( 1.0 - smoothstep( 0.8, 0.95, vEdge ) ) );',
           // Sides turned from the sun take the snow's blue shade, not grey.
-          'diffuseColor.rgb *= mix( vec3( 0.95, 0.965, 0.995 ), vec3( 1.0 ), smoothstep( -0.45, 0.30, sunDot ) );',
+          'float igJoint = smoothstep( 0.8, 0.95, vEdge );',
+          'float igGSun = mix( dot( wNrm, normalize( vec3( 0.35, 0.50, -0.80 ) ) ), 0.15, igJoint );',
+          'diffuseColor.rgb *= mix( vec3( 0.72, 0.77, 0.87 ), vec3( 1.04, 1.02, 1.0 ), smoothstep( -0.1, 0.8, igGSun ) );',
+          // Blocks darken toward their joints and soften with broad drift-like patches, as the hills do.
+          'diffuseColor.rgb *= mix( 1.0, 0.95, smoothstep( 0.7, 0.96, vEdge ) );',
+          'diffuseColor.rgb *= mix( vec3( 0.93, 0.96, 1.0 ), vec3( 1.02, 1.01, 1.0 ), igNoise( vLocal * 0.09 + 21.0 ) );',
           // Snow resting on whatever faces the sky: the dome's crown and the
           // tops of the blocks.
-          'float igSettled = smoothstep( 0.5, 0.85, wNrm.y ) * smoothstep( 0.2, 0.6, igNoise( vLocal * 0.35 + 9.0 ) + 0.25 );',
-          'diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.985, 0.99, 1.0 ) * mix( 0.94, 1.03, igGrain ), igSettled * 0.85 );',
+          'float igSettled = smoothstep( 0.5, 0.85, wNrm.y ) * smoothstep( 0.2, 0.6, igNoise( vLocal * 0.35 + 9.0 ) + 0.25 ) * ( 1.0 - igJoint );',
+          'diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.93, 0.95, 0.98 ) * mix( 0.8, 1.0, igGrain ), igSettled * 0.6 );',
         ].join('\n')
       )
       .replace(
@@ -264,13 +270,18 @@ const iceShader = (shader) => {
         [
           '#include <emissivemap_fragment>',
           'float innerFace = smoothstep( 0.20, -0.55, vFacing );',
+          // The narrow joint band takes no hearth light, so no bright line shows between the blocks from outside.
+          'innerFace *= 1.0 - smoothstep( 0.8, 0.95, vEdge ) * ( 1.0 - vEntrance );',
+          // Seen from outside, the inner wall shows only as a bright hairline through the gaps between courses.
+          'float igOutside = smoothstep( 22.0, 28.0, length( cameraPosition.xz - vec2( -30.0, 252.0 ) ) );',
+          'innerFace *= 1.0 - igOutside * 0.9;',
           // Warm golden hearth glow on all interior block surfaces
-          'totalEmissiveRadiance += vec3( 1.00, 0.76, 0.38 ) * 4.2 * innerFace;',
+          'totalEmissiveRadiance += vec3( 1.00, 0.76, 0.38 ) * 1.1 * innerFace;',
           // Translucent light scattering through ice blocks from inside
           'vec3 domeOut = normalize( vec3( vNormal.x, max(0.12, vNormal.y), vNormal.z ) );',
           'float scatter = clamp( dot( -normalize( vViewPosition ), domeOut ), 0.0, 1.0 );',
           'float seamLeak = smoothstep( 0.30, 0.95, vEdge );',
-          'totalEmissiveRadiance += vec3( 1.00, 0.70, 0.28 ) * 0.4 * smoothstep( 0.85, 1.0, vEdge ) * ( 0.35 + 0.65 * scatter ) * innerFace;',
+          'totalEmissiveRadiance += vec3( 1.00, 0.70, 0.28 ) * 0.0 * smoothstep( 0.85, 1.0, vEdge ) * ( 0.35 + 0.65 * scatter ) * innerFace;',
           // The joints between blocks: thin lines of the hearth light showing
           // through. Constant; nothing here responds to the scroll.
           'float seamLine = smoothstep( 0.92, 1.0, vEdge );',
@@ -281,12 +292,14 @@ const iceShader = (shader) => {
           'float archGlow = ( 0.55 + 0.15 * vExcite ) * vEntrance;',
           'float archRim = smoothstep( 0.75, 1.00, vEdge ) * archGlow;',
           'totalEmissiveRadiance += vec3( 1.00, 0.82, 0.46 ) * ( 2.1 * insideArch + 1.1 * archRim ) * archGlow;',
+          // The doorway's light catching the porch blocks' edges.
+          'totalEmissiveRadiance += vec3( 1.0, 0.66, 0.3 ) * 0.2 * vEntrance * smoothstep( 0.7, 1.0, vEdge ) * ( 1.0 - innerFace );',
           // Subtle daylight rim on outer dome contours
           'float nv = clamp( dot( normal, normalize( vViewPosition ) ), 0.0, 1.0 );',
           'float rim = pow( 1.0 - nv, 2.6 );',
-          'totalEmissiveRadiance += vec3( 0.20, 0.38, 0.60 ) * rim * ( 1.0 - innerFace ) * 0.18;',
+          'totalEmissiveRadiance += vec3( 0.20, 0.38, 0.60 ) * rim * ( 1.0 - innerFace ) * 0.0;',
           // Overcast fill: the block faces read clean white, as in the reference.
-          'totalEmissiveRadiance += vec3( 0.86, 0.89, 0.94 ) * 0.2 * ( 1.0 - innerFace ) * ( 1.0 - smoothstep( 0.72, 1.0, vEdge ) );',
+          'totalEmissiveRadiance += vec3( 0.86, 0.90, 0.96 ) * 0.12 * ( 1.0 - innerFace );',
         ].join('\n')
       )
       // At the opening frame the igloo wears the reference's own igloo,
@@ -294,10 +307,6 @@ const iceShader = (shader) => {
       .replace(
         '#include <dithering_fragment>',
         [
-          'vec3 igPh;',
-          'vec2 igFr;',
-          'float igW = refPlateAt( vRefWorld, igPh, igFr ) * refPlateHome();',
-          'gl_FragColor.rgb = mix( gl_FragColor.rgb, igPh, igW );',
           '#include <dithering_fragment>',
         ].join('\n')
       );
@@ -564,7 +573,7 @@ export default function IglooBlocks({
 
       {/* The doorway's light spilling over the snow in front of it: low and
           wide, so it warms the drift without touching the igloo's shape. */}
-      <pointLight position={[3, 1.6, 27]} intensity={300} distance={36} decay={2} color="#ffb869" />
+      <pointLight position={[7, 1.0, 34]} intensity={150} distance={26} decay={2} color="#ffb869" />
 
       <line ref={lineRef} geometry={lineGeometry} frustumCulled={false} visible={false}>
         <lineBasicMaterial color="#ffffff" transparent opacity={0.85} depthTest={false} />

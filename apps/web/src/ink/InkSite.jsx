@@ -81,41 +81,19 @@ function Header({ name, content }) {
   );
 }
 
-// "Scroll to begin" rides along at the foot of the screen and fades out over
-// the first part of the scroll, drifting down a little as it goes.
+// The scroll prompt sits in the hero's own flow, under the introduction, so it
+// can never land on the text whatever the window height. A ring with a small
+// arrow bobbing inside it; it also works as a link to the next section.
 function ScrollCue() {
-  const cue = useRef(null);
-  useEffect(() => {
-    let frame = 0;
-    const update = () => {
-      frame = 0;
-      const t = Math.min(1, window.scrollY / (window.innerHeight * 0.45));
-      const node = cue.current;
-      if (!node) return;
-      node.style.opacity = String(1 - t);
-      node.style.transform = `translateY(${t * 24}px)`;
-      node.style.visibility = t >= 1 ? 'hidden' : 'visible';
-    };
-    const onScroll = () => {
-      if (!frame) frame = requestAnimationFrame(update);
-    };
-    update();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onScroll);
-    };
-  }, []);
-
   return (
-    <div ref={cue} className="ink-scroll" aria-hidden="true">
-      <div className="ink-scroll-float">
-        <span>SCROLL TO BEGIN</span>
-        <span className="ink-scroll-line" />
-      </div>
-    </div>
+    <a className="ink-scroll" href="#about" aria-label="Scroll to the next section">
+      <span className="ink-scroll-text">SCROLL</span>
+      <span className="ink-scroll-ring" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 5v14M6 13l6 6 6-6" />
+        </svg>
+      </span>
+    </a>
   );
 }
 

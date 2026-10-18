@@ -1,7 +1,9 @@
 // Synthesized audio engine using Web Audio API (ambient air, pad, and interaction SFX).
 
 // Master compressor settings
-const MASTER = 0.9;
+// Kept low and rounded off: the first mix was bright and loud enough to tire
+// the ears within a minute.
+const MASTER = 0.5;
 const FADE = 1.4;
 
 // Ambient air breeze synthesis parameters
@@ -17,14 +19,14 @@ const BUFFER_SECONDS = 8;
 
 // Ambient music track parameters
 const MUSIC_PATH = '/audio/pad.mp3';
-const MUSIC_VOLUME = 0.55;
+const MUSIC_VOLUME = 0.3;
 const MUSIC_STEP = 1 / 24; // Volume ramp tick, in seconds.
 
 // Igloo interaction SFX parameters
 const LINK = 0.022;
 const LINK_GRAIN = 0.018;
 const LINK_LOW = 600;
-const LINK_HIGH = 2200;
+const LINK_HIGH = 1300;
 const LINK_GAP = 0.4; // Minimum seconds between sound triggers
 
 const HIT = 0.045;
@@ -32,11 +34,11 @@ const HIT_FROM = 1100;
 const HIT_TO = 380;
 const HIT_GLIDE = 0.08;
 const HIT_TAIL = 0.19;
-const HIT_TONE = 2000;
+const HIT_TONE = 1200;
 
 // Glass button UI sounds
 const GLASS_TONE = 0.035;
-const GLASS_HZ = 742;
+const GLASS_HZ = 560;
 const BLOOP = 0.06;
 
 // Transition cut sounds
@@ -46,7 +48,7 @@ const CUT_SWELL = 0.05;
 // The lantern on its hook: the creak's level at a brisk swing, the hook's
 // ring frequency with the lantern hanging still, and a knock's level.
 const LAMP_CREAK = 0.05;
-const LAMP_CREAK_HZ = 780;
+const LAMP_CREAK_HZ = 560;
 const LAMP_TAP = 0.05;
 const LAMP_TAP_GAP = 0.09;
 
@@ -691,7 +693,13 @@ function build() {
   limiter.attack.value = 0.008;
   limiter.release.value = 0.25;
 
-  master.connect(limiter).connect(ctx.destination);
+  // Everything passes a gentle low-pass, so no voice can be sharp or hissy.
+  const soften = ctx.createBiquadFilter();
+  soften.type = 'lowpass';
+  soften.frequency.value = 2600;
+  soften.Q.value = 0.4;
+
+  master.connect(soften).connect(limiter).connect(ctx.destination);
 
   voices = {
     air: buildAir(),

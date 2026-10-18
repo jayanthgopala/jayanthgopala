@@ -282,42 +282,46 @@
 /* Pinned to the screen, faded out by scroll (ScrollCue). The float lives on
    the inner element so it never fights the scroll-driven transform. */
 .ink-scroll {
-  position: fixed;
-  bottom: 40px;
-  inset-inline: 0;
-  z-index: 40;
-  display: flex;
-  justify-content: center;
-  pointer-events: none;
-  will-change: opacity, transform;
-}
-
-.ink-scroll-float {
-  display: flex;
+  display: inline-flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  margin-top: clamp(28px, 6vh, 56px);
+  color: var(--ink);
+  text-decoration: none;
   font-family: var(--typewriter);
   font-size: 10px;
-  letter-spacing: 0.24em;
-  animation: ink-float 3s ease-in-out infinite;
+  letter-spacing: 0.3em;
+}
+
+.ink-scroll-ring {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+  background: var(--paper-card);
+  box-shadow: 3px 3px 0 var(--seal);
+  transition: transform 0.2s var(--ink-ease), box-shadow 0.2s var(--ink-ease);
+}
+
+.ink-scroll-ring svg {
+  animation: ink-bob 1.8s ease-in-out infinite;
+}
+
+.ink-scroll:hover .ink-scroll-ring {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--seal);
+}
+
+@keyframes ink-bob {
+  0%, 100% { transform: translateY(-2px); }
+  50% { transform: translateY(3px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ink-scroll-float {
-    animation: none;
-  }
-}
-
-.ink-scroll-line {
-  width: 2px;
-  height: 34px;
-  background: var(--ink);
-}
-
-@keyframes ink-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+  .ink-scroll-ring svg { animation: none; }
 }
 
 /* About */

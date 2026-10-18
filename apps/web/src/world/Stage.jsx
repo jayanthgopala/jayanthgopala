@@ -1,6 +1,6 @@
-import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { AdaptiveEvents } from '@react-three/drei';
+import { AdaptiveEvents, PerformanceMonitor } from '@react-three/drei';
 import IglooBlocks from './structures/IglooBlocks.jsx';
 import CameraRig from './camera/CameraRig.jsx';
 import IceCut, { CutFrameGate } from './effects/IceCut.jsx';
@@ -31,8 +31,8 @@ import {
 } from 'three';
 import { ToneMappingMode } from 'postprocessing';
 import { NOISE_GLSL, SKY_FRAG, SKY_VERT, WIND_GLSL } from './lib/snow-shaders.js';
-import { REF_PLATE_GLSL, plateUniforms, refPlateUniforms } from './lib/ref-plate.js';
-import { MAX_DPR, MODEST, SMALL } from './water/device.js';
+import { plateUniforms, refPlateUniforms } from './lib/ref-plate.js';
+import { MAX_DPR, MIN_DPR, MODEST, SMALL, START_DPR } from './water/device.js';
 import { hillRise, hillWarp, plainTexture, refHumps, snowMounds, snowDrifts, snowSwell } from './lib/snow-hills.js';
 
 // Where the igloo stands, and the palette the whole frame is keyed to: a pale
@@ -194,7 +194,7 @@ const VALLEY_MIST = {
   near: [300, 620], // fades in over this distance from the lens
   floor: 4, // fully misted up to this height
   top: 112, // and thinned to nothing by this one
-  amount: 0.52,
+  amount: 0.2,
 };
 
 const SNOW_MARKS_GLSL = `
@@ -300,7 +300,6 @@ function SnowTrail() {
 }
 
 function snowSurface(shader) {
-  Object.assign(shader.uniforms, refPlateUniforms());
   shader.uniforms.uMistTime = VALLEY_MIST.time;
   shader.uniforms.uTrail = SNOW_MARKS.trail;
   shader.uniforms.uTrailRect = SNOW_MARKS.trailRect;
@@ -318,7 +317,6 @@ function snowSurface(shader) {
 
   shader.fragmentShader =
     'varying vec3 vSnowWorld;\nvarying float vCavity;\nvarying float vCast;\nuniform float uMistTime;\n' +
-    REF_PLATE_GLSL +
     'uniform sampler2D uTrail;\nuniform vec4 uTrailRect;\n' +
     SNOW_MARKS_GLSL +
     NOISE_GLSL +
@@ -335,17 +333,6 @@ function snowSurface(shader) {
         'float vmDensity = vmLow * smoothstep( 0.28, 0.7, vmN * 0.9 + vmLow * 0.3 ) * vmFar;',
         `gl_FragColor.rgb = mix( gl_FragColor.rgb, vec3( 0.95, 0.965, 0.985 ), vmDensity * ${VALLEY_MIST.amount.toFixed(2)} );`,
         '#include <fog_fragment>',
-        // The snow takes the reference's own pixels, projected from the opening
-        // camera (lib/ref-plate.js): its humps, shadows and mist.
-        'vec3 rgPh;',
-        'vec2 rgFr;',
-        'float rgW = refPlateAt( vSnowWorld, rgPh, rgFr );',
-        // Near snow and far range let go together. Held on past the opening
-        // frame, the plate strands the picture's own igloo across the hills
-        // behind ours; cutting that one igloo out only traded the smear for a
-        // dome-shaped hole in the ridge, so instead the whole picture goes.
-        'rgW *= refPlateHome();',
-        'gl_FragColor.rgb = mix( gl_FragColor.rgb, rgPh, rgW );',
       ].join('\n')
     ).replace(
       '#include <normal_fragment_maps>',
@@ -932,6 +919,12 @@ function billowTexture() {
   return texture;
 }
 
+// How much of each bank's own density is drawn, and how much faster than the
+// authored speeds it drifts: a very light mist that visibly moves, not a fog
+// that sits on the hills and the igloo.
+const MIST_LIGHTNESS = 0.26;
+const MIST_DRIFT = 2.2;
+
 // Low mist banks pooling at the foot of the ranges and drifting across them:
 // what reads in the reference as the ground haze the wind is dragging.
 function MistBanks() {
@@ -992,14 +985,14 @@ function MistBanks() {
     // At the opening frame the projected reference carries its own mist, so
     // the banks come in on exactly the curve the picture goes out on. Tied to
     // anything else, the scene snaps from hazy to clear mid-pull-back.
-    const show = 1 - refPlateUniforms().uPlateFade.value;
+    const show = 1;
     group.children.forEach((child, i) => {
       const band = bands[i];
       if (!band) return;
-      child.material.opacity = band.opacity * show;
+      child.material.opacity = band.opacity * show * MIST_LIGHTNESS;
       // Wrap the drift so a band never walks out of the frame for good.
       const span = band.size[0] * 0.6;
-      const travel = (((t * band.speed) % (span * 2)) + span * 2) % (span * 2);
+      const travel = (((t * band.speed * MIST_DRIFT) % (span * 2)) + span * 2) % (span * 2);
       child.position.x = band.at[0] - span + travel;
       child.position.y = band.at[1] + Math.sin(t * 0.13 + i) * 2.2;
     });
@@ -1046,8 +1039,7 @@ function grainTexture() {
   return new CanvasTexture(canvas);
 }
 
-// Snow carried on the wind rather than falling: fine grains streaming across
-// the frame, thin enough to read as spindrift.
+// Snow falling through the scene: fine flakes drifting down with a light sway.
 function Spindrift({ count = 900 }) {
   const pointsRef = useRef(null);
   const grain = useMemo(() => grainTexture(), []);
@@ -1062,8 +1054,8 @@ function Spindrift({ count = 900 }) {
       positions[i * 3] = -30 + (Math.random() - 0.5) * 300;
       positions[i * 3 + 1] = Math.random() * 80;
       positions[i * 3 + 2] = 252 + (Math.random() - 0.5) * 240;
-      speeds[i * 2] = 2.0 + Math.random() * 3.6; // fall
-      speeds[i * 2 + 1] = 5.0 + Math.random() * 9.0; // downwind
+      speeds[i * 2] = 4.0 + Math.random() * 5.0; // fall
+      speeds[i * 2 + 1] = 0.6 + Math.random() * 2.2; // downwind: a light drift only
     }
 
     geo.setAttribute('position', new BufferAttribute(positions, 3));
@@ -1082,9 +1074,10 @@ function Spindrift({ count = 900 }) {
       array[idx + 1] -= drift[i * 2] * dt;
       array[idx] += (drift[i * 2 + 1] + Math.sin(time * 0.7 + array[idx + 1] * 0.06) * 2.0) * dt;
 
-      if (array[idx + 1] < 0 || array[idx] > -30 + 150) {
-        array[idx + 1] = 80;
-        array[idx] = -30 - 150 - Math.random() * 40;
+      if (array[idx + 1] < 0 || array[idx] > -30 + 160) {
+        // Back to the top, anywhere across the field: falling snow, not a stream.
+        array[idx + 1] = 70 + Math.random() * 14;
+        array[idx] = -30 + (Math.random() - 0.5) * 300;
         array[idx + 2] = 252 + (Math.random() - 0.5) * 240;
       }
     }
@@ -1096,9 +1089,9 @@ function Spindrift({ count = 900 }) {
       <pointsMaterial
         map={grain}
         color="#ffffff"
-        size={0.28}
+        size={0.34}
         transparent
-        opacity={0.3}
+        opacity={0.55}
         depthWrite={false}
         blending={AdditiveBlending}
       />
@@ -1188,8 +1181,8 @@ function Lighting() {
         position={sunAt}
         target={target}
         castShadow
-        shadow-mapSize-width={MODEST ? 1024 : 2048}
-        shadow-mapSize-height={MODEST ? 1024 : 2048}
+        shadow-mapSize-width={SMALL ? 512 : MODEST ? 1024 : 2048}
+        shadow-mapSize-height={SMALL ? 512 : MODEST ? 1024 : 2048}
         shadow-intensity={0.5}
         shadow-bias={-0.0006}
         shadow-normalBias={0.35}
@@ -1211,12 +1204,16 @@ function Lighting() {
 }
 
 export default function Stage({ onIglooReady, begin = false, warm = false, onWarm }) {
+  // Render resolution follows the frame rate: it steps down when frames run
+  // long (a phone, a busy tab) and back up when there is room, between the
+  // device's floor and ceiling.
+  const [dpr, setDpr] = useState(START_DPR);
   return (
     <div className="w-stage">
       <Canvas
         className="w-canvas"
         shadows="percentage"
-        dpr={[1, MAX_DPR]}
+        dpr={dpr}
         gl={{
           // The post chain resolves to its own buffers, so canvas MSAA buys
           // little; on a phone it costs a second full-resolution target.
@@ -1247,8 +1244,8 @@ export default function Stage({ onIglooReady, begin = false, warm = false, onWar
           <MistBanks />
 
           {/* Snow streaming on the wind */}
-          <Spindrift count={MODEST ? 380 : 900} />
-          <NearFlakes count={MODEST ? 70 : 160} />
+          <Spindrift count={SMALL ? 240 : MODEST ? 380 : 900} />
+          <NearFlakes count={SMALL ? 40 : MODEST ? 70 : 160} />
 
           {/* 3D igloo settled firmly into the snow ground */}
           <IglooBlocks at={IGLOO_AT} lift={0.0} tint="#eef5fd" onReady={onIglooReady} />
@@ -1279,6 +1276,12 @@ export default function Stage({ onIglooReady, begin = false, warm = false, onWar
           <IceCut />
         </EffectComposer>
 
+        <PerformanceMonitor
+          flipflops={4}
+          onDecline={() => setDpr((d) => Math.max(MIN_DPR, d * 0.8))}
+          onIncline={() => setDpr((d) => Math.min(MAX_DPR, d * 1.12))}
+          onFallback={() => setDpr(MIN_DPR)}
+        />
         <AdaptiveEvents />
         <CutFrameGate />
       </Canvas>
