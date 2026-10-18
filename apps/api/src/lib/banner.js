@@ -507,7 +507,7 @@ export function bannerSvg(site, mode = 'dark') {
 
     <!-- greeting -->
     <text x="${px}" y="102" font-family="${SANS}" font-size="14" fill="${p.muted}" opacity="0">
-      ${esc(t('banner.greeting', "Hi 👋"))}
+      ${esc(t('banner.greeting', "Hi"))}
       <animate attributeName="opacity" from="0" to="1" begin="0.2s" dur="0.5s" fill="freeze"/>
     </text>
 

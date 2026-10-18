@@ -140,27 +140,19 @@ void main() {
     vec2 ndc = vec2( dot( dir, uRefR ), dot( dir, uRefU ) ) / ( refZ * uRefTan );
     vec2 frame = vec2( ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5 );
     float plateY = frame.y / uPlateRows;
-    // Faded at the frame's sides, above its top edge, and well before the
-    // reference's peaks so none of its mountains ghost behind ours.
-    // Fades only OUTSIDE the frame (a wider screen, or the camera's sway),
-    // holding the edge column there; inside it the photo is whole.
-    float side = smoothstep( -0.12, 0.0, frame.x ) * ( 1.0 - smoothstep( 1.0, 1.12, frame.x ) );
-    float plateX = clamp( frame.x, 0.001, 0.999 );
-    float keep = side * ( 1.0 - smoothstep( 0.0, 0.12, -frame.y ) );
+    // Past the frame's sides it mirrors (a wider screen, the camera's sway),
+    // fading out only well beyond; above its top edge it holds the top row.
+    // Inside it the photo is whole down to the plate's last rows.
+    float side = smoothstep( -0.3, -0.18, frame.x ) * ( 1.0 - smoothstep( 1.18, 1.3, frame.x ) );
+    float plateX = clamp( 1.0 - abs( 1.0 - abs( frame.x ) ), 0.001, 0.999 );
+    float keep = side * ( 1.0 - smoothstep( 0.0, 0.12, -frame.y ) ) * ( 1.0 - smoothstep( 0.92, 1.0, plateY ) );
     vec3 plate = texture2D( uPlate, vec2( plateX, 1.0 - clamp( plateY, 0.002, 0.998 ) ) ).rgb;
-    // Below the clouds the photo turns to the bright haze over its peaks;
-    // hold that haze (its row just above the summits) on down to our range,
-    // so the reference's own mountains never ghost behind ours.
-    vec3 haze = vec3( 0.0 );
-    for ( int i = -4; i <= 4; i ++ ) {
-      float hx = clamp( plateX + float( i ) * 0.016, 0.001, 0.999 );
-      haze += texture2D( uPlate, vec2( hx, 1.0 - 0.52 ) ).rgb + texture2D( uPlate, vec2( hx, 1.0 - 0.58 ) ).rgb;
-    }
-    haze = mix( haze / 18.0, col, 0.4 );
-    plate = mix( plate, haze, smoothstep( 0.5, 0.58, plateY ) );
+    // The plate runs down past the reference's peaks: wherever our range
+    // stands lower than its mountains, the dome shows them; wherever ours is
+    // taller, the range itself carries the same pixels (rangeUniforms).
     // The photo is already graded; offset the scene's tone map and grade.
     float plateL = dot( plate, vec3( 0.2126, 0.7152, 0.0722 ) );
-    plate = mix( vec3( plateL ), plate, 0.82 ) * 0.9;
+    plate = pow( mix( vec3( plateL ), plate, 0.94 ), vec3( 1.12 ) ) * 0.75;
     col = mix( col, plate, keep );
   }
 

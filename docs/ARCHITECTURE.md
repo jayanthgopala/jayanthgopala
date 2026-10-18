@@ -182,20 +182,6 @@ Under `prefers-reduced-motion` the scene collapses to `100svh` and the reveal is
 progress is never computed, so a tall scene would otherwise leave a viewport and a half of
 dead scroll under a static image.
 
-### The character asset
-
-`public/character.jpg` is the render with its studio backdrop **cut away** (border-seeded
-region growing) and the subject **composited onto this theme's exact `--bg`**. A
-transparent PNG was 13× the size for an identical result on a solid background — 1.2 MB
-versus 158 KB.
-
-> If `--bg` is ever retuned, the baked-in backdrop stops matching and a seam appears.
-> Regenerate the asset rather than reaching for a CSS mask.
-
-Uploading a Hero portrait in the admin panel overrides it. In minimal mode the same asset
-is re-cropped to the head via `transform-origin: 50% 0%` on the orb — `scale()` zooms about
-the element's centre by default, which drags the crop down past the face.
-
 ## Design language
 
 Defined once in `packages/tokens/tokens.css`.

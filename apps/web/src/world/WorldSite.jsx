@@ -108,12 +108,33 @@ export default function WorldSite({ site = {} }) {
   const [ringsReady, setRingsReady] = useState(false);
   const [projectsReady, setProjectsReady] = useState(false);
 
-  const ready = framesReady && iglooReady && warmed && projectsReady && ringsReady;
+  // The contact room is the last thing on the page and has its own canvas and
+  // shaders. It no longer holds the loader: it mounts once the world is open.
+  const ready = framesReady && iglooReady && warmed && projectsReady;
+  const [mountRings, setMountRings] = useState(false);
+  useEffect(() => {
+    if (!ready) return undefined;
+    const id = setTimeout(() => setMountRings(true), 2500);
+    return () => clearTimeout(id);
+  }, [ready]);
 
   const handleIglooReady = useCallback(() => setIglooReady(true), []);
   const handleWarm = useCallback(() => setWarmed(true), []);
   const handleRingsReady = useCallback(() => setRingsReady(true), []);
   const handleProjectsReady = useCallback(() => setProjectsReady(true), []);
+
+  // The igloo's own files, asked for before the Stage mounts. Otherwise the
+  // first request for them goes out only after React has finished rendering
+  // the scene, and the terrain build holds the main thread for over a second
+  // with the network sitting idle. The fetches land in the HTTP cache, so
+  // loadIgloo picks them up without a second round trip.
+  useEffect(() => {
+    // Fire and forget: these are wanted either way, and cancelling them on a
+    // StrictMode remount would throw away the very head start this buys.
+    for (const file of ['igloo.json', 'igloo.bin', 'basecolor.webp', 'normal.webp']) {
+      fetch(`/igloo/${file}`, { cache: 'force-cache' }).catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -144,7 +165,6 @@ export default function WorldSite({ site = {} }) {
     { label: 'Bringing in the igloo', done: iglooReady },
     { label: 'Compiling shaders', done: warmed },
     { label: 'Preparing the projects', done: projectsReady },
-    { label: 'Preparing the rings', done: ringsReady },
   ];
 
   return (
@@ -163,7 +183,9 @@ export default function WorldSite({ site = {} }) {
         profile={site.profile}
         onReady={handleProjectsReady}
       />
-      <RingsSection socials={site.socials} content={site.content} onReady={handleRingsReady} />
+      {mountRings && (
+        <RingsSection socials={site.socials} content={site.content} onReady={handleRingsReady} />
+      )}
       <Hud profile={site.profile} content={site.content} />
       <WorldLoader ready={ready} steps={loadSteps} name={site.profile?.name} />
     </ScrollProvider>

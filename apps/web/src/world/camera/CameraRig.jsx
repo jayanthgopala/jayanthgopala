@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Vector3 } from 'three';
-import { CAMERA_CURVE, INTRO, TARGET_CURVE } from '../chapters.js';
+import { CAMERA_CURVE, INTRO, OPENING_FRAME, TARGET_CURVE } from '../chapters.js';
+import { setPlateFade } from '../lib/ref-plate.js';
 import { useWorldScroll } from '../scroll/ScrollProvider.jsx';
 
 // Camera controller interpolating position and look-at targets along spline curves
@@ -10,9 +11,16 @@ const AIM_PARALLAX = 4.4;
 const GROUND_CLEARANCE = 2.4;
 const SETTLED = 0.0005;
 const INTRO_OFFSET = [0, 80, 50];
+// World units of lens travel over which the projected reference hands back
+// to the 3D scene. The whole opening journey spans about 40 units, and the
+// picture parts company with the geometry within a few, so this is short
+// and sits under the travel blur.
+const PLATE_TRAVEL = 13;
 
 // Quintic smootherstep easing
 const smootherstep = (k) => k * k * k * (k * (k * 6 - 15) + 10);
+
+const openingEye = new Vector3(...OPENING_FRAME.eye);
 
 const damp = (current, target, lambda, dt) => {
   if (Math.abs(target - current) < SETTLED) return target;
@@ -93,6 +101,11 @@ export default function CameraRig({ begin = true }) {
     }
 
     camera.position.copy(position.current);
+
+    // The projected reference, released on the settled camera's own travel:
+    // whole at the opening frame, gone a short way into the scroll. Taken
+    // here, before the pointer parallax below, so the cursor cannot fade it.
+    setPlateFade(1 - smootherstep(Math.min(1, openingEye.distanceTo(position.current) / PLATE_TRAVEL)));
 
     // Pointer look-at parallax scaled by arrival
     const lifted = touch.current.type === 'touch' && !touch.current.down;

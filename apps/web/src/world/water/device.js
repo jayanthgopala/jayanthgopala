@@ -11,11 +11,20 @@
 const width = typeof window === 'undefined' ? 1440 : window.innerWidth;
 const cores = typeof navigator === 'undefined' ? 8 : navigator.hardwareConcurrency || 4;
 
+// Development only: ?tier=small or ?tier=modest forces the cheaper budgets on
+// a desktop, so the phone path can be looked at without a phone. A browser
+// window cannot always be driven down to phone width from automation, and
+// guessing at what a tier renders like is how it ships broken.
+const forced =
+  typeof window === 'undefined' || !import.meta.env.DEV
+    ? null
+    : new URLSearchParams(window.location.search).get('tier');
+
 /** Phones and small tablets, where fill rate is the thing in short supply. */
-export const SMALL = width < 820;
+export const SMALL = forced ? forced === 'small' : width < 820;
 
 /** Also thin on cores, so geometry has to be cheaper to build as well. */
-export const MODEST = SMALL || cores <= 4;
+export const MODEST = forced ? forced === 'small' || forced === 'modest' : SMALL || cores <= 4;
 
 /**
  * Ceiling on device pixel ratio.

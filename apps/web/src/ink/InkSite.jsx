@@ -3,6 +3,7 @@ import { Reveal } from '../lib/motion.jsx';
 import { copy, externalUrl, mediaUrl } from '../lib/api.js';
 import Lightbox from '../components/Lightbox.jsx';
 import '../styles/ink.css';
+import AskWidget from '../components/AskWidget.jsx';
 
 /**
  * The minimal site: an ink-on-paper editorial page. Everything the admin
@@ -533,6 +534,7 @@ export default function InkSite({ site, loading }) {
         <Origins education={education} n={next(education.length > 0)} />
         <Contact profile={profile} socials={socials} n={next(true)} />
       </main>
+      <AskWidget content={content} profile={profile} />
     </div>
   );
 }

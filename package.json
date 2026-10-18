@@ -16,6 +16,9 @@
     "deploy:api": "npm run deploy -w @portfolio/api",
     "deploy:web": "npm run deploy -w @portfolio/web",
     "deploy:admin": "npm run deploy -w @portfolio/admin",
-    "setup": "node scripts/setup.mjs"
-  }
+    "setup": "node scripts/setup.mjs",
+    "db:migrate": "npm run db:remote -w @portfolio/api"
+  },
+  "license": "MIT",
+  "description": "Portfolio site, admin panel and API on Cloudflare (Pages, Workers, D1, KV, R2)."
 }

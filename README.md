@@ -51,7 +51,7 @@ I design and ship production systems end to end — from edge APIs and data mode
 - **Frontend** — `React` `Vite` `css`
 - **Backend** — `Node.js` `Express` `JWT` `WebAuthn` `BullMQ` `serverless backend`
 - **Platform** — `Cloudflare Workers` `Cloudflare` `Docker` `Dokploy` `Sequelize`
-- **Data** — `PostgreSQL` `PostgreSQL` `mongo db` `my sql` `sqlite` `Redis`
+- **Data** — `PostgreSQL` `mongo db` `my sql` `sqlite` `Redis`
 - **Tooling** — `Git` `GitHub` `npm` `Postman`
 - **Other** — `REST APIs` `Microservices` `RBAC` `CI/CD` `WebSockets` `Tunnel` `n8n` `Git · GitHub · Docker · Dokploy · Claude Code · Gemini CLI · Automation Tools`
 
@@ -62,10 +62,11 @@ I design and ship production systems end to end — from edge APIs and data mode
 
 ## Currently
 
-- 📍  Based in India
-- 📬  Reach me at [jayanthgopala21@gmail.com](mailto:jayanthgopala21@gmail.com)
+- Based in India
+- Reach me at [jayanthgopala21@gmail.com](mailto:jayanthgopala21@gmail.com)
 
 <div align="center">
   <sub>This README is generated from my portfolio's admin panel and published automatically.<br />
-  The status and metrics cards above are live SVGs — they update without a commit.</sub>
+  The status and metrics cards above are live SVGs — they update without a commit.<br />
+  Built on an open-source portfolio platform: [source and setup guide](https://github.com/jayanthgopala/jayanthgopala/blob/main/docs/DEPLOYMENT.md).</sub>
 </div>

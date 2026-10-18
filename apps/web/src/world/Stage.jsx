@@ -1,6 +1,6 @@
-import { Suspense, useEffect, useMemo, useRef } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { AdaptiveEvents, Preload } from '@react-three/drei';
+import { AdaptiveEvents } from '@react-three/drei';
 import IglooBlocks from './structures/IglooBlocks.jsx';
 import CameraRig from './camera/CameraRig.jsx';
 import IceCut, { CutFrameGate } from './effects/IceCut.jsx';
@@ -25,25 +25,27 @@ import {
   Plane,
   PlaneGeometry,
   Raycaster,
-  SRGBColorSpace,
-  TextureLoader,
   Vector2,
   Vector3,
   WebGLRenderTarget,
 } from 'three';
 import { ToneMappingMode } from 'postprocessing';
 import { NOISE_GLSL, SKY_FRAG, SKY_VERT, WIND_GLSL } from './lib/snow-shaders.js';
-import { OPENING_FRAME } from './chapters.js';
+import { REF_PLATE_GLSL, plateUniforms, refPlateUniforms } from './lib/ref-plate.js';
+import { MAX_DPR, MODEST, SMALL } from './water/device.js';
 import { hillRise, hillWarp, plainTexture, refHumps, snowMounds, snowDrifts, snowSwell } from './lib/snow-hills.js';
 
 // Where the igloo stands, and the palette the whole frame is keyed to: a pale
 // arctic day where distance washes out to white rather than darkening.
 const IGLOO_AT = [-30, 252];
-const SKY_ZENITH = '#7d8ca3';
+const SKY_ZENITH = '#8d9cb3';
 const SKY_HORIZON = '#eef3f8';
 const HAZE = '#edf4fc';
-// Sun bearing, as an offset from the igloo: high, front-left.
-const SUN_OFFSET = [-180, 190, 262];
+// Sun bearing, as an offset from the igloo: behind it and a little to the right,
+// about 30 degrees up. The reference's shadows fall in front of the igloo and
+// toward the lens, so the light has to come from the far side. Matches SUN_DIR
+// in lib/lighting.js and snSun below.
+const SUN_OFFSET = [105, 150, -240];
 
 // Development only: expose scene on window
 function SceneHandle() {
@@ -58,6 +60,22 @@ function SceneHandle() {
       delete window.__worldCamera;
     };
   }, [scene, camera]);
+  return null;
+}
+
+// Starts every shader compiling at once, the moment the scene is committed and
+// before its first frame. drei's <Preload all> does this with gl.compile, which
+// links and then waits on each program in turn: the four snow variants are
+// ~87 KB of GLSL apiece, so back to back they held the main thread for ~20 s.
+// compileAsync links them all first (and uses KHR_parallel_shader_compile), so
+// the wait is the slowest one instead of the sum.
+function ParallelCompile() {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  const camera = useThree((s) => s.camera);
+  useLayoutEffect(() => {
+    gl.compileAsync?.(scene, camera).catch(() => {});
+  }, [gl, scene, camera]);
   return null;
 }
 
@@ -119,26 +137,6 @@ function Warmup({ armed = false, onWarm }) {
 // Sky dome carried on the camera so it never leaves the far plane during the
 // retreat. Unfogged, and its horizon is the fog colour, so the terrain's far
 // edge dissolves into it with no visible seam.
-// The backplate's camera: the opening frame's basis and lens, so a sky
-// direction finds the pixel the reference shows it at.
-const PLATE = { width: 1871, height: 841, rows: 240 };
-function plateUniforms() {
-  const eye = new Vector3(...OPENING_FRAME.eye);
-  const f = new Vector3(...OPENING_FRAME.aim).sub(eye).normalize();
-  const r = new Vector3().crossVectors(f, new Vector3(0, 1, 0)).normalize();
-  const u = new Vector3().crossVectors(r, f);
-  const th = Math.tan((OPENING_FRAME.fov * Math.PI) / 360);
-  return {
-    uPlate: { value: null },
-    uPlateOn: { value: 0 },
-    uRefF: { value: f },
-    uRefR: { value: r },
-    uRefU: { value: u },
-    uRefTan: { value: new Vector2(th * (PLATE.width / PLATE.height), th) },
-    uPlateRows: { value: PLATE.rows / PLATE.height },
-  };
-}
-
 function SnowSky() {
   const meshRef = useRef(null);
   const camera = useThree((s) => s.camera);
@@ -150,20 +148,16 @@ function SnowSky() {
       uGlow: { value: new Color('#ffffff') },
       uSun: { value: [SUN_OFFSET[0], SUN_OFFSET[1], SUN_OFFSET[2]] },
       uTime: { value: 0 },
+      // The reference's clouds, laid back onto the dome along the opening
+      // view (see lib/ref-plate.js). Until it loads, or past its edges, the
+      // procedural sky shows.
       ...plateUniforms(),
+      uPlate: { value: refPlateUniforms().uRange.value },
+      uPlateOn: { value: 0 },
+      uPlateRows: { value: 1 },
     }),
     []
   );
-  // The reference's clouds, cut from the opening frame (HUD painted out),
-  // laid back onto the dome along the same view. Until it loads, or past its
-  // edges, the procedural sky shows.
-  if (!uniforms.uPlate.value) {
-    const texture = new TextureLoader().load('/environments/sky-backplate.jpg');
-    texture.colorSpace = SRGBColorSpace;
-    uniforms.uPlate.value = texture;
-  }
-
-  useEffect(() => () => uniforms.uPlate.value?.dispose(), [uniforms]);
 
   useFrame((state) => {
     // The material keeps its own copy of the uniforms, so write to that.
@@ -200,7 +194,7 @@ const VALLEY_MIST = {
   near: [300, 620], // fades in over this distance from the lens
   floor: 4, // fully misted up to this height
   top: 112, // and thinned to nothing by this one
-  amount: 0.4,
+  amount: 0.52,
 };
 
 const SNOW_MARKS_GLSL = `
@@ -305,36 +299,8 @@ function SnowTrail() {
   return null;
 }
 
-// The reference's mountain band, projected onto the far range from the
-// opening camera (camera-projection mapping): seen from the opening frame the
-// range carries the picture's own rock and mist; as the lens retreats the
-// geometry carries it, and that far off it barely shifts. Shared by every
-// compile of the snow material, and loaded once.
-const RANGE_ROWS = [120, 440];
-let rangePlate = null;
-function rangeUniforms() {
-  if (!rangePlate) {
-    const basis = plateUniforms();
-    rangePlate = {
-      uRange: { value: null },
-      uRangeOn: { value: 0 },
-      uRefEye: { value: new Vector3(...OPENING_FRAME.eye) },
-      uRefF: basis.uRefF,
-      uRefR: basis.uRefR,
-      uRefU: basis.uRefU,
-      uRefTan: basis.uRefTan,
-    };
-    const texture = new TextureLoader().load('/environments/range-plate.jpg', () => {
-      rangePlate.uRangeOn.value = 1;
-    });
-    texture.colorSpace = SRGBColorSpace;
-    rangePlate.uRange.value = texture;
-  }
-  return rangePlate;
-}
-
 function snowSurface(shader) {
-  Object.assign(shader.uniforms, rangeUniforms());
+  Object.assign(shader.uniforms, refPlateUniforms());
   shader.uniforms.uMistTime = VALLEY_MIST.time;
   shader.uniforms.uTrail = SNOW_MARKS.trail;
   shader.uniforms.uTrailRect = SNOW_MARKS.trailRect;
@@ -352,7 +318,7 @@ function snowSurface(shader) {
 
   shader.fragmentShader =
     'varying vec3 vSnowWorld;\nvarying float vCavity;\nvarying float vCast;\nuniform float uMistTime;\n' +
-    'uniform sampler2D uRange;\nuniform float uRangeOn;\nuniform vec3 uRefEye;\nuniform vec3 uRefF;\nuniform vec3 uRefR;\nuniform vec3 uRefU;\nuniform vec2 uRefTan;\n' +
+    REF_PLATE_GLSL +
     'uniform sampler2D uTrail;\nuniform vec4 uTrailRect;\n' +
     SNOW_MARKS_GLSL +
     NOISE_GLSL +
@@ -369,24 +335,17 @@ function snowSurface(shader) {
         'float vmDensity = vmLow * smoothstep( 0.28, 0.7, vmN * 0.9 + vmLow * 0.3 ) * vmFar;',
         `gl_FragColor.rgb = mix( gl_FragColor.rgb, vec3( 0.95, 0.965, 0.985 ), vmDensity * ${VALLEY_MIST.amount.toFixed(2)} );`,
         '#include <fog_fragment>',
-        // The far range takes the reference's own pixels, projected from the
-        // opening camera (see rangeUniforms). Only far snow, only inside the
-        // picture's band, and never where the picture has its igloo.
-        'vec3 rgD = vSnowWorld - uRefEye;',
-        'float rgZ = dot( rgD, uRefF );',
-        'if ( uRangeOn > 0.5 && rgZ > 0.0 ) {',
-        '  vec2 rgNdc = vec2( dot( rgD, uRefR ), dot( rgD, uRefU ) ) / ( rgZ * uRefTan );',
-        '  vec2 rgFr = vec2( rgNdc.x * 0.5 + 0.5, 0.5 - rgNdc.y * 0.5 );',
-        `  float rgV = ( rgFr.y - ${(RANGE_ROWS[0] / 841).toFixed(4)} ) / ${((RANGE_ROWS[1] - RANGE_ROWS[0]) / 841).toFixed(4)};`,
-        '  float rgW = smoothstep( 480.0, 680.0, length( rgD ) )',
-        '    * smoothstep( -0.02, 0.0, rgFr.x ) * ( 1.0 - smoothstep( 1.0, 1.02, rgFr.x ) )',
-        '    * smoothstep( 0.0, 0.05, rgV ) * ( 1.0 - smoothstep( 0.85, 1.0, rgV ) );',
-        '  rgW *= 1.0 - step( 0.42, rgFr.x ) * step( rgFr.x, 0.7 ) * step( 0.33, rgFr.y );',
-        '  vec3 rgPh = texture2D( uRange, vec2( clamp( rgFr.x, 0.001, 0.999 ), 1.0 - clamp( rgV, 0.001, 0.999 ) ) ).rgb;',
-        // Already graded: offset the scene's tone map and grade, as the sky does.
-        '  rgPh = mix( vec3( dot( rgPh, vec3( 0.2126, 0.7152, 0.0722 ) ) ), rgPh, 0.82 ) * 0.9;',
-        '  gl_FragColor.rgb = mix( gl_FragColor.rgb, rgPh, rgW );',
-        '}',
+        // The snow takes the reference's own pixels, projected from the opening
+        // camera (lib/ref-plate.js): its humps, shadows and mist.
+        'vec3 rgPh;',
+        'vec2 rgFr;',
+        'float rgW = refPlateAt( vSnowWorld, rgPh, rgFr );',
+        // Near snow and far range let go together. Held on past the opening
+        // frame, the plate strands the picture's own igloo across the hills
+        // behind ours; cutting that one igloo out only traded the smear for a
+        // dome-shaped hole in the ridge, so instead the whole picture goes.
+        'rgW *= refPlateHome();',
+        'gl_FragColor.rgb = mix( gl_FragColor.rgb, rgPh, rgW );',
       ].join('\n')
     ).replace(
       '#include <normal_fragment_maps>',
@@ -410,17 +369,43 @@ function snowSurface(shader) {
         'float snLand = 1.0 - smoothstep( 6.0, 22.0, vSnowWorld.y );',
         'float snRelief = ( 0.8 + 1.6 * snPatch ) * snNear * mix( 1.0, 0.75, snLand );',
         'snWorldN = normalize( snWorldN + vec3( -( snHX - snH0 ), 0.0, -( snHZ - snH0 ) ) * snRelief / snStep );',
+        // Broad wind forms for the middle distance, at ~70 units a feature:
+        // coarse enough to still read as shape where the fine sastrugi has
+        // already faded to nothing, and gone again before the far ranges.
+        'float snMidD = length( vSnowWorld - cameraPosition );',
+        'float snMid = smoothstep( 90.0, 260.0, snMidD ) * ( 1.0 - smoothstep( 620.0, 1150.0, snMidD ) );',
+        'float snBw = 0.0145;',
+        'float snB0 = snFbm( snWindWarp( vSnowWorld.xz * snBw ) );',
+        'float snBX = snFbm( snWindWarp( ( vSnowWorld.xz + vec2( 8.0, 0.0 ) ) * snBw ) );',
+        'float snBZ = snFbm( snWindWarp( ( vSnowWorld.xz + vec2( 0.0, 8.0 ) ) * snBw ) );',
+        'snWorldN = normalize( snWorldN + vec3( -( snBX - snB0 ), 0.0, -( snBZ - snB0 ) ) * 2.4 * snMid );',
+        // Drifted snow on the far ranges. Without it they are smooth cones
+        // with a wash over them, which is what reads as plastic.
+        'float snFarAmt = smoothstep( 300.0, 650.0, snMidD ) * smoothstep( 30.0, 90.0, vSnowWorld.y );',
+        'float snFw = 0.042;',
+        'vec2 snFp = vSnowWorld.xz * snFw + vec2( vSnowWorld.y * 0.02 );',
+        'float snF0 = snFbm( snFp );',
+        'float snFX = snFbm( snFp + vec2( 0.12, 0.0 ) );',
+        'float snFZ = snFbm( snFp + vec2( 0.0, 0.12 ) );',
+        'snWorldN = normalize( snWorldN + vec3( -( snFX - snF0 ), 0.0, -( snFZ - snF0 ) ) * 3.2 * snFarAmt );',
         // The pointer's trail, as a shallow dip.
         'float snMark = 0.0;',
         'snWorldN = snowMarks( snWorldN, vSnowWorld.xz, snMark );',
         // Packed-crystal micro relief on the near snow, the photographic
         // grain the reference's foreground has. Fades out before it aliases.
         'float snMicNear = 1.0 - smoothstep( 25.0, 140.0, length( vSnowWorld - cameraPosition ) );',
-        'vec2 snMicP = vSnowWorld.xz * 3.2;',
+        'vec2 snMicP = vSnowWorld.xz * 3.2 + vec2( snNoise( vSnowWorld.xz * 0.3 ), snNoise( vSnowWorld.xz * 0.3 + 5.0 ) ) * 2.6;',
         'float snMic0 = snNoise( snMicP ) * 0.6 + snNoise( snMicP * 2.7 + 1.7 ) * 0.4;',
         'float snMicX = snNoise( snMicP + vec2( 0.5, 0.0 ) ) * 0.6 + snNoise( ( snMicP + vec2( 0.5, 0.0 ) ) * 2.7 + 1.7 ) * 0.4;',
         'float snMicZ = snNoise( snMicP + vec2( 0.0, 0.5 ) ) * 0.6 + snNoise( ( snMicP + vec2( 0.0, 0.5 ) ) * 2.7 + 1.7 ) * 0.4;',
-        'snWorldN = normalize( snWorldN + vec3( snMic0 - snMicX, 0.0, snMic0 - snMicZ ) * 0.55 * snMicNear );',
+        'snWorldN = normalize( snWorldN + vec3( snMic0 - snMicX, 0.0, snMic0 - snMicZ ) * 0.38 * snMicNear );',
+        // A coarser layer over the top, so the near snow does not settle into
+        // one even weave the way a single lattice does.
+        'vec2 snMicQ = vSnowWorld.xz * 0.9 + 31.0;',
+        'float snMq0 = snFbm( snMicQ );',
+        'float snMqX = snFbm( snMicQ + vec2( 0.22, 0.0 ) );',
+        'float snMqZ = snFbm( snMicQ + vec2( 0.0, 0.22 ) );',
+        'snWorldN = normalize( snWorldN + vec3( snMq0 - snMqX, 0.0, snMq0 - snMqZ ) * 1.5 * snMicNear );',
         'normal = normalize( ( viewMatrix * vec4( snWorldN, 0.0 ) ).xyz );',
         // Wide dune-scale value break, so the plain is never a flat sheet.
         'float snBroad = snFbm( vSnowWorld.xz * 0.0045 );',
@@ -434,13 +419,13 @@ function snowSurface(shader) {
         'float snFlat = mix( smoothstep( 0.5, 0.995, snWorldN.y ), smoothstep( 0.55, 0.998, snWorldN.y ), snFront );',
         // Shaded snow stays blue, never grey: the blue channel barely drops.
         'vec3 snShade = mix( vec3( 0.71, 0.76, 0.87 ), vec3( 0.72, 0.76, 0.85 ), snFront * ( 1.0 - smoothstep( 120.0, 240.0, length( vSnowWorld - cameraPosition ) ) ) );',
-        'vec3 snLit = vec3( 0.972, 0.988, 1.0 );',
+        'vec3 snLit = vec3( 1.0, 0.993, 0.982 );',
         'vec3 snSnow = mix( snShade, snLit, clamp( snFlat * 0.86 + snCrest * 0.22 * snNear + snBroad * 0.16, 0.0, 1.0 ) );',
         // The snow is modelled by light from the left and behind, as in the
         // reference: lit faces bright, the far sides of every rise in blue
         // shade. (The igloo keeps the scene's own light.)
-        'float snSun = dot( snWorldN, normalize( vec3( -0.62, 0.55, -0.50 ) ) );',
-        'snSnow *= mix( mix( mix( vec3( 0.74, 0.79, 0.89 ), vec3( 0.62, 0.66, 0.75 ), smoothstep( 500.0, 800.0, length( vSnowWorld - cameraPosition ) ) ), vec3( 0.71, 0.75, 0.84 ), snFront * ( 1.0 - smoothstep( 120.0, 240.0, length( vSnowWorld - cameraPosition ) ) ) ), vec3( 1.06 + 0.06 * snFront ), smoothstep( -0.1, 0.8, snSun ) );',
+        'float snSun = dot( snWorldN, normalize( vec3( 0.35, 0.50, -0.80 ) ) );',
+        'snSnow *= mix( mix( mix( vec3( 0.74, 0.79, 0.89 ), vec3( 0.90, 0.92, 0.96 ), smoothstep( 500.0, 900.0, length( vSnowWorld - cameraPosition ) ) ), vec3( 0.71, 0.75, 0.84 ), snFront * ( 1.0 - smoothstep( 120.0, 240.0, length( vSnowWorld - cameraPosition ) ) ) ), vec3( 1.07, 1.045, 1.0 ) * ( 1.0 + 0.06 * snFront ), smoothstep( -0.1, 0.8, snSun ) );',
         // Past the ripples, wind-packed and loose snow still break the slopes
         // up: long soft patches a shade apart, stretched along the wind.
         'float snPack = snFbm( snWindWarp( vSnowWorld.xz * 0.02 ) );',
@@ -449,23 +434,25 @@ function snowSurface(shader) {
         // down the fall line, the darker ground showing through.
         'float snDist = length( vSnowWorld - cameraPosition );',
         'float snSteep = 1.0 - smoothstep( 0.7, 0.93, snWorldN.y );',
-        'float snStreak = snFbm( vec2( ( vSnowWorld.x + vSnowWorld.z ) * 0.13, vSnowWorld.y * 0.045 ) );',
+        'float snAx = ( vSnowWorld.x * 0.92 + vSnowWorld.z * 0.39 );',
+        'float snStreak = snFbm( vec2( snAx * 0.17, vSnowWorld.y * 0.085 ) );',
         'float snRock = snSteep * smoothstep( 0.42, 0.7, snStreak ) * smoothstep( 280.0, 620.0, snDist ) * smoothstep( 55.0, 120.0, vSnowWorld.y );',
         // Wind-scoured streaks down the far ranges' steep faces: grey-blue,
         // never dark rock, as on the reference's summits.
-        'snSnow *= mix( vec3( 1.0 ), vec3( 0.66, 0.72, 0.84 ), snRock );',
+        // (Same snow as the ground: no rock or scoured tint on the ranges.)
+        'snSnow *= mix( vec3( 1.0 ), vec3( 0.88, 0.91, 0.955 ), snRock * 0.0 );',
         // Rock breaking through the snow just under the summits, in patches
         // along the steep upper ridges, as on the reference's peaks.
         'float snSummit = ( 1.0 - smoothstep( 0.6, 0.97, snWorldN.y ) ) * smoothstep( 100.0, 160.0, vSnowWorld.y ) * smoothstep( 0.46, 0.66, snFbm( vSnowWorld.xz * 0.05 + vec2( vSnowWorld.y * 0.04 ) ) );',
-        'snSnow *= mix( vec3( 1.0 ), vec3( 0.58, 0.63, 0.74 ), snSummit * 0.75 );',
+        'snSnow *= mix( vec3( 1.0 ), vec3( 0.74, 0.78, 0.86 ), snSummit * 0.0 );',
         // Finer scoured detail on the steep summit faces.
-        'float snRockFine = smoothstep( 0.5, 0.75, snFbm( vec2( ( vSnowWorld.x - vSnowWorld.z ) * 0.32, vSnowWorld.y * 0.11 ) ) );',
-        'snSnow *= mix( vec3( 1.0 ), vec3( 0.74, 0.79, 0.89 ), snRockFine * snSteep * smoothstep( 280.0, 620.0, snDist ) * smoothstep( 90.0, 160.0, vSnowWorld.y ) * 0.8 );',
+        'float snRockFine = smoothstep( 0.52, 0.78, snFbm( vec2( snAx * 0.40, vSnowWorld.y * 0.16 ) ) );',
+        'snSnow *= mix( vec3( 1.0 ), vec3( 0.74, 0.79, 0.89 ), snRockFine * snSteep * smoothstep( 280.0, 620.0, snDist ) * smoothstep( 90.0, 160.0, vSnowWorld.y ) * 0.0 );',
         // Near snow reads bright and white, not grey.
         'snSnow = mix( snSnow, snLit, ( 1.0 - smoothstep( 20.0, 170.0, snDist ) ) * 0.08 );',
         // Folds and valleys sit in soft blue shade, crests a touch brighter:
         // the depth real snow has between its rises. (aCavity, from the mesh.)
-        'snSnow *= mix( vec3( 1.0 ), vec3( 0.80, 0.87, 0.98 ), clamp( vCavity, 0.0, 1.0 ) * 0.3 );',
+        'snSnow *= mix( vec3( 1.0 ), vec3( 0.78, 0.85, 0.97 ), clamp( vCavity, 0.0, 1.0 ) * 0.42 );',
         'snSnow *= 1.0 + clamp( -vCavity, 0.0, 1.0 ) * 0.05;',
         // Cast shadows of the mounds, baked from the low back-left light:
         // the soft blue-grey troughs the reference's foreground lies in.
@@ -481,7 +468,7 @@ function snowSurface(shader) {
         'snSnow *= mix( 1.0, 0.82 + 0.26 * snGrainA, 1.0 - smoothstep( 90.0, 340.0, length( vSnowWorld - cameraPosition ) ) );',
         'diffuseColor.rgb *= snSnow;',
         // Scoured crests take a touch more gloss than the packed hollows.
-        'roughnessFactor = mix( roughnessFactor, 0.62, snCrest * snNear * 0.45 );',
+        'roughnessFactor = mix( roughnessFactor, 0.78, snCrest * snNear * 0.3 );',
       ].join('\n')
     ).replace(
       '#include <emissivemap_fragment>',
@@ -516,6 +503,9 @@ function snowSurface(shader) {
         'totalEmissiveRadiance += vec3( 0.86, 0.90, 0.96 ) * 0.05 * snLand;',
         // Lit crowns in front go near white, as in the reference.
         'totalEmissiveRadiance += vec3( 0.95, 0.97, 1.0 ) * 0.26 * smoothstep( -0.1, 0.7, snSun ) * snFront * ( 1.0 - smoothstep( 150.0, 300.0, snDist ) );',
+        // The far ranges stand against the sun: the haze between lifts their
+        // shaded faces toward the pale of the reference rather than slate blue.
+        'totalEmissiveRadiance += vec3( 0.86, 0.9, 0.97 ) * 0.1 * smoothstep( 350.0, 1100.0, snDist );',
       ].join('\n')
     );
 }
@@ -627,6 +617,15 @@ const GRID_Z = {
   bands: [[-1450, -1450 + 213 * CELL_Z], [-1450 + 213 * CELL_Z, -1450 + 281 * CELL_Z], [-1450 + 281 * CELL_Z, 1550]],
   counts: [213, 330, 169],
 };
+// A phone cannot afford half a million vertices, nor the shadow bake that
+// walks them at load. The band boundaries are world positions and do not move,
+// so the hills keep their shape; only how finely they are sampled changes.
+const GRID_DENSITY = MODEST ? 0.4 : 0.62;
+if (GRID_DENSITY < 1) {
+  for (const axis of [GRID_X, GRID_Z]) {
+    axis.counts = axis.counts.map((n) => Math.max(8, Math.round(n * GRID_DENSITY)));
+  }
+}
 for (const axis of [GRID_X, GRID_Z]) axis.segments = axis.counts.reduce((a, b) => a + b, 0);
 
 function bandAt(axis, u) {
@@ -645,8 +644,8 @@ function bandAt(axis, u) {
 // The low light the foreground is modelled by (the shader's snSun, from the
 // back-left), flattened to a sun about 22 degrees up so the mounds throw the
 // long shadows the reference has. Toward-the-light, per horizontal unit.
-const CAST_DIR = [-0.778, -0.628];
-const CAST_RISE = 0.27;
+const CAST_DIR = [0.4, -0.92];
+const CAST_RISE = 0.5;
 const CAST_REACH = 48;
 
 /**
@@ -710,17 +709,32 @@ function SnowTerrain() {
     const pos = geo.attributes.position;
     const cols = GRID_X.segments + 1;
     const rows = GRID_Z.segments + 1;
+    const arr = pos.array;
 
-    for (let i = 0; i < pos.count; i++) {
-      const x = bandAt(GRID_X, (i % cols) / GRID_X.segments);
-      const z = bandAt(GRID_Z, Math.floor(i / cols) / GRID_Z.segments);
-      const ground = terrainHeight(x, z);
-      // Humps on the low land only; the hills keep their own smooth shape.
-      const low = 1 - 0.5 * smoothstep(5, 18, ground);
-      // The reference's humps, kept clear of the igloo's wall, over a quiet
-      // remnant of the wind texture.
-      const clear = smoothstep(26, 38, Math.hypot(x + 30, z - 252));
-      pos.setXYZ(i, x, ground + Math.max(refHumps(x, z), snowMounds(x, z) * landWeight(x, z) * low * (0.4 + 0.6 * smoothstep(190, 300, z))) * clear, z);
+    // A column's world X and a row's world Z, resolved once each instead of
+    // once per vertex: bandAt walks the bands, and it was being asked the same
+    // question half a million times over.
+    const xs = new Float64Array(cols);
+    for (let i = 0; i < cols; i++) xs[i] = bandAt(GRID_X, i / GRID_X.segments);
+    const zs = new Float64Array(rows);
+    for (let j = 0; j < rows; j++) zs[j] = bandAt(GRID_Z, j / GRID_Z.segments);
+
+    for (let j = 0; j < rows; j++) {
+      const z = zs[j];
+      const zFade = 0.4 + 0.6 * smoothstep(190, 300, z);
+      for (let i = 0; i < cols; i++) {
+        const x = xs[i];
+        const ground = terrainHeight(x, z);
+        // Humps on the low land only; the hills keep their own smooth shape.
+        const low = 1 - 0.5 * smoothstep(5, 18, ground);
+        // The reference's humps, kept clear of the igloo's wall, over a quiet
+        // remnant of the wind texture.
+        const clear = smoothstep(26, 38, Math.hypot(x + 30, z - 252));
+        const k = (j * cols + i) * 3;
+        arr[k] = x;
+        arr[k + 1] = ground + Math.max(refHumps(x, z), snowMounds(x, z) * landWeight(x, z) * low * zFade) * clear;
+        arr[k + 2] = z;
+      }
     }
 
     // How far each point sits below (+) or above (-) the ground a few cells
@@ -729,20 +743,18 @@ function SnowTerrain() {
     const reach = 3;
     const cavity = new Float32Array(pos.count);
     for (let j = 0; j < rows; j++) {
+      const jm = Math.max(0, j - reach) * cols;
+      const j0 = j * cols;
+      const jp = Math.min(rows - 1, j + reach) * cols;
       for (let i = 0; i < cols; i++) {
-        let sum = 0;
-        let n = 0;
-        for (let dj = -reach; dj <= reach; dj += reach) {
-          for (let di = -reach; di <= reach; di += reach) {
-            if (!di && !dj) continue;
-            const ii = Math.min(cols - 1, Math.max(0, i + di));
-            const jj = Math.min(rows - 1, Math.max(0, j + dj));
-            sum += pos.getY(jj * cols + ii);
-            n++;
-          }
-        }
-        const k = j * cols + i;
-        cavity[k] = Math.max(-1, Math.min(1, (sum / n - pos.getY(k)) / 5));
+        const im = Math.max(0, i - reach);
+        const ip = Math.min(cols - 1, i + reach);
+        const sum =
+          arr[(jm + im) * 3 + 1] + arr[(jm + i) * 3 + 1] + arr[(jm + ip) * 3 + 1] +
+          arr[(j0 + im) * 3 + 1] + arr[(j0 + ip) * 3 + 1] +
+          arr[(jp + im) * 3 + 1] + arr[(jp + i) * 3 + 1] + arr[(jp + ip) * 3 + 1];
+        const k = j0 + i;
+        cavity[k] = Math.max(-1, Math.min(1, (sum / 8 - arr[k * 3 + 1]) / 5));
       }
     }
     geo.setAttribute('aCavity', new BufferAttribute(cavity, 1));
@@ -969,7 +981,7 @@ function MistBanks() {
       { at: [-20, 112, -560], size: [1200, 110], opacity: 0.9, speed: 1.1 },
       { at: [-650, 82, -520], size: [800, 90], opacity: 0.75, speed: -1.2 },
       { at: [650, 86, -560], size: [800, 90], opacity: 0.75, speed: 1.3 },
-    ],
+    ].filter((_, i) => !MODEST || i % 2 === 0),
     []
   );
 
@@ -977,9 +989,14 @@ function MistBanks() {
     const group = groupRef.current;
     if (!group) return;
     const t = state.clock.elapsedTime;
+    // At the opening frame the projected reference carries its own mist, so
+    // the banks come in on exactly the curve the picture goes out on. Tied to
+    // anything else, the scene snaps from hazy to clear mid-pull-back.
+    const show = 1 - refPlateUniforms().uPlateFade.value;
     group.children.forEach((child, i) => {
       const band = bands[i];
       if (!band) return;
+      child.material.opacity = band.opacity * show;
       // Wrap the drift so a band never walks out of the frame for good.
       const span = band.size[0] * 0.6;
       const travel = (((t * band.speed) % (span * 2)) + span * 2) % (span * 2);
@@ -1160,19 +1177,20 @@ function Lighting() {
       {/* Snow is a near-white albedo, so the lights have to stay well under
           unity irradiance in total — pushed higher, every slope clips to the
           same white as the sky and the ranges vanish. */}
-      <ambientLight color="#9cc0e2" intensity={0.08} />
+      <ambientLight color="#b4cdea" intensity={0.5} />
 
       {/* Main daylight, aimed AT the igloo so its shadow frustum actually
           contains it — pointed at the origin it missed the subject entirely. */}
       <primitive object={target} />
       <directionalLight
         color="#fffdf7"
-        intensity={1.3}
+        intensity={0.55}
         position={sunAt}
         target={target}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={MODEST ? 1024 : 2048}
+        shadow-mapSize-height={MODEST ? 1024 : 2048}
+        shadow-intensity={0.5}
         shadow-bias={-0.0006}
         shadow-normalBias={0.35}
         shadow-camera-near={60}
@@ -1184,10 +1202,10 @@ function Lighting() {
       />
 
       {/* Cool counter light from behind the ranges, catching the crests */}
-      <directionalLight color="#a8c8ea" intensity={0.16} position={[110, 80, -90]} />
+      <directionalLight color="#a8c8ea" intensity={0.1} position={[-110, 80, 200]} />
 
       {/* Sky above, snow below: the bounce that keeps the shadows blue, not grey */}
-      <hemisphereLight args={['#bcd8f6', '#eaf2fc', 0.3]} />
+      <hemisphereLight args={['#c6dcf4', '#e6eefa', 0.5]} />
     </>
   );
 }
@@ -1198,9 +1216,11 @@ export default function Stage({ onIglooReady, begin = false, warm = false, onWar
       <Canvas
         className="w-canvas"
         shadows="percentage"
-        dpr={[1, 1.75]}
+        dpr={[1, MAX_DPR]}
         gl={{
-          antialias: true,
+          // The post chain resolves to its own buffers, so canvas MSAA buys
+          // little; on a phone it costs a second full-resolution target.
+          antialias: !MODEST,
           powerPreference: 'high-performance',
           alpha: false,
           stencil: false,
@@ -1227,15 +1247,15 @@ export default function Stage({ onIglooReady, begin = false, warm = false, onWar
           <MistBanks />
 
           {/* Snow streaming on the wind */}
-          <Spindrift count={900} />
-          <NearFlakes count={160} />
+          <Spindrift count={MODEST ? 380 : 900} />
+          <NearFlakes count={MODEST ? 70 : 160} />
 
           {/* 3D igloo settled firmly into the snow ground */}
           <IglooBlocks at={IGLOO_AT} lift={0.0} tint="#eef5fd" onReady={onIglooReady} />
           <SnowBank />
           <SnowTrail />
 
-          <Preload all />
+          <ParallelCompile />
         </Suspense>
 
         <CameraRig begin={begin} />
@@ -1243,10 +1263,18 @@ export default function Stage({ onIglooReady, begin = false, warm = false, onWar
         <Warmup armed={warm} onWarm={onWarm} />
 
         <EffectComposer disableNormalPass>
-          <Bloom intensity={0.3} luminanceThreshold={0.9} luminanceSmoothing={0.28} mipmapBlur />
+          <Bloom
+            intensity={0.3}
+            luminanceThreshold={0.9}
+            luminanceSmoothing={0.28}
+            mipmapBlur
+            // Fill rate is what a phone runs out of first, and the bloom is
+            // the one pass here that reads the frame several times over.
+            resolutionScale={SMALL ? 0.5 : 1}
+          />
           <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
           <BrightnessContrast brightness={0.0} contrast={0.2} />
-          <HueSaturation saturation={0.1} />
+          <HueSaturation saturation={-0.04} />
           <Vignette offset={0.44} darkness={0.12} eskil={false} />
           <IceCut />
         </EffectComposer>

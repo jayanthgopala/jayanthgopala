@@ -4,7 +4,7 @@
 import { spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,12 +25,12 @@ const c = {
 
 let step = 0;
 const heading = (msg) => console.log(`\n${c.bold(`${++step}. ${msg}`)}`);
-const ok = (msg) => console.log(`   ${c.green('✓')} ${msg}`);
+const ok = (msg) => console.log(`   ${c.green('ok')} ${msg}`);
 const info = (msg) => console.log(`   ${c.dim(msg)}`);
-const warn = (msg) => console.log(`   ${c.yellow('!')} ${msg}`);
+const warn = (msg) => console.log(`   ${c.yellow('warn')} ${msg}`);
 
 function die(msg) {
-  console.error(`\n${c.red('✗')} ${msg}\n`);
+  console.error(`\n${c.red('error')} ${msg}\n`);
   process.exit(1);
 }
 
@@ -47,6 +47,62 @@ function jsonFrom(text) {
 
 // Setup steps
 
+// Runs `npx wrangler ...` from apps/api, so it picks up wrangler.toml there.
+// Returns { status, out } with stdout and stderr merged.
+function wrangler(args, { capture = true, stdin } = {}) {
+  const res = spawnSync('npx', ['--yes', 'wrangler', ...args], {
+    cwd: API,
+    encoding: 'utf8',
+    input: stdin,
+    stdio: capture ? ['pipe', 'pipe', 'pipe'] : 'inherit',
+    shell: process.platform === 'win32',
+    env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1' },
+  });
+  return { status: res.status ?? 1, out: `${res.stdout || ''}${res.stderr || ''}` };
+}
+
+// Provisioning. Each helper reuses a resource of the same name if one exists,
+// so the script can be re-run without creating duplicates.
+
+function ensureD1(name) {
+  const list = wrangler(['d1', 'list', '--json']);
+  const found = (jsonFrom(list.out) || []).find((d) => d.name === name);
+  if (found) {
+    ok(`D1 database "${name}" exists.`);
+    return found.uuid;
+  }
+  const res = wrangler(['d1', 'create', name]);
+  const id = res.out.match(/database_id"?\s*[=:]\s*"([0-9a-f-]{36})"/i)?.[1];
+  if (res.status !== 0 || !id) die(`Could not create the D1 database.\n${res.out}`);
+  ok(`D1 database "${name}" created.`);
+  return id;
+}
+
+function ensureKV(title) {
+  const list = wrangler(['kv', 'namespace', 'list']);
+  const found = (jsonFrom(list.out) || []).find((n) => n.title === title || n.title.endsWith(`-${title}`));
+  if (found) {
+    ok(`KV namespace "${title}" exists.`);
+    return found.id;
+  }
+  const res = wrangler(['kv', 'namespace', 'create', title]);
+  const id = res.out.match(/"?id"?\s*[=:]\s*"([0-9a-f]{32})"/i)?.[1];
+  if (res.status !== 0 || !id) die(`Could not create the KV namespace.\n${res.out}`);
+  ok(`KV namespace "${title}" created.`);
+  return id;
+}
+
+function ensureR2(bucket) {
+  const list = wrangler(['r2', 'bucket', 'list']);
+  if (new RegExp(`^name:\s+${bucket}\s*$`, 'm').test(list.out)) {
+    ok(`R2 bucket "${bucket}" exists.`);
+    return;
+  }
+  const res = wrangler(['r2', 'bucket', 'create', bucket]);
+  if (res.status !== 0) die(`Could not create the R2 bucket.\n${res.out}`);
+  ok(`R2 bucket "${bucket}" created.`);
+}
+
 async function ensureLogin() {
   heading('Cloudflare account');
 
@@ -62,7 +118,7 @@ async function ensureLogin() {
     return;
   }
 
-  info('Opening a browser to authorise wrangler…');
+  info('Opening a browser to authorise wrangler...');
   info('No browser? Ctrl-C, then export CLOUDFLARE_API_TOKEN and re-run.');
   // Inherit stdio: this is an interactive OAuth flow, not something to capture.
   const login = wrangler(['login'], { capture: false });
@@ -133,28 +189,12 @@ function writeConfig({ workerName, dbName, bucket, githubUser, githubRepo, d1Id,
 }
 
 function applySchema(dbName) {
-  const schema = join(API, 'schema.sql');
-  if (!existsSync(schema)) die(`Missing ${schema}.`);
-
-  const res = wrangler(['d1', 'execute', dbName, '--remote', '--yes', '--file', schema]);
-  if (res.status !== 0) {
-    // A second run hits "table already exists", which is expected and harmless.
-    if (/already exists/i.test(res.out)) ok('Schema already applied.');
-    else die(`Applying schema.sql failed.\n${res.out}`);
-  } else {
-    ok('Schema applied.');
-  }
-
-  const dir = join(API, 'migrations');
-  if (!existsSync(dir)) return;
-
-  // Lexical order is the intended order — the files are numbered.
-  for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()) {
-    const r = wrangler(['d1', 'execute', dbName, '--remote', '--yes', '--file', join(dir, file)]);
-    if (r.status === 0) ok(`Migration ${file}`);
-    else if (/duplicate column|already exists/i.test(r.out)) info(`Migration ${file} (already applied)`);
-    else die(`Migration ${file} failed.\n${r.out}`);
-  }
+  // apps/api/migrations/0001_init.sql is the full schema and starter content.
+  // wrangler records what it has applied, so re-running is a no-op, and a
+  // database that already has the tables is left untouched.
+  const res = wrangler(['d1', 'migrations', 'apply', dbName, '--remote'], { stdin: 'y\n' });
+  if (res.status !== 0) die(`Applying migrations failed.\n${res.out}`);
+  ok('Database migrated.');
 }
 
 async function setSecrets(rl) {

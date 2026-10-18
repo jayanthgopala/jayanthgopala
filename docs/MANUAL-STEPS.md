@@ -168,6 +168,12 @@ handled. Two things it cannot decide for you:
   repo named after you, that renders on your GitHub profile — someone else's
   identity on your account — until the first sync from your own admin panel
   replaces it.
-- **Bundled assets.** The portrait at `apps/web/public/character.jpg` and the
-  favicon ship in the repo, not the database. Replace them, or upload your own
-  portrait from the admin panel, which takes precedence.
+- **Bundled assets.** The favicons and the igloo model in `apps/web/public/` ship in
+  the repo, not the database. Replace them if you want your own; the portrait and
+  favicon can also be uploaded from the admin panel, which takes precedence.
+
+- **Starter content.** `apps/api/migrations/0001_init.sql` seeds neutral placeholder
+  content (Your Name, you@example.com). Replace it from the admin panel after the
+  first deploy.
+- **License.** The project is MIT licensed (see `LICENSE`). Keep the notice if you
+  redistribute it; add your own name alongside if you like.

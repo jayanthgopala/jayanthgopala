@@ -919,3 +919,69 @@
     text-wrap: balance;
   }
 }
+
+/* Ask about me — the assistant, in ink on paper. AskWidget ships its own dark
+   styles (ask.css); these take it over inside .ink. */
+.ink .ask-fab {
+  background: var(--ink);
+  color: var(--paper-card);
+  border: 1.5px solid var(--ink);
+  border-radius: 0;
+  font-family: var(--typewriter);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  box-shadow: 4px 4px 0 var(--seal);
+}
+.ink .ask-fab:hover { box-shadow: 6px 6px 0 var(--seal); }
+.ink .ask-fab:active { box-shadow: 2px 2px 0 var(--seal); }
+
+.ink .ask-panel {
+  background: var(--paper-card);
+  border: 1.5px solid var(--ink);
+  border-radius: 0;
+  color: var(--ink);
+  box-shadow: 6px 6px 0 var(--ink-shadow), 6px 6px 0 1.5px var(--ink);
+  backdrop-filter: none;
+}
+.ink .ask-head { border-bottom: 1.5px solid var(--ink); }
+.ink .ask-title { font-family: var(--serif); font-size: 22px; font-weight: 600; }
+.ink .ask-note {
+  font-family: var(--typewriter);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.ink .ask-close { color: var(--ink-soft); border-radius: 0; }
+.ink .ask-close:hover { color: var(--seal); }
+.ink .ask-msg { border-radius: 0; font-family: var(--grotesk); font-size: 13.5px; }
+.ink .ask-bot {
+  background: var(--paper);
+  border: 1px solid var(--ink-mute);
+  color: var(--ink-soft);
+}
+.ink .ask-bot[data-error] { border-color: var(--seal); color: var(--seal); }
+.ink .ask-user {
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  color: var(--paper-card);
+}
+.ink .ask-typing span { background: var(--ink-mute); }
+.ink .ask-form { border-top: 1.5px solid var(--ink); }
+.ink .ask-input {
+  background: var(--paper);
+  border: 1.5px solid var(--ink);
+  border-radius: 0;
+  color: var(--ink);
+  font-family: var(--grotesk);
+}
+.ink .ask-input:focus { outline: none; border-color: var(--seal); }
+.ink .ask-send {
+  background: var(--seal);
+  color: var(--paper-card);
+  border-radius: 0;
+}
+.ink .ask-link { color: var(--seal); }
+.ink .ask-link:hover { color: var(--ink); }

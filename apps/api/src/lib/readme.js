@@ -124,8 +124,8 @@ ${stackByCategory(stack)}
 ## ${t('readme.currently', 'Currently')}
 
 ${[
-  profile.location && `- 📍  Based in ${esc(profile.location)}`,
-  profile.email && `- 📬  Reach me at [${esc(profile.email)}](mailto:${esc(profile.email)})`,
+  profile.location && `- Based in ${esc(profile.location)}`,
+  profile.email && `- Reach me at [${esc(profile.email)}](mailto:${esc(profile.email)})`,
 ]
   .filter(Boolean)
   .join('\n')}
@@ -135,7 +135,8 @@ ${[
     'readme.footnote',
     "This README is generated from my portfolio's admin panel and published automatically."
   )}<br />
-  The status and metrics cards above are live SVGs — they update without a commit.</sub>
+  The status and metrics cards above are live SVGs — they update without a commit.<br />
+  Built on an open-source portfolio platform: [source and setup guide](https://github.com/${esc(env.GITHUB_USER)}/${esc(env.GITHUB_REPO)}/blob/${esc(env.GITHUB_BRANCH || 'main')}/docs/DEPLOYMENT.md).</sub>
 </div>
 `;
 }

@@ -27,3 +27,6 @@ apps/api/wrangler.toml.bak
 # did before and takes about seventeen seconds. Run `npm run bake -w
 # @portfolio/web` once after cloning to get the fast path.
 apps/web/public/baked/
+
+# Scratch directories
+.igloo-scene-tmp/

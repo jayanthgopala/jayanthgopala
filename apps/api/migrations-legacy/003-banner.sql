@@ -7,7 +7,7 @@
 -- ---------------------------------------------------------------------------
 
 INSERT OR IGNORE INTO content (key, value, group_name, label, hint, multiline, sort_order, options) VALUES
-  ('banner.greeting', 'Hi 👋', 'Profile banner', 'Greeting', '', 0, 0, ''),
+  ('banner.greeting', 'Hi', 'Profile banner', 'Greeting', '', 0, 0, ''),
 
   ('banner.roles',
    'Frontend Engineer|Full Stack Developer|Open Source Contributor|UI Engineer|AI Enthusiast',

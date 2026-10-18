@@ -413,7 +413,9 @@ export const ARCTIC_HERO = {
     glow: '#ffaa44',
     strength: 1.0,
     lamp: { color: '#ff9834', intensity: 1400 },
-    porch: { color: '#ffa244', intensity: 1100 },
+    // Enough to warm the snow at the mouth of the tunnel. Higher and the
+    // porch blocks blow out to white and throw a flare across the drift.
+    porch: { color: '#ffa244', intensity: 430 },
   },
   snow: { normalScale: 0.22 },
   grade: {
@@ -430,7 +432,7 @@ export const ARCTIC_HERO = {
 export const LOOK = ARCTIC_HERO;
 
 /** Unit vector toward the active look's sun. */
-export const SUN_DIR = [0.12, 0.88, 0.45];
+export const SUN_DIR = [0.35, 0.5, -0.8];
 
 // Converts RGB [0-255] to hex string
 export const hex = (c) =>

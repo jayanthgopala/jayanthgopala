@@ -17,11 +17,13 @@ export default function SoundToggle({ className = '' } = {}) {
   const cut = scrollCtx?.cut || { current: 0 };
   const ringCut = scrollCtx?.ringCut || { current: 0 };
 
-  // Buffer the pad track up front so the first toggle starts immediately.
+  // Buffer the pad track once the world is up, so the first toggle starts
+  // immediately without its 9 MB competing with the load.
   useEffect(() => {
-    sound.preload();
+    const warm = setTimeout(() => sound.preload(), 12000);
     const unsub = sound.subscribe((active) => setOn(active));
     return () => {
+      clearTimeout(warm);
       unsub();
     };
   }, []);
