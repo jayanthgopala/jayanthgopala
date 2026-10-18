@@ -1,72 +1,133 @@
-<div align="center">
+# Portfolio Platform
 
-<!--
-  Banner is served live from the portfolio Worker, so it reflects the admin
-  panel without a commit. <picture> lets GitHub pick the palette: an SVG
-  embedded as an image can't see the host page's colour scheme itself.
--->
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://portfolio-api.jayanthgopala21.workers.dev/svg/banner-dark.svg" />
-  <source media="(prefers-color-scheme: light)" srcset="https://portfolio-api.jayanthgopala21.workers.dev/svg/banner-light.svg" />
-  <img src="https://portfolio-api.jayanthgopala21.workers.dev/svg/banner-dark.svg" alt="Jayanth Gopala V — Software Engineer" width="100%" />
-</picture>
+A dynamic portfolio you can edit from a browser. It has a public website with an
+interactive 3D arctic scene, an admin panel for all of the content, and an API that
+can also publish a GitHub profile README. It runs entirely on Cloudflare's free tier.
 
-</div>
+Edit your content once in the admin panel, and the website and your GitHub profile
+both update.
 
-<br />
+## Features
 
-<div align="center">
+- **Public website.** A minimal editorial layout with sections for projects, stack,
+  experience, education and contact, plus an "Ask about me" assistant.
+- **Immersive 3D world.** A scroll-driven React Three Fiber scene at `/world`: an
+  igloo in the snow, a cinematic scroll cut, a selected-work page and a particle
+  contact room.
+- **Admin panel.** Edit the profile, projects, tech stack, socials, education,
+  experience, status and every piece of site copy, and upload images.
+- **Ask about me.** A chat assistant, powered by Workers AI, that answers only from
+  your own content.
+- **GitHub profile sync.** Renders a Markdown README with live SVG status cards and
+  pushes it to your repository, only when the content actually changed.
+- **Link previews.** A Pages Function injects your live title and description into
+  the HTML so crawlers that do not run JavaScript still see them.
 
-### Building scalable software and exceptional digital experiences.
+## Architecture
 
-I design and ship production systems end to end — from edge APIs and data models to interfaces that feel considered.
+```
+Admin panel --write--> Worker API --> D1 (source of truth)
+                           |           |
+                           |           +--read--> Public website
+                           |
+                           +--render--+--push--> GitHub README (optional)
+                                      +--serve--> live SVG cards
+```
 
-[![GitHub](https://img.shields.io/badge/GitHub-141414?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jayanthgopala)&nbsp;[![Portfolio](https://img.shields.io/badge/Website-1a1a1a?style=for-the-badge&logo=vercel&logoColor=white)](https://jayanthgopala.com)&nbsp;[![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/jayanth-gopala-v/)&nbsp;[![Email](https://img.shields.io/badge/Email-1a1a1a?style=for-the-badge&logo=gmail&logoColor=white)](mailto:jayanthgopala21@gmail.com)
+| Part | Path | Stack |
+| --- | --- | --- |
+| API | `apps/api` | Cloudflare Worker, Hono, D1, KV, R2, Workers AI |
+| Website | `apps/web` | React 19, Vite, React Three Fiber, three.js |
+| Admin panel | `apps/admin` | React 19, Vite |
+| Design tokens | `packages/tokens` | Shared CSS used by the website and admin |
 
-</div>
+Read `docs/ARCHITECTURE.md` for how the pieces fit together.
 
-<br />
+## Quick start
 
-<div align="center">
-  <img src="https://portfolio-api.jayanthgopala21.workers.dev/svg/status.svg" alt="Live status" width="820" />
-</div>
+You need Node.js 20 or newer and a free Cloudflare account.
 
-<!--
-  The links inside that card are pixels, not anchors. GitHub proxies README
-  images through camo and renders them as <img>, so nothing inside an SVG is
-  ever clickable — an <a> in the markup would simply be ignored. The row below
-  is the clickable equivalent.
--->
-<div align="center">
+```bash
+git clone https://github.com/<you>/<repo>.git
+cd <repo>
+npm install
+npm run setup
+```
 
-[GitHub](https://github.com/jayanthgopala) &nbsp;·&nbsp; [Portfolio](https://jayanthgopala.com) &nbsp;·&nbsp; [LinkedIn](https://www.linkedin.com/in/jayanth-gopala-v/) &nbsp;·&nbsp; [Email](mailto:jayanthgopala21@gmail.com)
+`npm run setup` signs in to Cloudflare, creates the D1 database, KV namespace and R2
+bucket, runs the database migration, stores your secrets, and deploys the API. It
+then tells you how to create the two Pages projects for the website and admin panel.
 
-</div>
+## Manual deployment
 
-<br />
+If you would rather run each step yourself:
 
-## Tech Stack
+```bash
+cd apps/api
+npx wrangler login
+npx wrangler d1 create portfolio
+npx wrangler kv namespace create CACHE
+npx wrangler r2 bucket create portfolio-media
+cp wrangler.example.toml wrangler.toml     # then paste in the D1 and KV ids
+npm run db:migrate                         # creates the schema and starter content
+npx wrangler secret put ADMIN_PASSWORD
+npx wrangler secret put JWT_SECRET
+npx wrangler deploy
+```
 
-- **Language** — `JavaScript` `Python`
-- **Frontend** — `React` `Vite` `css`
-- **Backend** — `Node.js` `Express` `JWT` `WebAuthn` `BullMQ` `serverless backend`
-- **Platform** — `Cloudflare Workers` `Cloudflare` `Docker` `Dokploy` `Sequelize`
-- **Data** — `PostgreSQL` `mongo db` `my sql` `sqlite` `Redis`
-- **Tooling** — `Git` `GitHub` `npm` `Postman`
-- **Other** — `REST APIs` `Microservices` `RBAC` `CI/CD` `WebSockets` `Tunnel` `n8n` `Git · GitHub · Docker · Dokploy · Claude Code · Gemini CLI · Automation Tools`
+Then deploy the website and admin panel to Cloudflare Pages and allow their origins in
+the API. The full walkthrough, with every setting, is in
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
-<div align="center">
-  <br />
-  <img src="https://portfolio-api.jayanthgopala21.workers.dev/svg/metrics.svg" alt="Live metrics" width="820" />
-</div>
+## Local development
 
-## Currently
+```bash
+cp apps/api/.dev.vars.example apps/api/.dev.vars    # edit the values
+npm run db:local        # create the local database
+npm run dev:api         # API      http://localhost:8787
+npm run dev:web         # website  http://localhost:5173
+npm run dev:admin       # admin    http://localhost:5174
+```
 
-- Based in India
-- Reach me at [jayanthgopala21@gmail.com](mailto:jayanthgopala21@gmail.com)
+The 3D world is at `http://localhost:5173/world`.
 
-<div align="center">
-  <sub>This README is generated from my portfolio's admin panel and published automatically.<br />
-  The status and metrics cards above are live SVGs — they update without a commit.<br />
-  Built on an open-source portfolio platform: [source and setup guide](https://github.com/jayanthgopala/jayanthgopala/blob/main/docs/DEPLOYMENT.md).</sub>
-</div>
+## Database
+
+The schema lives in `apps/api/migrations/`. `0001_init.sql` creates every table and
+adds neutral starter content, and is safe to run more than once. To change the schema,
+add a new numbered file, for example `0002_add_field.sql`, and run
+`npm run db:migrate`. Databases created before the baseline existed used the files in
+`apps/api/migrations-legacy/`, which new installs do not need.
+
+## Project structure
+
+```
+apps/
+  api/        Worker: routes, D1 access, GitHub sync, SVG cards, migrations
+  web/        Website and 3D world, Pages Function for link previews
+  admin/      Admin panel
+packages/
+  tokens/     Shared design tokens
+docs/         Architecture, deployment, manual steps, GitHub token guide
+scripts/      Guided setup and asset tooling
+```
+
+## Documentation
+
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md): deploy with the script or by hand
+- [`docs/MANUAL-STEPS.md`](docs/MANUAL-STEPS.md): the steps that cannot be scripted
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): how the system is put together
+- [`docs/GITHUB-TOKEN.md`](docs/GITHUB-TOKEN.md): the token for the profile README sync
+
+## Profile README sync
+
+The Worker writes the generated profile README to the file named by `README_PATH`
+(`PROFILE.md` by default, so it never overwrites this README). To publish it on your
+GitHub profile, create the `<username>/<username>` repository, set `GITHUB_REPO` to
+it and `README_PATH` to `README.md` in `apps/api/wrangler.toml`, and add a GitHub
+token as described in `docs/GITHUB-TOKEN.md`. This part is optional.
+
+## License
+
+MIT. See [`LICENSE`](LICENSE). You are free to use, modify and distribute this
+project, including for your own portfolio.

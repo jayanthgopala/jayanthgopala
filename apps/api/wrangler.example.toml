@@ -37,7 +37,10 @@ compatibility_flags = ["nodejs_compat"]
 GITHUB_USER     = "jayanthgopala"
 GITHUB_REPO     = "jayanthgopala"        # profile repo == your username
 GITHUB_BRANCH   = "main"
-README_PATH     = "README.md"
+# File the profile sync writes. PROFILE.md keeps it away from this repo's own
+# README.md. To publish onto your GitHub profile, point GITHUB_REPO at your
+# <username>/<username> repo and set this to "README.md".
+README_PATH     = "PROFILE.md"
 PUBLIC_API_URL  = "https://portfolio-api.jayanthgopala21.workers.dev"
 # Credentialed requests can't use a wildcard, so every origin the site or admin
 # panel is served from has to be listed explicitly.

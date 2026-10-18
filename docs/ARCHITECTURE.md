@@ -9,7 +9,7 @@ Admin panel ──write──> Worker API ──> D1  (source of truth)
                            │           │
                            │           ├──read──> Public website
                            │           │
-                           └──render───┴──push──> github.com/<you>/<you>/README.md
+                           └──render───┴──push──> the file named by README_PATH
                                                      └─ embeds live <img> SVGs
                                                         served by the Worker
 ```
@@ -211,10 +211,3 @@ vestibular discomfort.
 
 - [`DEPLOYMENT.md`](./DEPLOYMENT.md) — provisioning and deploying all three apps
 - [`GITHUB-TOKEN.md`](./GITHUB-TOKEN.md) — creating a correctly-scoped PAT
-
----
-
-> **Why this file isn't `README.md`.** This repo is also the GitHub *profile* repo
-> (`jayanthgopala/jayanthgopala`), so its `README.md` is generated from the admin panel
-> and republished by the sync engine — anything written there by hand gets overwritten on
-> the next publish. The architecture docs live here instead, where they survive.

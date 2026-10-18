@@ -110,14 +110,14 @@ void main() {
   // The deck hangs higher: just above the peaks the sky stays bright.
   float deckBand = smoothstep( 0.05, 0.15, h );
   // Linear colours: they land as grey-blue undersides once encoded and exposed.
-  vec3 cloud = mix( vec3( 0.55, 0.60, 0.70 ), vec3( 0.12, 0.15, 0.23 ), smoothstep( 0.2, 0.52, dens ) );
+  vec3 cloud = mix( vec3( 0.68, 0.72, 0.80 ), vec3( 0.34, 0.38, 0.48 ), smoothstep( 0.2, 0.52, dens ) );
   col = mix( col, cloud, cover * deckBand * 0.95 );
   col = mix( col, vec3( 0.88, 0.91, 0.95 ), billowLit * cover * deckBand * 0.5 );
   // Bright, crisp rims where each billow thins against the sky.
   float rimC = smoothstep( 0.16, 0.3, dens ) * ( 1.0 - smoothstep( 0.3, 0.46, dens ) );
   col = mix( col, vec3( 0.92, 0.94, 0.97 ), rimC * deckBand * 0.35 );
   // Heavier overhead, as the reference's deck darkens toward the top of frame.
-  col *= mix( 1.0, 0.68, smoothstep( 0.06, 0.24, h ) * cover );
+  col *= mix( 1.0, 0.86, smoothstep( 0.06, 0.24, h ) * cover );
   col = mix( col, vec3( 0.97, 0.97, 0.97 ), brk * 0.35 * deckBand );
 
   // Cirrus: stretched fbm banded into thin streaks, faded out at the horizon

@@ -214,11 +214,16 @@ const iceShader = (shader) => {
           // Edges crumble unevenly: the rounding reaches further in where the
           // block has chipped.
           'float bevel = smoothstep( 0.62 - 0.3 * igCoarse, 1.00, vEdge );',
-          'normal = normalize( mix( normal, vCorner, bevel * 0.26 ) );',
+          // Light the rounded edges as the flat slab they belong to: left to
+          // their own normals, each edge catches the sky on one side and
+          // goes blue-dark on the other, a smudge down every joint.
+          'vec3 igFlat = normalize( cross( dFdx( -vViewPosition ), dFdy( -vViewPosition ) ) );',
+          'igFlat = faceforward( igFlat, -vViewPosition, igFlat );',
+          'normal = normalize( mix( normal, igFlat, bevel * 0.9 ) );',
           // The rounded edge is crumbled snow, so it takes a little less light
           // than the cut face. Without this every block wears a bright outline
           // and the wall reads as a row of inflated cushions.
-          'diffuseColor.rgb *= mix( 1.0, 0.93, bevel );',
+          'diffuseColor.rgb *= mix( 1.0, 0.97, bevel );',
           // Bump from the grain, strongest on the worn edges.
           // Broad chisel cuts (ridged noise) under the finer packed-snow grain.
           'float igChisel = 1.0 - abs( igNoise( vLocal * 0.3 + 7.0 ) * 2.0 - 1.0 );',
@@ -231,11 +236,11 @@ const iceShader = (shader) => {
           'vec3 igR2 = cross( normal, igDpx );',
           'float igDet = dot( igDpx, igR1 );',
           'vec3 igGrad = sign( igDet ) * ( igDhx * igR1 + igDhy * igR2 );',
-          'normal = normalize( abs( igDet ) * normal - igGrad * 0.38 );',
+          'normal = normalize( abs( igDet ) * normal - igGrad * 0.2 );',
           // Joints sit a shade darker: packed with loose snow, in shadow.
           // The joint is a groove packed with loose snow: a wider, deeper
           // band of shade, which is what separates one block from the next.
-          'diffuseColor.rgb *= mix( 1.0, 0.44, smoothstep( 0.78, 1.0, vEdge ) );',
+          'diffuseColor.rgb *= mix( 1.0, 0.86, smoothstep( 0.86, 1.0, vEdge ) );',
           'roughnessFactor = mix( 0.90, 0.985, vBlock );',
           // Crystals in the packed face catching the light, the sparkle the
           // snow around it already has.
@@ -247,7 +252,7 @@ const iceShader = (shader) => {
           'float sunFace = clamp( sunDot, 0.0, 1.0 );',
           'diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.96, 0.98, 1.00 ), smoothstep( 0.25, 0.85, sunFace ) * 0.35 );',
           // Sides turned from the sun take the snow's blue shade, not grey.
-          'diffuseColor.rgb *= mix( vec3( 0.86, 0.9, 0.98 ), vec3( 1.0 ), smoothstep( -0.45, 0.30, sunDot ) );',
+          'diffuseColor.rgb *= mix( vec3( 0.95, 0.965, 0.995 ), vec3( 1.0 ), smoothstep( -0.45, 0.30, sunDot ) );',
           // Snow resting on whatever faces the sky: the dome's crown and the
           // tops of the blocks.
           'float igSettled = smoothstep( 0.5, 0.85, wNrm.y ) * smoothstep( 0.2, 0.6, igNoise( vLocal * 0.35 + 9.0 ) + 0.25 );',
@@ -270,7 +275,7 @@ const iceShader = (shader) => {
           // through. Constant; nothing here responds to the scroll.
           'float seamLine = smoothstep( 0.92, 1.0, vEdge );',
           'float seamLeakage = smoothstep( 0.3, 0.75, igNoise( vLocal * 0.18 + 3.1 ) );',
-          'totalEmissiveRadiance += vec3( 1.00, 0.76, 0.40 ) * seamLine * ( 0.0 + 0.04 * seamLeakage ) * ( 0.45 + 0.55 * scatter );',
+          'totalEmissiveRadiance += vec3( 1.00, 0.76, 0.40 ) * seamLine * ( 0.0 * seamLeakage ) * ( 0.45 + 0.55 * scatter );',
           // Entrance arch glow radiating warm amber illumination
           'float insideArch = smoothstep( 0.35, -0.35, vFacing );',
           'float archGlow = ( 0.55 + 0.15 * vExcite ) * vEntrance;',
@@ -281,7 +286,7 @@ const iceShader = (shader) => {
           'float rim = pow( 1.0 - nv, 2.6 );',
           'totalEmissiveRadiance += vec3( 0.20, 0.38, 0.60 ) * rim * ( 1.0 - innerFace ) * 0.18;',
           // Overcast fill: the block faces read clean white, as in the reference.
-          'totalEmissiveRadiance += vec3( 0.80, 0.84, 0.90 ) * 0.10 * ( 1.0 - innerFace ) * ( 1.0 - smoothstep( 0.72, 1.0, vEdge ) );',
+          'totalEmissiveRadiance += vec3( 0.86, 0.89, 0.94 ) * 0.2 * ( 1.0 - innerFace ) * ( 1.0 - smoothstep( 0.72, 1.0, vEdge ) );',
         ].join('\n')
       )
       // At the opening frame the igloo wears the reference's own igloo,
@@ -306,6 +311,10 @@ function gradeForWorld(material, tint) {
   // The baked normal map's broad dents shade every block in grey blotches,
   // which read as marble; keep only a hint of it under the snow grain.
   material.normalScale.set(0.3, 0.3);
+  // Dropped altogether: its dents rendered as dark smudges along every joint.
+  // The shader's own grain and chisel bump give the blocks their texture.
+  material.normalMap?.dispose();
+  material.normalMap = null;
   material.side = 2; // DoubleSide
   material.onBeforeCompile = iceShader;
   material.needsUpdate = true;
@@ -357,6 +366,9 @@ export default function IglooBlocks({
         }
 
         gradeForWorld(igloo.mesh.material, tint);
+        // The wall takes no shadow from its own blocks: with the sun behind the
+        // igloo they only smudge the joints. It still casts onto the snow.
+        igloo.mesh.receiveShadow = false;
         igloo.mesh.frustumCulled = false;
 
         const physics = new BlockPhysics(igloo.blocks, {

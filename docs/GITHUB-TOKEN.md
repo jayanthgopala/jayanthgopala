@@ -1,6 +1,6 @@
 # GitHub token
 
-The Worker needs a token to commit `README.md` to your profile repo. This token is the
+The Worker needs a token to commit the generated profile README to your profile repo. This token is the
 single most sensitive thing in the system, so scope it as narrowly as GitHub allows.
 
 ## Create the profile repo first

@@ -1,4 +1,4 @@
-import { SRGBColorSpace, TextureLoader, Vector2, Vector3 } from 'three';
+import { Vector2, Vector3 } from 'three';
 import { OPENING_FRAME } from '../chapters.js';
 
 // The reference render the opening frame was matched to, HUD painted out,
@@ -37,11 +37,8 @@ export function refPlateUniforms() {
       // How much of the picture is showing: see setPlateFade.
       uPlateFade: { value: 1 },
     };
-    const texture = new TextureLoader().load(PLATE.url, () => {
-      shared.uRangeOn.value = 1;
-    });
-    texture.colorSpace = SRGBColorSpace;
-    shared.uRange.value = texture;
+    // No cover image: the texture is never loaded, so uRangeOn stays 0 and every
+    // shader that projects it falls back to the 3D scene's own surfaces.
   }
   return shared;
 }
@@ -53,15 +50,10 @@ export function refPlateUniforms() {
  * the pointer parallax moves the camera several units while the scene is at
  * rest, and the picture would breathe in and out with the cursor.
  */
-// Development only: ?plate=off holds the picture off entirely, so the 3D
-// scene can be judged on its own against the frame the picture gives.
-const PLATE_OFF =
-  typeof window !== 'undefined' &&
-  import.meta.env.DEV &&
-  new URLSearchParams(window.location.search).get('plate') === 'off';
-
-export function setPlateFade(value) {
-  refPlateUniforms().uPlateFade.value = PLATE_OFF ? 0 : value;
+// The projected picture is switched off for good: the world is drawn by the 3D
+// scene alone. The fade is kept at 0 so the shaders take their own path.
+export function setPlateFade() {
+  refPlateUniforms().uPlateFade.value = 0;
 }
 
 export const REF_PLATE_GLSL = /* glsl */ `

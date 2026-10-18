@@ -21,6 +21,13 @@ function buildContext(site) {
     p.email && `Email: ${p.email}`,
   ].filter(Boolean);
 
+  // Every way to reach them, so "contact" can be answered in full.
+  const socials = (site.socials || []).filter((s) => s.url);
+  if (socials.length) {
+    lines.push('', 'CONTACT AND SOCIAL LINKS:');
+    for (const s of socials) lines.push(`- ${s.label}: ${s.url.replace(/^mailto:/i, '')}`);
+  }
+
   const projects = (site.projects || []).filter((x) => x.published);
   if (projects.length) {
     lines.push('', 'PROJECTS:');
@@ -134,6 +141,10 @@ general knowledge, coding help, opinions on tools, current events, writing
 tasks. Then reply with one sentence saying you can only answer questions about
 ${name}, and nothing else. Do not attempt the task.
 
+CONTACT: when asked how to contact or reach ${name}, give every contact method in
+the CONTACT AND SOCIAL LINKS list (email first, then each profile), not just one.
+Only say a method is unavailable if it is truly absent from that list.
+
 LINKS: when a URL or email address is relevant, write it out in full and plain
 (https://example.com, name@example.com). No markdown link syntax.
 
@@ -178,6 +189,15 @@ export async function askHandler(c) {
 
   const site = await loadSite(c.env.DB);
   const name = site.profile?.name || 'the site owner';
+
+  // A bare "hi" or "hello" gets a short fixed greeting rather than a model
+  // reply, which tended to answer with a whole biography. Nothing else is
+  // intercepted.
+  if (/^(hi|hello)[\s!.,]*$/i.test(question)) {
+    return c.json({
+      answer: `Hi, I'm the assistant for ${name}. Ask me about the projects, tech stack, experience or background.`,
+    });
+  }
 
   // Retain recent turns for conversation continuity, capped at MAX_HISTORY.
   const tone = TONES[body.tone] ? body.tone : DEFAULT_TONE;

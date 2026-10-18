@@ -226,6 +226,10 @@ as soon as it is saved.
 
 ### 9. Publish the GitHub profile README (optional)
 
+The sync writes to the file named by `README_PATH` (default `PROFILE.md`). To put
+it on your GitHub profile, set `GITHUB_REPO` to your `<username>/<username>` repo
+and `README_PATH` to `README.md`, then redeploy the API.
+
 Create a fine-grained token for your profile repository only, with Contents set
 to read and write (see `docs/GITHUB-TOKEN.md`), and store it as `GITHUB_TOKEN`.
 In the admin panel choose Publish, then Publish now. The Worker also re-syncs on

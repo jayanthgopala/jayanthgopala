@@ -5,9 +5,7 @@ import {
   Button, Empty, Field, Input, Select, Switch, Textarea, useToast,
 } from '../components/ui.jsx';
 import ImageUploadField from '../components/ImageUploadField.jsx';
-import {
-  SHAPES, availableShapes, labelOf, nextShape, roundProgress,
-} from '@portfolio/shapes';
+import { SHAPES, labelOf, nextShape, shapeUsage } from '@portfolio/shapes';
 
 const ACCENTS = ['iris', 'violet', 'mint', 'amber', 'rose'];
 
@@ -23,20 +21,9 @@ function Editor({ initial, projects, onSaved, onCancel }) {
   const [saving, setSaving] = useState(false);
   const set = (key, value) => setDraft((prev) => ({ ...prev, [key]: value }));
 
-  // Shapes still free this round, ignoring whatever this project itself holds
-  // so editing without changing the shape is never blocked by its own choice.
-  const free = availableShapes(projects, draft.id ?? null);
-  const progress = roundProgress(projects);
-
-  const options = SHAPES.map((shape) => {
-    const open = free.includes(shape.id);
-    const mine = shape.id === draft.shape;
-    return {
-      value: shape.id,
-      label: open || mine ? shape.label : `${shape.label} — taken`,
-      disabled: !open && !mine,
-    };
-  });
+  // How many other projects already use each object. Informational only: any
+  // object can be picked, and the world page copes with repeats.
+  const usage = shapeUsage(projects, draft.id ?? null);
 
   async function save() {
     if (!draft.title?.trim()) {
@@ -135,13 +122,38 @@ function Editor({ initial, projects, onSaved, onCancel }) {
 
         <Field
           label="Object"
-          hint={`The shape this project becomes on the world page. Round ${progress.round}: ${free.length} of ${progress.total} still free.`}
+          full
+          hint="The 3D object this project becomes on the world's Selected work page. Pick one, or leave it automatic."
         >
-          <Select
-            value={draft.shape || ''}
-            onChange={(v) => set('shape', v)}
-            options={[{ value: '', label: 'Assign automatically' }, ...options]}
-          />
+          <div className="shape-grid" role="radiogroup" aria-label="Object">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={!draft.shape}
+              className={`shape-chip${!draft.shape ? ' is-on' : ''}`}
+              onClick={() => set('shape', '')}
+            >
+              <span className="shape-name">Automatic</span>
+              <span className="shape-meta">by position</span>
+            </button>
+            {SHAPES.map((shape) => {
+              const used = usage.get(shape.id) || 0;
+              const on = draft.shape === shape.id;
+              return (
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  key={shape.id}
+                  className={`shape-chip${on ? ' is-on' : ''}`}
+                  onClick={() => set('shape', shape.id)}
+                >
+                  <span className="shape-name">{shape.label}</span>
+                  <span className="shape-meta">{used ? `used by ${used}` : 'free'}</span>
+                </button>
+              );
+            })}
+          </div>
         </Field>
 
         <div className="field" style={{ justifyContent: 'flex-end', gap: 'var(--s-3)' }}>

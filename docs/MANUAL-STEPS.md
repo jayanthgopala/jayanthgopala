@@ -3,9 +3,8 @@
 Everything that *can* be scripted is. This file is the remainder — the steps a
 setup script cannot do for you, and why each one resists automation.
 
-Deliberately not in the root `README.md`: on a repo named after its owner, that
-file is the GitHub **profile** README and is generated from the database. Anything
-written there gets overwritten by the next sync, and shows up on a profile page.
+The root `README.md` is the project README. The generated GitHub profile README is
+written to the file named by `README_PATH` (`PROFILE.md` by default).
 
 ---
 
@@ -111,7 +110,7 @@ Set these on **both** projects, under Settings → Builds → Watch paths:
 - admin panel → `apps/admin/*`
 
 Without them, every commit rebuilds both projects — including the automated
-`chore(profile): sync from admin panel` commits, which touch only `README.md`.
+`chore(profile): sync from admin panel` commits, which touch only the profile file (`PROFILE.md`).
 The admin panel then 403s for the five or six minutes each rebuild takes, for a
 change that affected neither frontend.
 
@@ -164,10 +163,10 @@ Neither can be done on your behalf.
 The setup script re-seeds the database with your details, so the *content* is
 handled. Two things it cannot decide for you:
 
-- **The profile README.** A fork carries the original author's `README.md`. On a
-  repo named after you, that renders on your GitHub profile — someone else's
-  identity on your account — until the first sync from your own admin panel
-  replaces it.
+- **The profile README.** `PROFILE.md` carries the original author's generated profile.
+  Delete or regenerate it from your own admin panel. To publish to your GitHub
+  profile, point `GITHUB_REPO` at your `<username>/<username>` repo and set
+  `README_PATH` to `README.md`.
 - **Bundled assets.** The favicons and the igloo model in `apps/web/public/` ship in
   the repo, not the database. Replace them if you want your own; the portrait and
   favicon can also be uploaded from the admin panel, which takes precedence.
