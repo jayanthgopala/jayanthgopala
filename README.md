@@ -39,8 +39,8 @@ I design and ship production systems end to end — from edge APIs and data mode
 ## Tech Stack
 
 - **Language** — `JavaScript` `Python` `TypeScript`
-- **Frontend** — `React` `Vite` `CSS` `HTML` `Tailwind CSS`
-- **Backend** — `Node.js` `Express` `BullMQ` `Sequelize`
+- **Frontend** — `React` `Vite` `CSS` `HTML` `Tailwind CSS` `Next.js` `Astro` `Three.js / React Three Fiber` `GSAP`
+- **Backend** — `Node.js` `Express` `BullMQ` `Sequelize` `Hono`
 - **Platform** — `Cloudflare Workers` `Cloudflare (Pages, KV, R2, Durable Objects)` `Docker` `Dokploy`
 - **Data** — `PostgreSQL` `MongoDB` `MySQL` `SQLite / Cloudflare D1` `Redis`
 - **Security** — `JWT (RS256)` `WebAuthn / Passkeys` `RBAC`
