@@ -40,12 +40,13 @@ I design and ship production systems end to end — from edge APIs and data mode
 
 - **Language** — `JavaScript` `Python` `TypeScript`
 - **Frontend** — `React` `Vite` `CSS` `HTML` `Tailwind CSS` `Next.js` `Astro` `Three.js / React Three Fiber` `GSAP`
-- **Backend** — `Node.js` `Express` `BullMQ` `Sequelize` `Hono`
-- **Platform** — `Cloudflare Workers` `Cloudflare (Pages, KV, R2, Durable Objects)` `Docker` `Dokploy`
-- **Data** — `PostgreSQL` `MongoDB` `MySQL` `SQLite / Cloudflare D1` `Redis`
+- **Backend** — `Node.js` `Express` `BullMQ` `Sequelize` `Hono` `Fastify` `FastAPI`
+- **Platform** — `Cloudflare Workers` `Cloudflare (Pages, KV, R2, Durable Objects)` `Docker` `Dokploy` `Electron` `AWS (S3, SES, EC2)` `Linux`
+- **Data** — `PostgreSQL` `MongoDB` `MySQL` `SQLite / Cloudflare D1` `Redis` `Supabase`
 - **Security** — `JWT (RS256)` `WebAuthn / Passkeys` `RBAC`
-- **Tooling** — `Git` `GitHub` `npm` `Postman` `n8n`
+- **Tooling** — `Git` `GitHub` `npm` `Postman` `n8n` `Remotion` `Claude Code` `Playwright`
 - **Other** — `REST APIs` `Microservices` `CI/CD` `WebSockets`
+- **AI / ML** — `ONNX Runtime` `Speech AI (Whisper, Kokoro TTS)` `scikit-learn`
 
 <div align="center">
   <br />
