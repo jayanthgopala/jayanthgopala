@@ -42,9 +42,9 @@ I design and ship production systems end to end — from edge APIs and data mode
 - **Frontend** — `React` `Vite` `css`
 - **Backend** — `Node.js` `Express` `JWT` `WebAuthn` `BullMQ` `serverless backend`
 - **Platform** — `Cloudflare Workers` `Cloudflare` `Docker` `Dokploy` `Sequelize`
-- **Data** — `PostgreSQL` `PostgreSQL` `mongo db` `my sql` `sqlite` `Redis`
+- **Data** — `PostgreSQL` `mongo db` `my sql` `sqlite` `Redis`
 - **Tooling** — `Git` `GitHub` `npm` `Postman`
-- **Other** — `REST APIs` `Microservices` `RBAC` `CI/CD` `WebSockets` `Tunnel` `n8n` `Git · GitHub · Docker · Dokploy · Claude Code · Gemini CLI · Automation Tools`
+- **Other** — `REST APIs` `Microservices` `RBAC` `CI/CD` `WebSockets` `n8n` `Git · GitHub · Docker · Dokploy · Claude Code · Gemini CLI · Automation Tools`
 
 <div align="center">
   <br />
